@@ -9,6 +9,8 @@
 mkdir -p /tmp/5gmodem 2>/dev/null
 
 rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp 2>/dev/null
+# ttyUSB numbers shift and another modem can sit on the same USB port: GNSS port caches are stale
+rm -f /tmp/5gmodem/gnss_caps_* /tmp/5gmodem/gnss_port_* 2>/dev/null
 
 touch /tmp/5gmodem/resolve.pending
 

@@ -8,6 +8,12 @@
 'require view.modem5g.fresh as fresh';
 
 function loadCss() {
+	if (!document.getElementById('tg-page-align-css')) {
+		var p = document.createElement('link');
+		p.id = 'tg-page-align-css'; p.rel = 'stylesheet';
+		p.href = L.resource('view/modem5g/page-align.css');
+		document.head.appendChild(p);
+	}
 	if (document.getElementById('tg-modem-css')) return;
 	var l = document.createElement('link');
 	l.id = 'tg-modem-css'; l.rel = 'stylesheet';
@@ -39,11 +45,7 @@ function probeCheckmark() {
 	else { document.addEventListener('DOMContentLoaded', function() { setTimeout(run, 0); }); }
 }
 
-var IS_PROTON = (function() {
-	var base = String((window.L && L.env && L.env.mediaurlbase) || '');
-	if (/proton2025/.test(base)) return true;
-	return !!document.querySelector('link[href*="proton2025"]');
-})();
+var PHONE_MQ = '(max-width: 700px)';
 
 var _qualRat = 'lte';
 function qualSetMode(mode) {
@@ -70,37 +72,42 @@ function metricPct(key, v, rat) {
 	if (pc == null) { return null; }
 	return pc < 4 ? 4 : pc;
 }
-function paintMetricCell(td, key, v, text, rat) {
-	var has = (v != null && v !== '' && v !== '-');
+// Number coloured by the signal quality scale of the Network page (tables, MIMO grid).
+function paintMetricCell(el, key, v, text, rat) {
+	var has = (v != null && v !== '' && v !== '-' && !isNaN(parseFloat(v)));
 	var txt = has ? String(text != null ? text : v) : '-';
 	var col = has ? caQuality(key, v, rat) : null;
-	var pc  = col ? metricPct(key, v, rat) : null;
-	if (IS_PROTON) {
-		if (pc != null) {
-			var pb = td.querySelector('.cbi-progressbar');
-			if (!pb) { td.textContent = ''; pb = E('div', { 'class': 'cbi-progressbar' }, [ E('div', { 'style': 'box-shadow:none' }) ]); td.appendChild(pb); }
-			pb.setAttribute('title', txt);
-			var pf = pb.firstElementChild;
-			pf.style.width = pc + '%'; pf.style.background = CA_GRAD[col] || CA_COLOR[col];
-			return;
-		}
-		td.textContent = txt;
-		return;
-	}
-	var tn = td.firstChild;
-	if (!tn || tn.nodeType !== 3) { td.textContent = ''; tn = document.createTextNode(''); td.appendChild(tn); }
-	tn.nodeValue = txt;
-	td.style.color = col ? CA_COLOR[col] : '';
-	td.style.fontWeight = col ? '600' : '';
-	var bar = td.querySelector('.metric-bar');
-	if (pc != null) {
-		if (!bar) { bar = E('div', { 'class': 'metric-bar' }, [ E('div', {}) ]); td.appendChild(bar); }
-		var bf = bar.firstElementChild;
-		bf.style.width = pc + '%'; bf.style.background = CA_GRAD[col] || CA_COLOR[col];
-	} else if (bar) { bar.parentNode.removeChild(bar); }
+	if (el.textContent !== txt) { el.textContent = txt; }
+	el.style.color = col ? CA_COLOR[col] : '';
+	el.classList.toggle('v', has);
 }
 
-var LINE_COLORS = [ '#1c7ed6', '#2b8a3e', '#e8590c', '#7048e8', '#c92a2a' ];
+var ICONS = {
+	tower: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="1.3"/><path d="M15.89 4.11a5.5 5.5 0 0 1 0 7.78M8.11 4.11a5.5 5.5 0 0 0 0 7.78M18.36 1.64a9 9 0 0 1 0 12.72M5.64 1.64a9 9 0 0 0 0 12.72"/><path d="M12 9.5 7.5 22M12 9.5 16.5 22M10.2 14.5h3.6M8.8 18.5h6.4M6 22h12"/></g>',
+	spk: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4Z"/><path d="M17 9a4 4 0 0 1 0 6M19.5 6.5a8 8 0 0 1 0 11"/></g>',
+	mute: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4Z"/><path d="m17 9.5 5 5M22 9.5l-5 5"/></g>',
+	target: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/></g>',
+	up: '<path d="M12 15V3M7 8l5-5 5 5M4 20.5h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+	trash: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></g>',
+	chev: '<path d="M7 10l5 5 5-5z" fill="currentColor"/>'
+};
+function svg(name, size) {
+	return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+function icon(name, size) {
+	var s = E('span', { 'class': 'tg-align-i' });
+	s.innerHTML = svg(name, size);
+	return s;
+}
+
+function isDarkUI(el) {
+	var c = getComputedStyle(el || document.body).color;
+	var m = String(c).match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+	if (!m) { return false; }
+	return (0.2126 * (+m[1]) + 0.7152 * (+m[2]) + 0.0722 * (+m[3])) > 128;
+}
+
+var LINE_COLORS = [ '#2b8a3e', '#1c7ed6', '#e8590c', '#7048e8', '#c92a2a' ];
 function hexToRgba(hex, a) {
 	var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
 	if (!m) return hex;
@@ -110,11 +117,12 @@ function drawChart(canvas, series, opts) {
 	opts = opts || {};
 	var dpr = window.devicePixelRatio || 1;
 	var rect = canvas.getBoundingClientRect();
-	var W = Math.max(1, rect.width || canvas.clientWidth || 600), H = Math.max(1, rect.height || 190);
+	if (!(rect.width > 0) || !(rect.height > 0)) return;
+	var W = rect.width, H = rect.height;
 	canvas.width = Math.floor(W * dpr); canvas.height = Math.floor(H * dpr);
 	var ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 	var padL = 46, padR = 12, padT = 12, padB = 22;
-	var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+	var dark = isDarkUI(canvas);
 	var fg = dark ? '#c9ccd1' : '#444', grid = dark ? 'rgba(255,255,255,.10)' : 'rgba(0,0,0,.08)';
 	ctx.clearRect(0, 0, W, H);
 	var all = [];
@@ -139,7 +147,7 @@ function drawChart(canvas, series, opts) {
 	series.forEach(function(s, idx) {
 		var pts = s.points || [];
 		if (!pts.length) return;
-		var col = LINE_COLORS[idx % LINE_COLORS.length];
+		var col = s.color || LINE_COLORS[idx % LINE_COLORS.length];
 		var tracePath = function() {
 			for (var q = 0; q < pts.length; q++) {
 				var qpx = x(pts[q][0]), qpy = y(pts[q][1]);
@@ -179,14 +187,43 @@ function parseAntports(raw) {
 	return rx;
 }
 
+// collapsibleSection() of 5gdetail.js (same storage keys) with a summary on the right.
+function collapsible(key, titleText, content, defOpen) {
+	var open = defOpen, stored = null;
+	try { stored = window.localStorage.getItem('5gm-blk-' + key); } catch (e) {}
+	var known = (stored === '0' || stored === '1');
+	if (known) { open = stored === '1'; }
+	var chev = E('span', { 'class': 'tg-align-chev' });
+	chev.innerHTML = svg('chev', 16);
+	var sum = E('span', { 'class': 'tg-align-sum' }, '');
+	var body = E('div', { 'class': 'tg-collapse' }, [ E('div', { 'class': 'tg-collapse-inner' }, content) ]);
+	var title = E('h3', { 'class': 'tg-align-coll', 'role': 'button', 'tabindex': '0' }, [ chev, E('span', {}, titleText), sum ]);
+	var blk = { sum: sum, known: known };
+	blk.set = function(v, persist) {
+		body.classList.toggle('open', v);
+		chev.classList.toggle('open', v);
+		title.classList.toggle('open', v);
+		title.setAttribute('aria-expanded', String(v));
+		if (persist) { blk.known = true; try { window.localStorage.setItem('5gm-blk-' + key, v ? '1' : '0'); } catch (e) {} }
+	};
+	title.addEventListener('click', function() { blk.set(!body.classList.contains('open'), true); });
+	title.addEventListener('keydown', function(ev) {
+		if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); blk.set(!body.classList.contains('open'), true); }
+	});
+	blk.set(open, false);
+	blk.node = E('div', { 'class': 'cbi-section tg5g', 'data-blk': key }, [ title, body ]);
+	return blk;
+}
+
 var pageModemPath = '';
 
 return view.extend({
-	load: function() { return fresh.check(30946, [ modemtabs, mutil ]); },
+	load: function() { return fresh.check(40000, [ modemtabs, mutil ]); },
 
 	render: function() {
 		loadCss();
 		try { pageModemPath = window.sessionStorage.getItem('5gm-tab') || ''; } catch (e) { pageModemPath = ''; }
+		var isPhone = !!(window.matchMedia && window.matchMedia(PHONE_MQ).matches);
 
 		var LS = {
 			g: function(k, d) { try { var v = localStorage.getItem('align_' + k); return v === null ? d : v; } catch(e) { return d; } },
@@ -246,103 +283,175 @@ return view.extend({
 			speechSynthesis.speak(m);
 		}
 
-		var css = '' +
-			'.al-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 26px}' +
-			'.al-head{display:flex;flex-wrap:wrap;gap:4px 22px;font-size:15px;font-weight:600;margin-bottom:12px}' +
-			'.al-lbl{font-size:11px;letter-spacing:.04em;text-transform:uppercase;opacity:.65;font-weight:600}' +
-			'.al-cell{margin-top:6px;font-size:18px;font-weight:700}' +
-			'.al-hint{font-size:11px;opacity:.6;margin-top:1px}' +
-			'.al-rx{display:grid;grid-template-columns:60px repeat(4,1fr);gap:5px 8px;font-size:13px;text-align:center;align-items:center}' +
-			'.al-rx .l{text-align:left;opacity:.65;font-weight:600}' +
-			'.al-rx .h{opacity:.55;font-size:11px}' +
-			'.al-tbl{width:100%;border-collapse:collapse;font-size:13px}' +
-			'.al-tbl th{opacity:.6;font-weight:600;font-size:11px;text-align:left;padding:4px 6px}' +
-			'.al-tbl td{padding:5px 6px;border-top:1px solid rgba(128,128,128,.18)}' +
-			'.al-tbl tr.pick{cursor:pointer}.al-tbl tr.tgt td{font-weight:700}' +
-			'.al-sli{display:flex;align-items:center;gap:10px;margin:6px 0}' +
-			'.al-sli label{min-width:180px;font-weight:600;font-size:14px}' +
-			'.al-sli input[type=range]{flex:1;max-width:240px}' +
-			'.al-sndbtn{font-size:15px;font-weight:700;padding:8px 16px}' +
-			'@media (max-width:600px){.al-sli label{min-width:0;flex:0 0 38%}.al-sli input[type=range]{min-width:0}.al-rx{grid-template-columns:48px repeat(4,1fr)}}' +
-			'.al-intro{border-left:3px solid var(--tg-accent,#0095ff);background:rgba(128,128,128,.08);border-radius:6px;padding:10px 14px;margin:0 0 12px;font-size:14px;line-height:1.5}' +
-			'.al-intro p{margin:0 0 6px}.al-intro ol{margin:4px 0 0 20px;padding:0}.al-intro li{margin:2px 0}';
-		var style = E('style', { type: 'text/css' }, css);
+		/* ---------- header card ---------- */
+		var mkPill = function(cls) { return E('span', { 'class': 'tg-align-pill off' + (cls ? ' ' + cls : ''), 'style': 'visibility:hidden' }, [ E('i'), E('span', {}, '') ]); };
+		var hd = {
+			mode: E('span', { 'class': 'tg-proto-badge', 'style': 'display:none' }, ''),
+			band: E('span', { 'class': 'tg-proto-badge', 'style': 'display:none' }, ''),
+			mimo: E('span', { 'class': 'tg-proto-badge', 'style': 'display:none' }, ''),
+			pill: mkPill(), pillM: mkPill('tg-align-pillm'),
+			ico: E('div', { 'class': 'tginfo-signal tg-align-ico off' }),
+			reg: E('div', { 'class': 'tginfo-reg' }, _('Base station')),
+			main: E('div', { 'class': 'tginfo-op tg-align-main none' }, ''),
+			loc: E('div', { 'class': 'tginfo-loc' }, '')
+		};
+		hd.ico.innerHTML = svg('tower', 36);
 
-		var bs = E('span'), sec = E('span'), earfcn = E('span'), mode = E('span');
-		var head = E('div', { class: 'al-head' }, [ bs, sec, earfcn, mode ]);
+		// How often the page polls the modem for a fresh reading (also the cache TTL of the snapshot).
+		if (!(st.interval >= 0.5 && st.interval <= 10)) { st.interval = 2; }
+		var ivlSteps = [ 0.5, 1, 2, 3, 5, 10 ];
+		if (ivlSteps.indexOf(st.interval) < 0) { ivlSteps.push(st.interval); ivlSteps.sort(function(a, b) { return a - b; }); }
+		var intervalSel = E('select', { 'class': 'cbi-input-select tg-align-ival', change: function(ev) {
+			var v = parseFloat(ev.target.value);
+			if (v >= 0.5 && v <= 10) { st.interval = v; LS.s('interval', v); restart(); paintTarget(); }
+		} }, ivlSteps.map(function(v) {
+			return E('option', { 'value': String(v) }, _('%s s').format(String(v)));
+		}));
+		intervalSel.value = String(st.interval);
+		var sndBtn = E('button', { class: 'btn cbi-button tg-align-snd', click: function() {
+			au.on = !au.on; LS.s('sndon', au.on ? '1' : '0'); paintSndBtn();
+			if (au.on) { ac(); speak(_('Sound on')); geiger(au.curSinr || 0); } else { stopAudio(); }
+		} });
+		function paintSndBtn() {
+			dom.content(sndBtn, [ icon(au.on ? 'spk' : 'mute', 16), au.on ? _('Sound: on') : _('Sound: off') ]);
+			sndBtn.classList.toggle('cbi-button-positive', au.on);
+		}
+		paintSndBtn();
+		var head = E('div', { 'class': 'cbi-section tg5g tg-pg-head tg-align-head' }, [
+			E('h3', { 'class': 'tg-pg-title tg-align-title' }, [ E('span', {}, _('Antenna alignment')), hd.mode, hd.band, hd.mimo, hd.pillM ]),
+			E('div', { 'class': 'tginfo-general' }, [
+				hd.ico,
+				E('div', { 'class': 'tginfo-status' }, [ hd.reg, hd.main, hd.loc ]),
+				E('div', { 'class': 'tginfo-right' }, [
+					hd.pill,
+					E('div', { 'class': 'tg-align-ctl' }, [
+						sndBtn,
+						E('label', { 'class': 'tg-align-ivl' }, [ _('Refresh every'), intervalSel ])
+					])
+				])
+			])
+		]);
 
+		/* ---------- big tiles ---------- */
 		function metric(label, hint, key, unit) {
-			var cell = E('div', { class: 'al-cell' });
-			var node = E('div', {}, [ E('div', { class: 'al-lbl' }, label), cell, E('div', { class: 'al-hint' }, hint) ]);
-			return { node: node, cell: cell, key: key, unit: unit };
+			var t = { key: key, unit: unit, now: E('span', {}, '-'), u: E('small', {}, ''), trend: E('span', { 'class': 'tg-align-trend' }, '') };
+			t.val = E('div', { 'class': 'tg-hist-now dash' }, [ t.now, ' ', t.u ]);
+			t.fill = E('div', { 'class': 'tg-mbar-fill' });
+			t.bar = E('div', { 'class': 'tg-mbar', 'style': 'visibility:hidden' }, E('div', { 'class': 'tg-mbar-t' }, t.fill));
+			t.node = E('div', { 'class': 'tg-hist-card' }, [
+				E('div', { 'class': 'tg-hist-h' }, [ E('span', { 'class': 'tg-hist-name' }, E('b', {}, label)), t.trend ]),
+				t.val, t.bar,
+				E('div', { 'class': 'tg-hist-f' }, E('span', {}, hint))
+			]);
+			return t;
 		}
 		var QT = mutil.QUAL_T.lte;
-		var mSinr = metric('SINR', _('signal-to-noise · good from %d dB').format(QT.sinr[1]), 'sinr', ' dB');
-		var mRsrp = metric('RSRP', _('signal power · good from %d dBm').format(QT.rsrp[1]), 'rsrp', ' dBm');
-		var mRsrq = metric('RSRQ', _('cell quality · good from %d dB').format(QT.rsrq[1]), 'rsrq', ' dB');
-		var mRssi = metric('RSSI', _('overall level'), 'rssi', ' dBm');
-		function setMetric(mo, v, arrow) {
+		var mSinr = metric('SINR', _('signal-to-noise · good from %d dB').format(QT.sinr[1]), 'sinr', 'dB');
+		var mRsrq = metric('RSRQ', _('cell quality · good from %d dB').format(QT.rsrq[1]), 'rsrq', 'dB');
+		var mRsrp = metric('RSRP', _('signal power · good from %d dBm').format(QT.rsrp[1]), 'rsrp', 'dBm');
+		var mRssi = metric('RSSI', _('overall level'), 'rssi', 'dBm');
+		function setMetric(mo, v, trend) {
 			var has = (v != null && !isNaN(parseFloat(v)));
-			paintMetricCell(mo.cell, mo.key, has ? v : null, has ? (v + mo.unit + (arrow || '')) : '-');
+			mo.now.textContent = has ? String(v) : '-';
+			mo.u.textContent = has ? mo.unit : '';
+			mo.val.classList.toggle('dash', !has);
+			var col = has ? caQuality(mo.key, v) : null, pc = col ? metricPct(mo.key, v) : null;
+			mo.val.style.color = col ? CA_COLOR[col] : '';
+			if (pc == null) { mo.bar.style.visibility = 'hidden'; }
+			else { mo.bar.style.visibility = ''; mo.fill.style.width = pc + '%'; mo.fill.style.background = CA_GRAD[col] || CA_COLOR[col]; }
+			mo.trend.textContent = trend || '';
+			mo.trend.className = 'tg-align-trend' + (trend ? (trend.charAt(0) === '▲' ? ' up' : ' down') : '');
+			if (mo.key === 'sinr') { mo.node.style.borderColor = col ? CA_COLOR[col] : ''; }
 		}
-		var metricSec = E('div', { class: 'cbi-section' }, [ head, E('div', { class: 'al-grid' }, [ mSinr.node, mRsrq.node, mRsrp.node, mRssi.node ]) ]);
+		var bigTiles = E('div', { 'class': 'tg-align-big' }, [ mSinr.node, mRsrq.node, mRsrp.node, mRssi.node ]);
 
+		/* ---------- MIMO ---------- */
 		var rxRsrp = [], rxRsrq = [];
 		for (var i = 0; i < 4; i++) { rxRsrp.push(E('div', {}, '-')); rxRsrq.push(E('div', {}, '-')); }
 		var mimoTitle = E('h3', {}, 'MIMO: --');
-		var mimoBal = E('div', { class: 'al-hint', style: 'margin-bottom:8px' }, '');
+		var mimoSpread = E('span', {}, '');
+		var mimoBal = E('span', { 'class': 'tg-align-pill off', 'style': 'display:none' }, [ E('i'), E('span', {}, '') ]);
 		function rxLine(lbl, arr) { return [ E('div', { class: 'l' }, lbl) ].concat(arr); }
-		var mimoSec = E('div', { class: 'cbi-section' }, [
-			mimoTitle, mimoBal,
-			E('div', { class: 'al-rx' }, []
+		var mimoSec = E('div', { class: 'cbi-section tg5g' }, [
+			mimoTitle,
+			E('div', { 'class': 'tg-align-bal' }, [ mimoSpread, mimoBal ]),
+			E('div', { class: 'tg-align-rx' }, []
 				.concat([ E('div', {}, ''), E('div', { class: 'h' }, 'RX0'), E('div', { class: 'h' }, 'RX1'), E('div', { class: 'h' }, 'RX2'), E('div', { class: 'h' }, 'RX3') ])
 				.concat(rxLine('RSRP', rxRsrp)).concat(rxLine('RSRQ', rxRsrq)))
 		]);
 
+		/* ---------- best cells ---------- */
 		var tbody = E('tbody');
-		var pageInfo = E('span', { class: 'al-hint' }, '');
+		var pageInfo = E('span', { class: 'grow tg-align-hint' }, '');
 		var btnPrev = E('button', { class: 'btn cbi-button', click: function() { if (st.page > 0) { st.page--; renderTable(); } } }, '◀');
 		var btnNext = E('button', { class: 'btn cbi-button', click: function() { var tp = Math.ceil(st.cells.length / st.pageSize); if (st.page < tp - 1) { st.page++; renderTable(); } } }, '▶');
-		var pager = E('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px' }, [ btnPrev, pageInfo, btnNext ]);
-		var btnReset = E('button', { class: 'btn cbi-button cbi-button-negative', click: function() { st.cells = []; st.page = 0; st.target = null; LS.d('celllog'); LS.d('target'); renderTable(); speak(_('Log cleared')); } }, _('Clear the log'));
-		var logSec = E('div', { class: 'cbi-section' }, [
+		var btnReset = E('button', { class: 'btn cbi-button cbi-button-negative', click: function() { st.cells = []; st.page = 0; st.target = null; LS.d('celllog'); LS.d('target'); renderTable(); paintTarget(); speak(_('Log cleared')); } }, [ icon('trash', 15), _('Clear the log') ]);
+		var logSec = E('div', { class: 'cbi-section tg5g' }, [
 			E('h3', {}, _('Best cells (by SINR)')),
-			E('div', { class: 'al-hint', style: 'margin-bottom:8px;font-style:italic' }, _('Click a row to set the target cell')),
-			E('table', { class: 'al-tbl' }, [
-				E('thead', {}, E('tr', {}, [ E('th', {}, '#'), E('th', {}, 'eNB'), E('th', {}, _('Sector')), E('th', {}, 'RSRP'), E('th', {}, 'SINR'), E('th', {}, _('Time')) ])),
+			E('div', { class: 'cbi-section-descr tg-align-hint', style: 'margin-bottom:6px' }, _('Click a row to set the target cell')),
+			E('table', { class: 'tg-align-tbl' }, [
+				E('thead', {}, E('tr', {}, [ E('th', {}, '#'), E('th', {}, 'eNB'), E('th', {}, _('Sector')), E('th', {}, 'RSRP'), E('th', {}, 'SINR'), E('th', { 'class': 'hm' }, _('Time')) ])),
 				tbody
 			]),
-			pager,
-			E('div', { style: 'margin-top:8px' }, [ btnReset ])
+			E('div', { 'class': 'tg-align-actions', 'style': 'margin-top:10px' }, [ pageInfo, btnPrev, btnNext, btnReset ])
 		]);
 		function sortedCells() { return st.cells.slice().sort(function(a, b) { return b.sinr - a.sinr; }); }
 		function renderTable() {
 			var s = sortedCells(), tp = Math.max(1, Math.ceil(s.length / st.pageSize));
 			if (st.page >= tp) st.page = tp - 1; if (st.page < 0) st.page = 0;
 			var start = st.page * st.pageSize;
-			pageInfo.textContent = _('Page') + ' ' + (st.page + 1) + '/' + tp + ' (' + s.length + ')';
-			pager.style.display = (tp > 1) ? 'flex' : 'none';
+			pageInfo.textContent = s.length ? (_('Page') + ' ' + (st.page + 1) + '/' + tp + ' (' + s.length + ')') : '';
+			btnPrev.style.display = btnNext.style.display = (tp > 1) ? '' : 'none';
+			btnReset.style.display = s.length ? '' : 'none';
+			if (!s.length) {
+				dom.content(tbody, E('tr', {}, E('td', { 'colspan': '6', 'class': 'tg-align-hint' }, _('No data yet'))));
+				return;
+			}
 			dom.content(tbody, s.slice(start, start + st.pageSize).map(function(e, i) {
 				var isT = st.target && st.target.enb === e.enb && st.target.pci === e.pci;
-				var rsrpTd = E('td', {}), sinrTd = E('td', {});
+				var rsrpTd = E('td', {}), sinrTd = E('td', { 'class': 'b' });
 				paintMetricCell(rsrpTd, 'rsrp', e.rsrp, e.rsrp + ' dBm');
 				paintMetricCell(sinrTd, 'sinr', e.sinr, e.sinr.toFixed(1));
+				var num = E('td', {}, String(start + i + 1));
+				if (isT) { num.appendChild(icon('target', 13)); }
 				return E('tr', { class: 'pick' + (isT ? ' tgt' : ''), click: function() {
 					if (isT) { st.target = null; LS.d('target'); speak(_('Target cleared')); }
 					else { st.target = { enb: e.enb, pci: e.pci }; LS.sj('target', st.target); speak(_('Target') + ' ' + e.enb + ' ' + _('sector') + ' ' + e.pci); }
-					renderTable();
-				} }, [ E('td', {}, String(start + i + 1)), E('td', {}, [ String(e.enb) ]), E('td', {}, [ String(e.pci) ]), rsrpTd, sinrTd, E('td', { class: 'al-hint' }, [ String(e.time || '--') ]) ]);
+					renderTable(); paintTarget();
+				} }, [ num, E('td', { 'class': 'mono' }, [ String(e.enb) ]), E('td', {}, [ String(e.pci) ]), rsrpTd, sinrTd, E('td', { class: 'hm tg-align-hint' }, [ String(e.time || '--') ]) ]);
 			}));
 		}
 
-		var canvas = E('canvas', { style: 'width:100%;height:190px;display:block' });
-		function draw() { drawChart(canvas, [ { name: 'SINR', points: st.hist } ], { min: -5, max: 25, fmt: function(v) { return Math.round(v) + ' dB'; } }); }
+		/* ---------- chart ---------- */
+		var canvas = E('canvas', { 'class': 'tg-align-chart' });
+		function draw() {
+			var col = CA_COLOR[caQuality('sinr', st.lastSinr)] || null;
+			drawChart(canvas, [ { name: 'SINR', points: st.hist, color: col } ], { min: -5, max: 25, fmt: function(v) { return Math.round(v) + ' dB'; } });
+		}
 		var chartSec = E('div', { class: 'cbi-section tg5g' }, [ E('h3', {}, _('SINR over the last 30 seconds')), canvas ]);
+		if (window.ResizeObserver) {
+			var rof = 0;
+			new ResizeObserver(function() {
+				if (rof) return;
+				rof = window.requestAnimationFrame(function() { rof = 0; if (canvas.isConnected) draw(); });
+			}).observe(canvas);
+		} else {
+			window.addEventListener('resize', function() { if (canvas.isConnected) draw(); });
+		}
 
+		/* ---------- sound ---------- */
+		var sndSum = function() {
+			return [ [ _('Geiger (SINR)'), au.vGeiger ], [ _('RSRP tone'), au.vTone ], [ _('Voice'), au.vVoice ] ]
+				.map(function(p) { return p[0] + ' ' + Math.round(p[1] * 100) + '%'; }).join(' · ');
+		};
+		var soundBlk = null;
 		function sliderRow(label, key, val, onChange) {
-			var vEl = E('span', { class: 'al-hint', style: 'min-width:34px' }, Math.round(val * 100) + '%');
-			var inp = E('input', { type: 'range', min: 0, max: 100, value: val * 100, input: function(ev) { var v = parseInt(ev.target.value) / 100; vEl.textContent = Math.round(v * 100) + '%'; LS.s(key, v); onChange(v); } });
-			return E('div', { class: 'al-sli' }, [ E('label', {}, label), inp, vEl ]);
+			var vEl = E('span', { class: 'tg-align-hint' }, Math.round(val * 100) + '%');
+			var inp = E('input', { type: 'range', min: 0, max: 100, value: val * 100, 'aria-label': label, input: function(ev) {
+				var v = parseInt(ev.target.value) / 100; vEl.textContent = Math.round(v * 100) + '%'; LS.s(key, v); onChange(v);
+				if (soundBlk) soundBlk.sum.textContent = sndSum();
+			} });
+			return E('div', { class: 'tg-align-sli' }, [ E('label', {}, label), inp, vEl ]);
 		}
 		function loadCustom(dataUrl) {
 			try { var b = atob(dataUrl.split(',')[1]); var buf = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) buf[i] = b.charCodeAt(i); ac().decodeAudioData(buf.buffer, function(d) { au.customBuf = d; }); } catch(e) {}
@@ -355,32 +464,52 @@ return view.extend({
 			r.readAsDataURL(f);
 		} });
 		var snd0 = LS.g('customsnd', ''); if (snd0) loadCustom(snd0);
-		var soundSec = E('div', { class: 'cbi-section' }, [
-			E('h3', {}, _('Sound')),
+		soundBlk = collapsible('alsnd', _('Sound'), [
 			sliderRow(_('Geiger (SINR)'), 'vGeiger', au.vGeiger, function(v) { au.vGeiger = v; }),
 			sliderRow(_('RSRP tone'), 'vTone', au.vTone, function(v) { au.vTone = v; }),
 			sliderRow(_('Voice'), 'vVoice', au.vVoice, function(v) { au.vVoice = v; }),
-			E('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' }, [
-				E('button', { class: 'btn cbi-button', click: function() { fileInput.click(); } }, _('Upload a custom sound')),
-				E('button', { class: 'btn cbi-button', click: function() { var was = au.on; au.on = true; click(); au.on = was; } }, _('Preview')),
+			E('div', { 'class': 'tg-align-actions', 'style': 'margin-top:8px' }, [
+				E('button', { class: 'btn cbi-button', click: function() { fileInput.click(); } }, [ icon('up', 15), _('Upload a custom sound') ]),
+				E('button', { class: 'btn cbi-button', click: function() { var was = au.on; au.on = true; click(); au.on = was; } }, [ icon('spk', 15), _('Preview') ]),
 				E('button', { class: 'btn cbi-button', click: function() { au.customBuf = null; LS.d('customsnd'); ui.addNotification(null, E('p', _('Back to the default sound')), 'info'); } }, _('Default sound')),
 				fileInput
 			])
-		]);
+		], false);
+		soundBlk.sum.textContent = sndSum();
 
-		var intervalInput = E('input', { type: 'number', min: 0.5, max: 10, step: 0.5, value: st.interval, style: 'width:64px', change: function(ev) {
-			var v = parseFloat(ev.target.value);
-			if (v >= 0.5 && v <= 10) { st.interval = v; LS.s('interval', v); restart(); } else ev.target.value = st.interval;
-		} });
-		var sndBtn = E('button', { class: 'btn cbi-button al-sndbtn', click: function() {
-			au.on = !au.on; LS.s('sndon', au.on ? '1' : '0'); paintSndBtn();
-			if (au.on) { ac(); speak(_('Sound on')); geiger(au.curSinr || 0); } else { stopAudio(); }
-		} });
-		function paintSndBtn() { dom.content(sndBtn, au.on ? [ '🔊 ', _('Sound: on') ] : [ '🔇 ', _('Sound: off') ]); sndBtn.classList.toggle('cbi-button-positive', au.on); }
-		paintSndBtn();
-		var topBar = E('div', { class: 'cbi-section', style: 'display:flex;flex-wrap:wrap;gap:14px;align-items:center' }, [
-			sndBtn, E('div', { style: 'display:flex;align-items:center;gap:8px' }, [ E('span', { class: 'al-hint' }, _('Interval, s')), intervalInput ])
-		]);
+		/* ---------- how to use it ---------- */
+		var step = function(n, txt) { return [ E('b', {}, String(n)), E('span', {}, txt) ]; };
+		var howBlk = collapsible('alhow', _('How to use it'), [
+			E('p', { 'class': 'cbi-section-descr', 'style': 'margin:0 0 8px' },
+				_('An outdoor or directional antenna works best when it points precisely at a base station. This page shows the signal live, every few seconds, so you can turn the antenna and see at once whether it got better or worse.')),
+			E('div', { 'class': 'tg-align-step' }, [].concat(
+				step(1, _('Watch SINR first: it decides the speed. RSRP and RSRQ help confirm the direction.')),
+				step(2, _('Turn the antenna slowly, a few degrees at a time, and wait for a couple of readings after each step.')),
+				step(3, _('Turn on the sound to follow the signal without looking at the screen: the faster the clicks, the better.')),
+				step(4, _('The table of best cells remembers where the signal was strongest; click a row to make that cell the target.')),
+				step(5, _('When the numbers stop improving, fix the antenna in the best position.'))
+			))
+		], true);
+		// Without a stored choice the instructions stay open until the first reading arrives.
+		var howAuto = !howBlk.known;
+
+		/* ---------- live updates ---------- */
+		var lastCell = { enb: '', pci: '', earfcn: '' };
+		function paintTarget() {
+			var parts = [];
+			if (st.target) { parts.push(_('Target') + ': ' + _('BS') + ' ' + st.target.enb + ', ' + _('sector') + ' ' + st.target.pci); }
+			hd.loc.textContent = parts.join(' · ');
+			var isT = st.target && lastCell.enb && st.target.enb === lastCell.enb && st.target.pci === lastCell.pci;
+			hd.main.classList.toggle('tgt', !!isT);
+		}
+		function setPill(kind, text) {
+			[ hd.pill, hd.pillM ].forEach(function(p) {
+				p.className = 'tg-align-pill ' + kind + (p === hd.pillM ? ' tg-align-pillm' : '');
+				p.style.visibility = text ? '' : 'hidden';
+				p.lastChild.textContent = text || '';
+			});
+		}
+		function setBadge(el, txt) { el.textContent = txt || ''; el.style.display = txt ? '' : 'none'; }
 
 		function updateRx(rx) {
 			var vals = [];
@@ -392,11 +521,16 @@ return view.extend({
 			}
 			var n = vals.length;
 			mimoTitle.textContent = 'MIMO: ' + (n ? (n + 'x' + n) : '--');
+			setBadge(hd.mimo, n >= 2 ? 'MIMO ' + n + 'x' + n : '');
 			if (n >= 2) {
 				var d = Math.round((Math.max.apply(null, vals) - Math.min.apply(null, vals)) * 10) / 10;
-				var lbl = d <= 3 ? _('excellent') : d <= 6 ? _('good') : d <= 10 ? _('fair') : _('poor');
-				mimoBal.textContent = _('RX spread') + ': ' + d + ' dB · ' + _('balance') + ': ' + lbl;
-			} else mimoBal.textContent = '';
+				var lv = d <= 3 ? 3 : d <= 6 ? 2 : d <= 10 ? 1 : 0;
+				var lbl = [ _('poor'), _('fair'), _('good'), _('excellent') ][lv];
+				mimoSpread.textContent = _('RX spread') + ': ' + d + ' dB';
+				mimoBal.className = 'tg-align-pill ' + (lv >= 2 ? 'ok' : lv === 1 ? 'warn' : 'bad');
+				mimoBal.lastChild.textContent = _('balance') + ': ' + lbl;
+				mimoBal.style.display = '';
+			} else { mimoSpread.textContent = ''; mimoBal.style.display = 'none'; }
 		}
 		function logCell(enb, pci, rsrp, sinr) {
 			if (enb == null || enb === '' || enb === '-' || isNaN(sinr)) return;
@@ -411,6 +545,15 @@ return view.extend({
 			st.cells.push({ enb: enb, pci: pci, rsrp: rsrp, sinr: sinr, time: ts });
 			LS.sj('celllog', st.cells);
 			return true;
+		}
+		function showOffline() {
+			hd.ico.className = 'tginfo-signal tg-align-ico off';
+			hd.reg.textContent = _('Base station');
+			hd.main.textContent = _('No data');
+			hd.main.classList.add('none');
+			hd.loc.textContent = _('Waiting for the active modem. If the selected modem is not the active one, switch to it in the modem bar.');
+			setPill('off', '');
+			setBadge(hd.mode, ''); setBadge(hd.band, '');
 		}
 
 		function apply(j) {
@@ -427,15 +570,19 @@ return view.extend({
 			if (!online) {
 				stopAudio();
 				[ mSinr, mRsrp, mRsrq, mRssi ].forEach(function(mo) { setMetric(mo, null); });
-				bs.textContent = _('BS') + ': --'; sec.textContent = _('Sector') + ': --'; earfcn.textContent = 'EARFCN: --'; mode.textContent = '';
 				updateRx([]);
+				showOffline();
 				return;
 			}
+			if (howAuto) { howAuto = false; if (!howBlk.known) howBlk.set(false, false); }
 			au.curSinr = sinr;
-			var arrow = '';
-			if (st.lastSinr !== null && !isNaN(sinr)) { var d = sinr - st.lastSinr; arrow = d > 0.3 ? ' ↑' : d < -0.3 ? ' ↓' : ''; }
+			var trend = '';
+			if (st.lastSinr !== null && !isNaN(sinr)) {
+				var d = Math.round((sinr - st.lastSinr) * 10) / 10;
+				trend = d > 0.3 ? '▲ ' + d.toFixed(1) : d < -0.3 ? '▼ ' + Math.abs(d).toFixed(1) : '';
+			}
 			if (!isNaN(sinr)) st.lastSinr = sinr;
-			setMetric(mSinr, isNaN(sinr) ? null : sinr.toFixed(1), arrow);
+			setMetric(mSinr, isNaN(sinr) ? null : sinr.toFixed(1), trend);
 			setMetric(mRsrp, isNaN(rsrp) ? null : rsrp);
 			setMetric(mRsrq, isNaN(rsrq) ? null : rsrq);
 			mutil.qualRssiCap(isNaN(rsrq) ? null : rsrq);
@@ -443,11 +590,19 @@ return view.extend({
 
 			var enb = (j.enbid != null && j.enbid !== '' && j.enbid !== '-') ? String(j.enbid) : '';
 			var pci = (j.pci != null && j.pci !== '') ? String(j.pci) : '';
-			var isT = st.target && st.target.enb === enb && st.target.pci === pci;
-			bs.textContent = _('BS') + ': ' + (enb || '--') + (isT ? ' 🎯' : '');
-			sec.textContent = _('Sector') + ': ' + (pci || '--');
-			earfcn.textContent = 'EARFCN: ' + (j.earfcn || '--');
-			mode.textContent = j.mode ? String(j.mode).split('|')[0].trim() : '';
+			var earfcn = (j.earfcn != null && j.earfcn !== '' && j.earfcn !== '-') ? String(j.earfcn) : '';
+			lastCell = { enb: enb, pci: pci, earfcn: earfcn };
+			var lvl = isNaN(sinr) ? null : mutil.qualLevel('sinr', sinr, _qualRat);
+			hd.ico.className = 'tginfo-signal tg-align-ico ' + (lvl == null ? 'off' : lvl >= 2 ? 'ok' : lvl === 1 ? 'warn' : 'bad');
+			hd.main.classList.remove('none');
+			hd.main.textContent = _('BS') + ' ' + (enb || '--') + ' · ' + _('sector') + ' ' + (pci || '--') + ' · EARFCN ' + (earfcn || '--');
+			setPill(lvl == null ? 'off' : lvl >= 2 ? 'ok' : lvl === 1 ? 'warn' : 'bad',
+				lvl == null ? '' : [ _('Poor'), _('Fair'), _('Good'), _('Excellent') ][lvl]);
+			setBadge(hd.mode, j.mode ? String(j.mode).split('|')[0].trim() : '');
+			var band = '';
+			try { band = String(mutil.caSplitBand(j.pband).band || '').replace(/\s*\(.*$/, '').trim(); } catch (e) { band = ''; }
+			setBadge(hd.band, band && band !== '-' ? band : '');
+			paintTarget();
 
 			updateRx(parseAntports(j.antports));
 			// Rebuild the table only when the log changed, not on every tick.
@@ -474,20 +629,18 @@ return view.extend({
 		};
 		document.addEventListener('visibilitychange', function() { if (document.hidden) stopAudio(); });
 
-		var intro = E('div', { class: 'al-intro' }, [
-			E('p', {}, [ E('strong', {}, _('What alignment is for.')), ' ',
-				_('An outdoor or directional antenna works best when it points precisely at a base station. This page shows the signal live, every few seconds, so you can turn the antenna and see at once whether it got better or worse.') ]),
-			E('p', {}, E('strong', {}, _('How to use it:'))),
-			E('ol', {}, [
-				E('li', {}, _('Turn the antenna slowly, a few degrees at a time, and wait for a couple of readings after each step.')),
-				E('li', {}, _('Watch SINR first: it decides the speed. RSRP and RSRQ help confirm the direction.')),
-				E('li', {}, _('Turn on the sound to follow the signal without looking at the screen: the faster the clicks, the better.')),
-				E('li', {}, _('The table of best cells remembers where the signal was strongest; click a row to make that cell the target.')),
-				E('li', {}, _('When the numbers stop improving, fix the antenna in the best position.'))
-			])
+		var root = E('div', { 'class': 'tg-align' }, [
+			head,
+			bigTiles,
+			E('div', { 'class': 'tg-align-grid' }, [ chartSec, mimoSec ]),
+			logSec,
+			soundBlk.node,
+			howBlk.node
 		]);
-		var root = E('div', {}, [ style, E('h2', {}, _('Antenna alignment')), intro, topBar, metricSec, mimoSec, logSec, chartSec, soundSec ]);
 
+		showOffline();
+		hd.loc.textContent = _('Waiting for the active modem. If the selected modem is not the active one, switch to it in the modem bar.');
+		[ mSinr, mRsrp, mRsrq, mRssi ].forEach(function(mo) { setMetric(mo, null); });
 		renderTable();
 		modemtabs.attach();
 		setTimeout(function() { draw(); tick(); restart(); }, 0);

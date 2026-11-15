@@ -70,13 +70,19 @@ The script builds them, not the page, so that the sending policy lives in one pl
 
 ## Page behaviour
 
-- Stages are printed with the same typewriter animation as the answer, and only when the stage changes, because the poll runs every 2 s and restarting the animation on every tick would reset it. In history mode ("keep previous answer"), `typewrite()` clears the whole `<pre>`, so the first "Sending request…" wiped the operator's menu and there was nothing left to reply to (audit 2026-09-12). In that mode stages are appended without animation, and the history is restored before the answer. The last stage's animation is stopped before the answer is printed, because it kept typing into the answer.
+Layout (2026-11 redesign, styles in `view/modem5g/page-ussd.css`, loaded by the view as `link#tg-page-ussd-css`): a header card like the Network page, the exchange with the network as a chat on the left, the code lists on the right, and the USSD settings (`smssettings.panel('ussd')`) folded into a block below, with its state kept under `5gm-blk-ussdset` and a summary (3G switch, ModemManager) in the title. On a phone the columns stack.
+
+- Every request is a pair of bubbles: the code on the right, the reply on the left. Errors (CME codes, rejected requests, no reply) get a red bubble with the raw modem text under the explanation. Without "keep the previous reply" each request clears the chat; with it the exchanges accumulate, and "newest replies first" puts the latest one on top.
+- Stages are listed under the request as they arrive (spinner on the current one, a check on the finished ones), and only when the stage changes, because the poll runs every 2 s. When only one stage was shown, the list is dropped once the reply arrives. The old single `<pre>` printed stages with the same typewriter as the answer, and in history mode the first "Sending request…" wiped the operator's menu (audit 2026-09-12); separate elements per exchange remove that whole class of bugs. The reply itself is still typed out, unless the browser asks for reduced motion.
+- A reply that looks like an operator menu (at least two lines starting with `1.`, `2)` and so on) gets number buttons under it. A button puts the number into the field and sends it, through the open ModemManager session or as a new request on the AT path. Only the latest reply keeps its buttons.
+- On the ModemManager path an open session (`user-response`/`active`) shows a bar above the input and marks the reply "waiting for a reply". The clear button cancels the session.
 - A start failure is parsed immediately. `ussd.sh` prints `{"error":...}` without touching the state file, which still holds the previous `done`, so the first poll showed the previous answer as the answer to the new code (audit 2026-09-12).
 - The poll gives up with margin over the measured 18 s. An in-flight guard stops rpcd calls from stacking up. The timer is stored on the view and stopped in `leave`: before that, polling lived for up to two minutes on a closed page, wrote into a detached `<pre>`, and after returning there were two pollers (audit 2026-09-12).
-- An empty answer is explained: `unsupported` (the module's firmware cannot do USSD) or `noswitch` (the request went to a modem that is not active, so no 3G switch was made).
+- An empty answer is explained: `unsupported` (the module's firmware cannot do USSD) or `noswitch` (the request went to a modem that is not active, so no 3G switch was made). "USSD terminated by network" links to the incoming messages.
 - A bare `Delete` key used to wipe the whole code field, so a long code could not be edited (audit 2026-09-12). Clearing now needs Ctrl or Shift.
 - A ReferenceError on `res` in an outer scope used to swallow the real error, and the user got no notification at all.
-- The code list is a `ui.Dropdown` rebuilt when the code file changes. It has no `<option>` or `.value`, so the node is replaced. A select placeholder ensures that picking the first code also fires an event.
+- CME/CMS error numbers are matched exactly (`error: <n>`). The old chain of `includes('error: 1')` tests relied on the order of the checks to let `error: 100` win over `error: 1`.
+- Code lists: one segment per `/etc/5gmodem/modem/ussdcodes/*.user` file plus "My codes" for `ussdcodes.user` when it has content (before, that file was shown only when the directory was empty). The choice is kept in localStorage (`luci-app-sendussd-selectedFile`). A click on a code puts it into the field; sending stays a separate action. "USSD templates" opens the same editor as before.
 
 ## Warnings on the page
 
@@ -84,6 +90,8 @@ There are three distinct causes, and they must not be confused:
 - `supported=0`: the module cannot do USSD at all. This is a firmware property from the verified-modem database (`quirks.sh: ussd_supported_for`). Some data-only modules advertise `+CUSD` but never answer, so the page used to hang until timeout and the app got the blame. The FM350 firmware does not answer `+CUSD` in any mode (full matrix tested). The page warns but does not block, since the database may lag behind new firmware. `ussd.sh` still sends the request, without the 3G detour.
 - `sms_only=1`: the module could, but the network registered the subscriber as "SMS only" (CREG 6/7), and USSD belongs to the voice domain. This may resolve itself on another network or plan.
 - The modem is in LTE/5G, so USSD will go through CSFB. The text depends on the per-modem `ussd_3g` setting.
+
+The header card carries the state: a status pill, a short main line, and for the LTE case the explanation that used to be a separate info banner. The first two causes also keep a yellow warning block under the card, because they mean the request will most likely stay unanswered. A HiLink modem without an AT port (`reason: no_at_port`) says so instead of the data-only text. The badge in the title shows the transport: `sms_tool` with the configured port, or `ModemManager`.
 
 The data comes from `modemswitch.sh ussdsupport`, which is the sixth result of `load()`. The code used to read the fifth, `uci.load('defmodems')`, which resolves to a list of package names, so `JSON.parse` always threw and all three warnings were dead (audit 2026-09-12). The network mode is taken from the metrics snapshot, keeping only the mode part (`LTE | B3 (1800 MHz)` gives `LTE`).
 

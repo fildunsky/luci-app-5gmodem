@@ -1,0 +1,147 @@
+/* Statistics page (5gstats.js); loaded once by the view. Shared tokens and tiles are in modem.css. */
+.tg-stats {
+  --tg-stats-ok: #22a559;
+  --tg-stats-warn: #e0a100;
+  --tg-stats-bad: #e5484d;
+}
+
+/* header card in the Network-page layout (tginfo-general), as on the GPS page */
+.tg-stats-title .tg-stats-pillm { display: none; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.tg-stats-ico { color: var(--tg-accent); }
+.tg-stats-ico.ok { color: var(--tg-stats-ok); }
+.tg-stats-ico.warn { color: var(--tg-stats-warn); }
+.tg-stats-ico.bad { color: var(--tg-stats-bad); }
+.tg-stats-ico.off { color: var(--tg-muted); }
+
+.tg-stats-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; line-height: 1.3; }
+.tg-stats-pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.tg-stats-pill.ok { color: var(--tg-stats-ok); }
+.tg-stats-pill.warn { color: var(--tg-stats-warn); }
+.tg-stats-pill.bad { color: var(--tg-stats-bad); }
+.tg-stats-pill.off { color: var(--tg-muted); }
+.tg-stats-pill.acc { color: var(--tg-accent); }
+.tg-stats-head .tg-stats-warn { color: var(--tg-stats-warn); }
+
+/* header controls: switches and the background segment. Plain <button>s with every property themes
+   touch set here (bootstrap and argon style bare buttons: gradients, shadows, fixed heights). */
+.tg-stats-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(128, 128, 128, .2); }
+.tg-stats-ctl > .tg-stats-reset { margin-left: auto !important; }
+.tg-stats-head .tg-stats-main { font-size: 1.35em; line-height: 1.25; }
+.tg-stats-head .tginfo-status .tg-stats-trf { font-variant-numeric: tabular-nums; opacity: .85; }
+.tg-stats-head .tginfo-general { align-items: center; }
+.tg-stats-head .tginfo-right { margin-left: auto; }
+.tg-stats .tg-stats-sw,
+.tg-stats .tg-stats-seg button {
+  font: inherit; font-size: 12.5px; line-height: 1.3; letter-spacing: normal; text-transform: none;
+  margin: 0; height: auto; min-height: 0; min-width: 0; width: auto;
+  box-shadow: none; text-shadow: none; background-image: none; color: inherit; cursor: pointer; white-space: nowrap;
+}
+.tg-stats .tg-stats-sw {
+  display: inline-flex; align-items: center; gap: 7px; box-sizing: border-box; height: 28px !important; padding: 0 11px 0 7px !important;
+  border: 1px solid rgba(128, 128, 128, .4) !important; border-radius: 7px !important; background: transparent !important;
+}
+.tg-stats .tg-stats-sw > i { position: relative; width: 24px; height: 14px; border-radius: 7px; background: rgba(128, 128, 128, .45); flex: none; transition: background .15s ease; }
+.tg-stats .tg-stats-sw > i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
+.tg-stats .tg-stats-sw.on { border-color: var(--tg-stats-ok); }
+.tg-stats .tg-stats-sw.on > i { background: var(--tg-stats-ok); }
+.tg-stats .tg-stats-sw.on > i::after { transform: translateX(10px); }
+.tg-stats .tg-stats-sw:disabled { opacity: .6; cursor: progress; }
+.tg-stats .tg-stats-sw:focus-visible,
+.tg-stats .tg-stats-seg button:focus-visible { outline: 2px solid var(--tg-accent); outline-offset: -2px; }
+.tg-stats-bg { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tg-stats-lbl { font-size: 12.5px; color: var(--tg-muted); white-space: nowrap; }
+/* the SMS view switch (Dialogs | Feed): square-ish segments that the active one fills edge to edge;
+   !important because some themes give bare buttons their own padding, radius and height */
+.tg-stats-seg { display: inline-flex; align-items: stretch; flex-wrap: nowrap; box-sizing: border-box; height: 28px; border: 1px solid rgba(128, 128, 128, .4); border-radius: 7px; overflow: hidden; max-width: 100%; vertical-align: middle; }
+.tg-stats .tg-stats-seg button { padding: 0 11px !important; border: 0 !important; border-radius: 0 !important; margin: 0 !important; height: auto !important; min-height: 0 !important; background: transparent !important; color: inherit !important; box-shadow: none !important; }
+.tg-stats .tg-stats-seg button + button { border-left: 1px solid rgba(128, 128, 128, .4) !important; }
+.tg-stats .tg-stats-seg button.on { background: var(--tg-accent) !important; color: #fff !important; font-weight: 600; }
+.tg-stats .tg-stats-path { width: 13em !important; max-width: 100%; height: 28px !important; min-height: 0 !important; line-height: 20px !important; padding: 3px 9px !important; border: 1px solid rgba(128, 128, 128, .4) !important; background: transparent !important; color: inherit !important; box-shadow: none !important; margin: 0 !important; font-size: 12.5px !important; border-radius: 7px !important; box-sizing: border-box; }
+.tg-stats .tg-stats-reset { padding: 0 11px !important; color: var(--tg-stats-bad) !important; border-color: rgba(229, 72, 77, .5) !important; }
+.tg-stats .tg-stats-reset { gap: 5px; }
+.tg-stats .tg-stats-ri { display: inline-flex; }
+.tg-stats .tg-stats-reset:disabled { opacity: .6; cursor: progress; }
+
+/* tiles: tg-hist-card from the Network page; every tile is name, value, bar, footer, and the
+   tiles of a row stretch to one height with their content at the top */
+.tg-stats-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.tg-stats .tg-stats-tiles .tg-hist-card { align-content: start; }
+.tg-stats .tg-hist-name b { font-size: 12px; font-weight: 600; color: var(--tg-muted); }
+.tg-stats .tg-hist-now.dash { color: var(--tg-muted); font-weight: 500; }
+.tg-stats .tg-hist-card .tg-mbar { min-height: 0; }
+.tg-stats .tg-hist-card .tg-mbar-t { flex: 1 1 60px; min-width: 40px; height: 6px; }
+.tg-stats .tg-hist-f > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* collapsible blocks (collapsibleSection of 5gdetail.js, with a summary) */
+.tg-stats-chev { display: inline-flex; transition: transform .15s ease; }
+.tg-stats-chev.open { transform: rotate(180deg); }
+.tg-stats-chev svg { display: block; }
+.tg-stats-sum { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--tg-muted); text-align: right; }
+.tg-stats-sum:empty { display: none; }
+
+.tg-stats-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tg-stats-actions .grow { flex: 1 1 auto; }
+.tg-stats-actions .cbi-button { margin: 0 !important; }
+.tg-stats .cbi-button .tg-stats-i { display: inline-flex; vertical-align: -3px; margin-right: 5px; }
+.tg-stats .cbi-button .tg-stats-i svg { display: block; }
+.tg-stats-empty { display: grid; place-items: center; text-align: center; padding: 30px 16px; font-size: 13px; }
+.tg-stats-empty > div { display: grid; gap: 8px; justify-items: center; max-width: 40ch; }
+.tg-stats-empty > div > span { color: var(--tg-muted); }
+.tg-stats-empty b { font-size: 14px; font-weight: 600; }
+.tg-stats-empty .tg-stats-i { color: var(--tg-muted); }
+.tg-stats-empty .tg-stats-i svg { display: block; }
+
+@media (max-width: 700px) {
+  .tg-stats-head .tginfo-general { gap: .9em; flex-wrap: nowrap; }
+  .tg-stats-title .tg-stats-pillm { display: inline-flex; }
+  .tg-stats-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .tg-stats .tg-hist-card { padding: 6px 8px; }
+  .tg-stats .tg-hist-now { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-stats-chev,
+  .tg-stats .tg-stats-sw > i,
+  .tg-stats .tg-stats-sw > i::after { transition: none; }
+}
+
+/* ===== Statistics page (5gstats.js) ===== */
+.tg-stats { --tg-stats-rx: var(--tg-accent); --tg-stats-tx: #8e6ce6; }
+.tg-stats-tiles { margin: 0 0 14px; }
+.tg-stats-head .tginfo-right { justify-content: flex-start; }
+
+.tg-stats-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 0 14px; align-items: stretch; }
+.tg-stats-charts > .cbi-section { margin: 0 !important; min-width: 0; }
+.tg-stats-charts > .tg-stats-wide { grid-column: 1 / -1; }
+.tg-stats-chart { width: 100%; height: 160px; display: block; cursor: crosshair; }
+.tg-stats-leg { display: flex; gap: 4px 14px; flex-wrap: wrap; font-size: 12px; color: var(--tg-muted); margin-top: 6px; min-height: 1.3em; }
+.tg-stats-leg i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+
+.tg-stats-tr { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.tg-stats-tr .tg-hist-card { gap: 6px; }
+.tg-stats-trname { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.tg-stats-trname b { font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-stats-split { display: flex; height: 8px; border-radius: 5px; overflow: hidden; background: var(--tg-track); }
+.tg-stats-split .rx { background: var(--tg-stats-rx); }
+.tg-stats-split .tx { background: var(--tg-stats-tx); }
+.tg-stats .cbi-button.tg-stats-del { padding: 3px 6px !important; min-height: 0 !important; height: auto !important; line-height: 0; margin: 0 !important; flex: none; opacity: .7; }
+.tg-stats .cbi-button.tg-stats-del:hover { opacity: 1; }
+.tg-stats .cbi-button.tg-stats-del svg { display: block; }
+
+@media (max-width: 700px) {
+  .tg-stats-head .tginfo-right { display: none; }
+  .tg-stats-charts { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .tg-stats-chart { height: 130px; }
+  .tg-stats-ctl { margin-top: 6px; }
+  /* phone: every row of the control bar spans the card edge to edge - the two switches share a row,
+     the background segment fills its own row under its label, the path takes what reset leaves */
+  .tg-stats-ctl { gap: 8px; }
+  .tg-stats .tg-stats-ctl > .tg-stats-sw:not(.tg-stats-reset) { flex: 1 1 0; min-width: 0; }
+  .tg-stats .tg-stats-ctl > .tg-stats-sw > span { overflow: hidden; text-overflow: ellipsis; }
+  .tg-stats-poll { flex: 1 1 100%; display: grid; gap: 4px; }
+  .tg-stats-poll .tg-stats-seg { display: flex; width: 100%; }
+  .tg-stats .tg-stats-poll .tg-stats-seg button { flex: 1 1 0; min-width: 0; padding: 0 4px !important; overflow: hidden; text-overflow: ellipsis; }
+  .tg-stats-store { flex: 1 1 0; min-width: 0; flex-wrap: nowrap; }
+  .tg-stats .tg-stats-store .tg-stats-path { flex: 1 1 auto; width: auto !important; min-width: 0; }
+  .tg-stats-ctl > .tg-stats-reset { margin-left: 0 !important; flex: none; }
+  .tg-stats-tr { grid-template-columns: minmax(0, 1fr); }
+}

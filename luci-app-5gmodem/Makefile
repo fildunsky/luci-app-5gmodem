@@ -22,7 +22,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=3.9.46
+PKG_VERSION:=4.0.0
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -46,6 +46,7 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-antenna 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-btnleds 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-usbports 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
+chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-gpsfeed 2>/dev/null
 _5gm_step() {
 	[ -f /tmp/5gmodem/update.pid ] && echo "$$1" > /tmp/5gmodem/update.step 2>/dev/null
 	return 0

@@ -716,6 +716,20 @@ var mmIdx = '';
 var ifaceProtoIsMM = false;
 var ledsAvail = false;
 var pageModemPath = '';
+
+// Write actions wait for a tab switch still running on the router (modemswitch.sh switch takes
+// seconds): the scripts act on uci active_modem, which is the previous modem until it returns.
+// Every write also names the page modem (for=<usb path>, read when the action starts), so it
+// cannot land on another modem when active_modem is not the one shown. Only for scripts that
+// take for=: reboot_modem.sh and "setopt.sh reconnect" here.
+function forArgs(args) {
+	return pageModemPath ? (args || []).concat([ 'for=' + pageModemPath ]) : args;
+}
+function execW(bin, args) {
+	var p = window.__5gmSwitchP || Promise.resolve();
+	var a = forArgs(args);
+	return p.then(function() { return fs.exec(bin, a); });
+}
 var pollTickFn = null;
 
 function resetStickyForModem() {
@@ -798,6 +812,7 @@ function switchModemInPlace(path) {
 	loadMmIdx();
 	if (modemtabs.refreshEsimTab) { modemtabs.refreshEsimTab(); }
 	if (modemtabs.refreshUssdTab) { modemtabs.refreshUssdTab(); }
+	if (modemtabs.refreshGpsTab) { modemtabs.refreshGpsTab(); }
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'peek', pageModemPath ]), '{}')
 		.then(function(out) {
 			var j = null; try { j = JSON.parse(out); } catch (e) {}
@@ -1489,7 +1504,7 @@ function mapPinButton(c4, label) {
 
 function rebootModem(hard) {
 	if (hard) { setModemBusy(_('The modem is restarting…'), 90); }
-	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ hard ? 'hard' : 'soft' ]).then(function(res) {
+	return execW('/usr/share/5gmodem/reboot_modem.sh', [ hard ? 'hard' : 'soft' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
 			if (hard) { clearModemBusy(true); }
@@ -1511,7 +1526,7 @@ function rebootModem(hard) {
 var _powerRebootMode = 'power';
 function rebootModemPower() {
 	setModemBusy(_('The modem is restarting…'), 120);
-	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ _powerRebootMode ]).then(function(res) {
+	return execW('/usr/share/5gmodem/reboot_modem.sh', [ _powerRebootMode ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
 			clearModemBusy(true);
@@ -1531,10 +1546,10 @@ function rebootModemPower() {
 function initPowerBtn() {
 	var b = document.getElementById('btn-power-reboot');
 	if (!b) { return; }
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', [ 'haspower' ]), '').then(function(out) {
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', forArgs([ 'haspower' ])), '').then(function(out) {
 		var g = ''; try { g = (JSON.parse(out || '{}').gpio) || ''; } catch (e) {}
 		if (g) { _powerRebootMode = 'power'; b.style.display = ''; return; }
-		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', [ 'hasusbpower' ]), '').then(function(out2) {
+		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', forArgs([ 'hasusbpower' ])), '').then(function(out2) {
 			var m = ''; try { m = (JSON.parse(out2 || '{}').method) || ''; } catch (e) {}
 			if (m) { _powerRebootMode = 'usbpower'; b.style.display = ''; }
 		});
@@ -2052,22 +2067,22 @@ function runDoctor(btn) {
 	}
 	mark(l1, false, _('No connection'));
 	var l2 = line(_('Reconnecting…'));
-	fs.exec('/usr/share/5gmodem/setopt.sh', [ 'reconnect' ]).then(function() {
+	execW('/usr/share/5gmodem/setopt.sh', [ 'reconnect' ]).then(function() {
 		return doctorWait(35);
 	}).then(function(ok) {
 		if (ok) { mark(l2, true, _('Done — the internet is back')); finish(); return; }
 		mark(l2, false, _('Did not help'));
 		var l3 = line(_('Restarting the modem…'));
-		return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'soft' ]).then(function() {
+		return execW('/usr/share/5gmodem/reboot_modem.sh', [ 'soft' ]).then(function() {
 			return doctorWait(80);
 		}).then(function(ok2) {
 			if (ok2) { mark(l3, true, _('Done — the internet is back')); finish(); return; }
 			mark(l3, false, _('Did not help'));
-			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', [ 'hasusbpower' ]), '').then(function(out) {
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', forArgs([ 'hasusbpower' ])), '').then(function(out) {
 				var m = ''; try { m = (JSON.parse(out || '{}').method) || ''; } catch (e) {}
 				if (!m) { giveup(); return; }
 				var l4 = line(_('Power-cycling the modem over USB…'));
-				return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'usbpower' ]).then(function() {
+				return execW('/usr/share/5gmodem/reboot_modem.sh', [ 'usbpower' ]).then(function() {
 					return doctorWait(120);
 				}).then(function(ok3) {
 					if (ok3) { mark(l4, true, _('Done — the internet is back')); finish(); }
@@ -2344,8 +2359,7 @@ function applyMetrics(json) {
 						var mv = String(json.mode || '').trim();
 						var _mibR = document.getElementById('modem-info-block');
 						if (_mibR && mutil.ratFill) {
-							if (uci.get('5gmodem', '@5gmodem[0]', 'rat_card') === '0') { _mibR.removeAttribute('data-rat'); }
-							else { _mibR.setAttribute('data-rat', mutil.ratFill(mv)); }
+							_mibR.setAttribute('data-rat', mutil.ratFill(mv));
 						}
 						if (mv && mv != '-') {
 							var mtext = mutil.formatModeDisplay(mv).replace(/[&<>]/g, function(c) {
@@ -2931,7 +2945,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30946, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40000, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -3216,7 +3230,7 @@ simDialog: baseclass.extend({
 					E('div', { 'class': 'tginfo-simslot-row' }, [
 						(function() {
 							var _env = E('a', { 'id': 'smsenv', 'class': 'tg-smsenv',
-								'href': L.url('admin/modem/5gmodem/readsms'),
+								'href': L.url('admin/modem/5gmodem/sms'),
 								'title': _('Unread SMS — open Incoming'),
 								'style': 'display:none' }, []);
 							_env.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>';

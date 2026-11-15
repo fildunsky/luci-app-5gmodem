@@ -19,11 +19,25 @@ if [ "$1" = mtk-package-needed ]; then
 	exit 0
 fi
 
+# for=<usb path>, anywhere in the arguments: the modem this call is about. The page sends it with
+# every write, so the write lands on the modem it shows even when uci active_modem is another one.
+for _fa in "$@"; do
+	shift
+	case "$_fa" in
+		for=*)
+			case "${_fa#for=}" in
+				''|*[!0-9A-Za-z.:_-]*) : ;;
+				*) BANDS_ACTIVE_MODEM="${_fa#for=}" ;;
+			esac ;;
+		*) set -- "$@" "$_fa" ;;
+	esac
+done
+
 case "$1" in
 	json|jsonrefresh|mgmtinfo|mgmtjson|nratjson|getmode|getsupportedmodes|getcelllock|applyresult)
 		case "$2" in
 			'') : ;;
-			*[!0-9.:_-]*) : ;;
+			*[!0-9A-Za-z.:_-]*) : ;;   # letters too: SoC and PCI modem paths (ccci, *.remoteproc, hex)
 			*) BANDS_ACTIVE_MODEM="$2" ;;
 		esac ;;
 esac
@@ -85,6 +99,17 @@ fi
 active_modem() {
 	[ -n "$BANDS_ACTIVE_MODEM" ] && { printf '%s\n' "$BANDS_ACTIVE_MODEM"; return 0; }
 	uci -q get 5gmodem.@5gmodem[0].active_modem
+}
+
+# The global options (network, at_port) and detect.sh describe uci active_modem: no fallback to
+# them when the call names another modem.
+_sel_is_active() {
+	[ -z "$BANDS_ACTIVE_MODEM" ] \
+		|| [ "$BANDS_ACTIVE_MODEM" = "$(uci -q get 5gmodem.@5gmodem[0].active_modem)" ]
+}
+_global_opt() {
+	_sel_is_active || return 0
+	uci -q get "5gmodem.@5gmodem[0].$1"
 }
 
 _persist_bands() {
@@ -149,6 +174,8 @@ _cfun_cycle() {
 		sleep 2
 		case "$(sms_tool -d "$_DEVICE" at "AT+CFUN?" 2>/dev/null)" in *"+CFUN: 1"*) break ;; esac
 	done
+	# the radio is on again: "mobile.sh tick" re-applies airplane mode when it is set
+	rm -f /tmp/5gmodem/airplane.applied 2>/dev/null
 }
 
 hextobands() {
@@ -577,6 +604,8 @@ _reconnect_iface() {
 	# targeted down+up instead of ifup: see docs/subsystems/bands.md#reconnect-after-a-radio-cycle
 	ubus call "network.interface.$_ri_if" down >/dev/null 2>&1
 	sleep 3
+	# not for an interface the user switched off (mobile data off, airplane mode)
+	[ "$(uci -q get "network.$_ri_if.auto")" = 0 ] && return 0
 	ubus call "network.interface.$_ri_if" up >/dev/null 2>&1 || ifup "$_ri_if" >/dev/null 2>&1
 }
 
@@ -591,7 +620,7 @@ _bands_after_write() {
 	case "$_BANDS_APPLY_LIVE" in
 		1)         return 0 ;;
 		reconnect) _reconnect_iface ;;
-		*)         /usr/share/5gmodem/reboot_modem.sh soft ;;
+		*)         /usr/share/5gmodem/reboot_modem.sh soft ${BANDS_ACTIVE_MODEM:+"for=$BANDS_ACTIVE_MODEM"} ;;
 	esac
 }
 _bands_flush() {
@@ -730,7 +759,7 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	_BJT=$(cat "$_BJF.t" 2>/dev/null)
 	case "$_BJT" in ''|*[!0-9]*) _BJT="" ;; esac
 	_BJIF=$(uci -q get "5gmodem.m_$(echo "$_BJAM" | sed 's/[^A-Za-z0-9]/_/g').network" 2>/dev/null)
-	[ -n "$_BJIF" ] || _BJIF=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+	[ -n "$_BJIF" ] || _BJIF=$(_global_opt network 2>/dev/null)
 	_BJP=$(uci -q get "network.$_BJIF.proto" 2>/dev/null)
 	_BJMDL=$(uci -q get "5gmodem.m_$(echo "$_BJAM" | sed 's/[^A-Za-z0-9]/_/g').model" 2>/dev/null)
 	_BJCM=$(cat "$_BJF.m" 2>/dev/null)
@@ -1180,7 +1209,7 @@ if [ -n "$_AMP" ]; then
 	done
 
 	if [ -z "$_found" ] && [ -n "$_AVIDPID" ]; then
-		_atp="$_bs_at"; [ -n "$_atp" ] || _atp=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+		_atp="$_bs_at"; [ -n "$_atp" ] || _atp=$(_global_opt at_port)
 		command -v tty_no_at >/dev/null 2>&1 || . /usr/share/5gmodem/noatports.sh
 		[ -n "$_atp" ] && tty_no_at "$_atp" && _atp=""
 		if [ -n "$_atp" ] && [ -e "$_atp" ]; then
@@ -1265,7 +1294,7 @@ if [ "$_PORT_OK" = 1 ]; then
 		_PORT_OK=0
 	else
 		_bo_if=$(uci -q get "5gmodem.$_bs_sec.network")
-		[ -n "$_bo_if" ] || _bo_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+		[ -n "$_bo_if" ] || _bo_if=$(_global_opt network)
 		if [ "$(uci -q get "network.$_bo_if.proto" 2>/dev/null)" != "modemmanager" ] \
 		   && pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1; then
 			_bo_c="/tmp/5gmodem/mmowns_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g')"
@@ -1299,7 +1328,7 @@ fi
 
 if [ "$_BAND_VIA" = "mmcli" ]; then
 	_IFACE=$(uci -q get "5gmodem.$_bs_sec.network")
-	[ -n "$_IFACE" ] || _IFACE=$(uci -q get 5gmodem.@5gmodem[0].network)
+	[ -n "$_IFACE" ] || _IFACE=$(_global_opt network)
 	_bs_ipr=$(uci -q get "network.$_IFACE.proto" 2>/dev/null)
 	_BAND_NO_TAKEOVER=""
 	if [ "$_bs_ipr" = "mbimp" ]; then
@@ -1384,7 +1413,7 @@ _mm_takeover_run() {
 	_mt_op="$1"; _mt_list="$2"
 	_mt_path="$_bs_am"
 	_mt_if=$(uci -q get "5gmodem.$_bs_sec.network" 2>/dev/null)
-	[ -n "$_mt_if" ] || _mt_if=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+	[ -n "$_mt_if" ] || _mt_if=$(_global_opt network 2>/dev/null)
 	logger -t 5gmodem "band-set: temporary MM takeover for $_mt_path (iface $_mt_if): $_mt_op $_mt_list"
 	[ -n "$_mt_if" ] && ifdown "$_mt_if" 2>/dev/null
 	"$_R/mm-inhibit.sh" pause "$_mt_path" 2>/dev/null
@@ -2094,7 +2123,7 @@ case $1 in
 			  esac
 			  _reconnect_iface
 			  _cl_at=$(uci -q get "5gmodem.$_cl_sec.at_port")
-			  [ -n "$_cl_at" ] || _cl_at=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
+			  [ -n "$_cl_at" ] || ! _sel_is_active || _cl_at=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 			  if [ -n "$_cl_at" ] && [ -e "$_cl_at" ]; then
 				_cl_ok=0
 				for _cl_i in 1 2 3 4 5 6; do

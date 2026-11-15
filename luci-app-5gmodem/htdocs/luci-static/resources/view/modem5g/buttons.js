@@ -4,6 +4,13 @@
 'require ui';
 'require view.modem5g.modemtabs as modemtabs';
 
+// Router buttons: one card per button, page styles in page-buttons.css (tg-btn-*).
+(function() {
+	if (document.getElementById('tg-page-buttons-css')) { return; }
+	document.head.appendChild(E('link', { 'id': 'tg-page-buttons-css', 'rel': 'stylesheet', 'type': 'text/css',
+		'href': L.resource('view/modem5g/page-buttons.css') }));
+})();
+
 function detect() {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'detect' ]).then(function(res) {
 		var j = {};
@@ -43,6 +50,23 @@ function delBinding(name) {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'del', name ]);
 }
 
+var ICONS = {
+	power: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/></g>',
+	trash: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></g>',
+	plus: '<path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+	check: '<path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+};
+function svg(name, size) {
+	return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+function icon(name, size, cls) {
+	var s = E('span', { 'class': cls || 'tg-btn-i' });
+	s.innerHTML = svg(name, size);
+	return s;
+}
+// Labels are the existing "Command:" style strings; the card shows them without the colon.
+function lbl(s) { return String(s).replace(/[:：]\s*$/, ''); }
+
 var LED_CSS = {
 	red:'#e5484d', green:'#2ea043', blue:'#4b8bf5', white:'#e8ecf1', amber:'#f5a623',
 	orange:'#fb923c', yellow:'#eab308', cyan:'#22d3ee', purple:'#a855f7',
@@ -62,13 +86,14 @@ function parseLedSpec(spec) {
 	return map;
 }
 
+// LED chips: each click cycles "not touched" -> on -> off.
 function ledGrid(leds, savedSpec) {
 	var initial = parseLedSpec(savedSpec);
 	var chips = [];
-	var wrap = E('div', { 'class': 'ledgrid' });
+	var wrap = E('div', { 'class': 'tg-btn-leds' });
 
 	if (!leds.length) {
-		return { node: E('div', { 'class': 'ledgrid-empty' },
+		return { node: E('div', { 'class': 'tg-btn-ledsempty' },
 			_('No LEDs found on this device')), getSpec: function() { return ''; }, leds: leds };
 	}
 
@@ -76,23 +101,20 @@ function ledGrid(leds, savedSpec) {
 	var stLabel = { 'none': '—', '1': _('on'), '0': _('off') };
 	leds.forEach(function(led) {
 		var st = initial[led.name] || 'none';
-		var col = ledColor(led.color);
-		var stTxt = E('span', { 'class': 'ledst' }, stLabel[st]);
-		var chip = E('span', {
-			'class': 'ledchip', 'data-st': st, 'data-name': led.name,
+		var stTxt = E('span', { 'class': 'tg-btn-ledst' }, stLabel[st]);
+		var chip = E('button', {
+			'type': 'button', 'class': 'tg-btn-led', 'data-st': st, 'data-name': led.name,
 			'title': led.name + (led.color ? (' · ' + led.color) : ''),
-			'style': '--ledc:' + col
+			'style': '--ledc:' + ledColor(led.color)
 		}, [
-			E('span', { 'class': 'leddot' }),
+			E('i'),
 			E('span', {}, [ led.name ]),
 			stTxt
 		]);
-		chip.classList.toggle('on', st !== 'none');
 		chip.addEventListener('click', function() {
 			var cur = chip.getAttribute('data-st');
 			var next = order[(order.indexOf(cur) + 1) % order.length];
 			chip.setAttribute('data-st', next);
-			chip.classList.toggle('on', next !== 'none');
 			stTxt.textContent = stLabel[next];
 		});
 		chips.push(chip);
@@ -117,9 +139,6 @@ var PRESETS_SIMPLE = [
 	{ label: _('Stop service'),  cmd: '/usr/share/5gmodem/buttons.sh svc stop ssclash' },
 	{ label: _('Restart service'), cmd: '/etc/init.d/ssclash restart' }
 ].concat(PRESETS_COMMON);
-var PRESETS_COND = [
-	{ label: _('Toggle service (on/off)'), cmd: '/usr/share/5gmodem/buttons.sh svc toggle ssclash' }
-].concat(PRESETS_COMMON);
 
 var _reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -135,10 +154,12 @@ function typewrite(term, input, text) {
 	})();
 }
 
+// The command "terminal" (btnterm, styled in modem.css) with the preset menu behind the caret.
 function cmdField(value, presetList) {
 	var input = E('input', {
 		'type': 'text', 'spellcheck': 'false', 'autocomplete': 'off',
-		'placeholder': _('shell command'), 'value': value || ''
+		'placeholder': _('shell command'), 'value': value || '',
+		'aria-label': lbl(_('Command:'))
 	});
 	var menu = E('div', { 'class': 'btnmenu' });
 	var body = E('div', { 'class': 'btnterm-body' }, [ input ]);
@@ -153,29 +174,17 @@ function cmdField(value, presetList) {
 	}
 	fillMenu(presetList);
 	var caret = E('span', {
-		'class': 'btncaret', 'title': _('insert a preset'),
+		'class': 'btncaret', 'title': _('insert a preset'), 'role': 'button', 'tabindex': '0',
 		'click': function(ev) {
 			ev.stopPropagation();
 			var wasOpen = menu.classList.contains('open');
 			document.querySelectorAll('.btnmenu.open').forEach(function(m) { m.classList.remove('open'); });
 			if (!wasOpen) { menu.classList.add('open'); }
-		}
+		},
+		'keydown': function(ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); caret.click(); } }
 	}, '▾');
 	body.appendChild(caret);
 	return { input: input, node: E('div', { 'class': 'btncmd' }, [ term, menu ]), setPresets: fillMenu };
-}
-
-function toggleWidget(on, small) {
-	return E('span', { 'class': 'btnsw' + (small ? ' btnsw-sm' : '') + (on ? ' on' : '') });
-}
-
-function widget(b, state) {
-	var cls = 'btn cbi-button btnhead-card'
-		+ (state === 'pressed' ? ' hpressed' : ' hreleased');
-	return E('div', { 'class': cls }, [
-		E('span', { 'class': 'hname' }, [ b.label || b.name ]),
-		E('span', { 'class': 'hsub' }, [ b.name ])
-	]);
 }
 
 function infoBox(key, text) {
@@ -192,14 +201,15 @@ function infoBox(key, text) {
 }
 
 function segmented(opts, value, onChange) {
-	var wrap = E('div', { 'class': 'btnseg' });
+	var wrap = E('div', { 'class': 'tg-btn-seg', 'role': 'group' });
 	var btns = [];
 	opts.forEach(function(o) {
-		var el = E('button', { 'type': 'button' }, o.label);
-		if (o.value === value) { el.classList.add('active'); }
+		var el = E('button', { 'type': 'button', 'aria-pressed': String(o.value === value) }, o.label);
+		if (o.value === value) { el.classList.add('on'); }
 		el.addEventListener('click', function() {
-			btns.forEach(function(x) { x.classList.remove('active'); });
-			el.classList.add('active');
+			btns.forEach(function(x) { x.classList.remove('on'); x.setAttribute('aria-pressed', 'false'); });
+			el.classList.add('on');
+			el.setAttribute('aria-pressed', 'true');
 			wrap.setAttribute('data-val', o.value);
 			if (onChange) { onChange(o.value); }
 		});
@@ -210,26 +220,30 @@ function segmented(opts, value, onChange) {
 }
 
 function ledsBlock(labelText, grid) {
-	var preview = grid.leds && grid.leds.length ? E('span', {
-		'class': 'ledprev', 'title': _('Apply this LED combination now to check it'),
-		'click': function() { previewLeds(grid.getSpec()); }
+	var preview = grid.leds && grid.leds.length ? E('a', {
+		'href': '#', 'class': 'tg-btn-test', 'title': _('Apply this LED combination now to check it'),
+		'click': function(ev) { ev.preventDefault(); previewLeds(grid.getSpec()); }
 	}, _('test on LEDs')) : null;
-	return E('div', { 'style': 'margin-top:.9em' }, [
-		E('div', { 'class': 'ledgrid-lbl' }, [ E('span', {}, labelText), preview ].filter(Boolean)),
+	return E('div', { 'class': 'tg-btn-ledblk' }, [
+		E('div', { 'class': 'tg-btn-lbl' }, [ E('span', {}, lbl(labelText)), preview ].filter(Boolean)),
 		grid.node
 	]);
 }
 
 function dbcInput(b) {
-	return E('input', { 'type': 'number', 'min': '0', 'class': 'cbi-input-text',
+	return E('input', { 'type': 'number', 'min': '0', 'class': 'cbi-input-text tg-btn-dbc',
+		'aria-label': _('delay between repeats, seconds'),
 		'value': (b.debounce !== undefined && b.debounce !== '') ? b.debounce : '10' });
 }
 
-function saveStatus() { return E('span', { 'style': 'margin-left:.6em; font-size:90%' }, ''); }
-function flashSaved(status) { status.textContent = _('Saved'); status.style.color = '#2ea043';
-	window.setTimeout(function() { status.textContent = ''; }, 2500); }
-function flashCleared(status) { status.textContent = _('Cleared'); status.style.color = '';
-	window.setTimeout(function() { status.textContent = ''; }, 2500); }
+function saveStatus() { return E('span', { 'class': 'tg-btn-status' }, ''); }
+function flashSaved(status) {
+	status.className = 'tg-btn-status ok';
+	status.textContent = '';
+	status.appendChild(icon('check', 14));
+	status.appendChild(document.createTextNode(_('Saved')));
+	window.setTimeout(function() { status.textContent = ''; }, 2500);
+}
 
 function condPresets(services) {
 	return (services || []).map(function(s) {
@@ -238,6 +252,7 @@ function condPresets(services) {
 	}).concat(PRESETS_COMMON);
 }
 
+// One state (pressed/released, or switch on/off): command on the left, LEDs on the right.
 function statePanel(b, leds, state, services) {
 	var ct0 = (b['ct_' + state] === 'conditional') ? 'conditional' : 'simple';
 	var cPre = condPresets(services);
@@ -249,7 +264,7 @@ function statePanel(b, leds, state, services) {
 
 	var onGrid = ledGrid(leds, b['ledson_' + state]);
 	var offGrid = ledGrid(leds, b['ledsoff_' + state]);
-	var condArea = E('div', {}, [
+	var condArea = E('div', { 'class': 'tg-btn-cond' }, [
 		infoBox('cond-help',
 			_('Pick a service from the command menu above (▾) - it fills the toggle command. Each press flips it; the LEDs below reflect whether it ends up running or stopped.')),
 		ledsBlock(_('LEDs when the service is running:'), onGrid),
@@ -268,13 +283,14 @@ function statePanel(b, leds, state, services) {
 	simpleLeds.style.display = (ct0 === 'simple') ? '' : 'none';
 	condArea.style.display = (ct0 === 'conditional') ? '' : 'none';
 
-	var node = E('div', { 'style': 'margin-top:.3em' }, [
-		E('div', { 'class': 'btncmd-label', 'style': 'margin-bottom:.2em' }, _('Command type:')),
-		seg.node,
-		E('label', { 'class': 'btncmd-label', 'style': 'margin-top:.6em' }, _('Command:')),
-		cmd.node,
-		simpleLeds,
-		condArea
+	var node = E('div', { 'class': 'tg-btn-grid' }, [
+		E('div', { 'class': 'tg-btn-col' }, [
+			E('div', { 'class': 'tg-btn-lbl' }, E('span', {}, lbl(_('Command type:')))),
+			seg.node,
+			E('div', { 'class': 'tg-btn-lbl tg-btn-lbl2' }, E('span', {}, lbl(_('Command:')))),
+			cmd.node
+		]),
+		E('div', { 'class': 'tg-btn-col' }, [ simpleLeds, condArea ])
 	]);
 
 	function getVals() {
@@ -289,56 +305,42 @@ function statePanel(b, leds, state, services) {
 
 function buttonCard(b, leds, services, onDelete) {
 	var isSwitch = (b.type === 'switch');
-	var card = E('div', { 'class': 'btncard' });
+	var card = E('div', { 'class': 'cbi-section tg-btn-card', 'data-btn': b.name });
 	var dbc = dbcInput(b);
 	var status = saveStatus();
 
-	card.appendChild(E('button', { 'class': 'btn cbi-button cbi-button-remove btncard-del',
+	var pPanel = statePanel(b, leds, 'pressed', services);
+	var rPanel = statePanel(b, leds, 'released', services);
+
+	// The state picker replaces the old click-on-the-picture; a switch has ON/OFF instead.
+	var stateSeg = segmented([
+		{ 'value': 'pressed', 'label': isSwitch ? _('Switch ON') : _('Pressed') },
+		{ 'value': 'released', 'label': isSwitch ? _('Switch OFF') : _('Released') }
+	], 'pressed', function(v) {
+		pPanel.node.style.display = (v === 'pressed') ? '' : 'none';
+		rPanel.node.style.display = (v === 'released') ? '' : 'none';
+	});
+	rPanel.node.style.display = 'none';
+
+	var del = E('button', { 'class': 'cbi-button cbi-button-negative tg-btn-ico', 'type': 'button',
+		'title': _('Delete'), 'aria-label': _('Delete'),
 		'click': ui.createHandlerFn(this, function() {
 			return delBinding(b.name).then(function() {
 				if (card.parentNode) { card.parentNode.removeChild(card); }
 				if (onDelete) { onDelete(b.name); }
 			});
-		}) }, _('Delete')));
+		}) });
+	del.innerHTML = svg('trash', 15);
 
-	var pPanel = statePanel(b, leds, 'pressed', services);
-	var rPanel = statePanel(b, leds, 'released', services);
+	var title = E('h3', { 'class': 'tg-btn-title' }, [
+		E('span', {}, [ b.label || b.name ]),
+		E('span', { 'class': 'tg-proto-badge', 'title': b.name }, isSwitch ? _('switch') : _('button'))
+	]);
+	card.appendChild(E('div', { 'class': 'tg-btn-top' }, [ title, E('span', { 'class': 'tg-btn-grow' }), stateSeg.node, del ]));
+	card.appendChild(pPanel.node);
+	card.appendChild(rPanel.node);
 
-	if (isSwitch) {
-		card.appendChild(E('div', {}, [
-			E('div', { 'class': 'btnstate-lbl' }, _('Switch ON')),
-			toggleWidget(true, false) ]));
-		card.appendChild(pPanel.node);
-		card.appendChild(E('hr', { 'style': 'border:0;border-top:1px solid rgba(127,127,127,.2);margin:1.1em 0' }));
-		card.appendChild(E('div', {}, [
-			E('div', { 'class': 'btnstate-lbl' }, _('Switch OFF')),
-			toggleWidget(false, false) ]));
-		card.appendChild(rPanel.node);
-	} else {
-		var state = 'pressed';
-		var widgetWrap = E('div', { 'class': 'btnwidget',
-			'title': _('Click the button to switch between its pressed and released state') });
-		var lbl = E('span', {});
-		card.appendChild(E('div', { 'class': 'btnstate-lbl' }, [ lbl,
-			E('span', { 'class': 'hint' }, _('(click the button to switch state)')) ]));
-		card.appendChild(widgetWrap);
-		card.appendChild(pPanel.node);
-		card.appendChild(rPanel.node);
-		var renderState = function() {
-			widgetWrap.innerHTML = '';
-			widgetWrap.appendChild(widget(b, state));
-			lbl.textContent = (state === 'pressed') ? _('Pressed') : _('Released');
-			pPanel.node.style.display = (state === 'pressed') ? '' : 'none';
-			rPanel.node.style.display = (state === 'released') ? '' : 'none';
-		};
-		widgetWrap.addEventListener('click', function() {
-			state = (state === 'pressed') ? 'released' : 'pressed';
-			renderState();
-		});
-		renderState();
-	}
-
-	var save = E('button', { 'class': 'btn cbi-button cbi-button-save',
+	var save = E('button', { 'class': 'cbi-button cbi-button-action', 'type': 'button',
 		'click': ui.createHandlerFn(this, function() {
 			var ops = [ function() { return setField(b.name, 'debounce', dbc.value); } ];
 			var fields = [ 'debounce=' + (dbc.value || '') ];
@@ -362,13 +364,14 @@ function buttonCard(b, leds, services, onDelete) {
 				if (j && typeof j.error === 'string' && j.error.indexOf('usage') !== 0) { throw new Error(j.error); }
 				return ops.reduce(function(p, mk) { return p.then(mk); }, Promise.resolve());
 			}).then(function() { flashSaved(status); }, function(e) {
-				status.textContent = String((e && e.message) || e); status.style.color = '#e5484d';
+				status.className = 'tg-btn-status bad';
+				status.textContent = String((e && e.message) || e);
 			});
 		}) }, _('Save'));
 
-	card.appendChild(E('div', { 'class': 'btndbc' }, [
-		dbc, E('span', { 'style': 'opacity:.7' }, _('delay between repeats, seconds')) ]));
-	card.appendChild(E('div', { 'style': 'margin-top:.9em' }, [ save, status ]));
+	card.appendChild(E('div', { 'class': 'tg-btn-foot' }, [
+		dbc, E('span', { 'class': 'tg-btn-muted' }, _('delay between repeats, seconds')),
+		E('span', { 'class': 'tg-btn-grow' }), status, save ]));
 	return card;
 }
 
@@ -386,23 +389,39 @@ return view.extend({
 		var buttons = (res && res[0]) || [];
 		var leds = (res && res[1]) || [];
 		var services = (res && res[2]) || [];
-		var body = E('div', {}, [
-			E('h2', {}, _('Buttons')),
-			E('div', { 'class': 'cbi-map-descr' },
-				_('Assign actions to this router’s physical buttons. Click a button below to add and configure it.'))
-		]);
 
 		var assignable = (buttons || []).filter(function(b) { return !b['default']; });
+
+		/* header card in the Network-page layout */
+		var hd = {};
+		hd.ico = E('div', { 'class': 'tginfo-signal tg-btn-ico' + (assignable.length ? '' : ' off') });
+		hd.ico.innerHTML = svg('power', 36);
+		hd.count = E('medium', {}, '0');
+		hd.ico.appendChild(hd.count);
+		hd.main = E('div', { 'class': 'tginfo-op tg-btn-main' }, '');
+		hd.add = E('div', { 'class': 'tg-btn-add' });
+		var head = E('div', { 'class': 'cbi-section tg-pg-head tg-btn-head' }, [
+			E('h3', { 'class': 'tg-pg-title tg-btn-title' }, E('span', {}, _('Buttons'))),
+			E('div', { 'class': 'tginfo-general' }, [
+				hd.ico,
+				E('div', { 'class': 'tginfo-status' }, [
+					E('div', { 'class': 'tginfo-reg' }, _('Physical buttons of this router model, available for assigning functions')),
+					hd.main,
+					E('div', { 'class': 'tginfo-loc' },
+						_('Assign actions to this router’s physical buttons. Click a button below to add and configure it.'))
+				]),
+				E('div', { 'class': 'tginfo-right' }, [ hd.add ])
+			])
+		]);
+		var body = E('div', { 'class': 'tg-btn' }, [ head ]);
+
 		if (!assignable.length) {
-			body.appendChild(E('div', { 'class': 'alert-message' },
-				_('No assignable buttons were detected on this device')));
+			hd.main.textContent = _('No assignable buttons were detected on this device');
 			return body;
 		}
 
-		var list = E('div', {});
-		var addWrap = E('div', { 'class': 'btnadd' });
+		var list = E('div', { 'class': 'tg-btn-list' });
 		body.appendChild(list);
-		body.appendChild(addWrap);
 
 		var CFG_KEYS = [ 'cmd_pressed', 'cmd_released', 'ct_pressed', 'ct_released',
 			'leds_pressed', 'leds_released', 'ledson_pressed', 'ledsoff_pressed',
@@ -418,19 +437,24 @@ return view.extend({
 			refreshAdd();
 		}
 		function refreshAdd() {
-			addWrap.innerHTML = '';
+			var n = assignable.filter(function(b) { return shown[b.name]; }).length;
+			hd.count.textContent = n + ' / ' + assignable.length;
+			hd.main.textContent = _('%d of %d buttons configured').format(n, assignable.length);
+			hd.ico.classList.toggle('off', n === 0);
+			hd.add.innerHTML = '';
 			var avail = assignable.filter(function(b) { return !shown[b.name]; });
 			if (!avail.length) {
-				addWrap.appendChild(E('em', { 'style': 'opacity:.6' },
+				hd.add.appendChild(E('em', { 'class': 'tg-btn-muted' },
 					_('All buttons of this device have been added')));
 				return;
 			}
 			avail.forEach(function(b) {
-				addWrap.appendChild(E('button', {
-					'class': 'btn cbi-button cbi-button-add', 'style': 'margin-right:.4em',
-					'title': b.name + (b.type === 'switch' ? ' · switch' : ''),
+				var btn = E('button', {
+					'class': 'cbi-button cbi-button-add', 'type': 'button',
+					'title': b.name + (b.type === 'switch' ? ' · ' + _('switch') : ''),
 					'click': function() { addCard(b); }
-				}, [ '+ ' + (b.label || b.name) ]));
+				}, [ icon('plus', 14), E('span', {}, [ b.label || b.name ]) ]);
+				hd.add.appendChild(btn);
 			});
 		}
 

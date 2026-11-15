@@ -11,3 +11,4 @@ CLAUDE.local.md
 AGENTS.local.md
 .claude/settings.local.json
 *.local.md
+__pycache__/

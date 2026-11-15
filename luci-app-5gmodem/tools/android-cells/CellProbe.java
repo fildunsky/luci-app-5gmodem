@@ -256,6 +256,83 @@ public class CellProbe {
         printRadio(tm, sub, writable);
     }
 
+
+    // GNSS of the phone: turn the GPS provider on for a few seconds as the shell user, which holds
+    // ACCESS_FINE_LOCATION, and report the best fix and the satellites (docs/modems/android-phones.md#gnss)
+    public static class Gnss extends android.location.GnssStatus.Callback implements android.location.LocationListener {
+        volatile Object best; volatile Object status; volatile int ttff=-1, locs=0, stats=0, started=0;
+        final java.util.concurrent.CountDownLatch fixed = new java.util.concurrent.CountDownLatch(1);
+        volatile long since=0;
+        public void onLocationChanged(android.location.Location location) {
+            locs++;
+            // the provider hands over its cached last fix on registration: only fixes made after the request count
+            Object t=optional(location,"getElapsedRealtimeNanos");
+            if(t instanceof Number && ((Number)t).longValue()<since)return;
+            Object prev=best;
+            Object acc=optional(location,"getAccuracy"), pacc=prev==null?null:optional(prev,"getAccuracy");
+            if(prev==null || !(acc instanceof Number) || !(pacc instanceof Number) || ((Number)acc).floatValue()<=((Number)pacc).floatValue()+5f)best=location;
+            if(acc instanceof Number && ((Number)acc).floatValue()<=25f)fixed.countDown();
+        }
+        public void onSatelliteStatusChanged(android.location.GnssStatus value) { status=value; stats++; }
+        public void onStarted() { started++; }
+        public void onFirstFix(int ttffMillis) { ttff=ttffMillis; }
+    }
+    static Map<String,Object> place(Object loc) {
+        Map<String,Object> out=new LinkedHashMap<>();
+        if(loc==null)return out;
+        out.put("provider",optional(loc,"getProvider"));
+        out.put("lat",optional(loc,"getLatitude"));out.put("lon",optional(loc,"getLongitude"));
+        if(Boolean.TRUE.equals(optional(loc,"hasAltitude")))out.put("alt",optional(loc,"getAltitude"));
+        if(Boolean.TRUE.equals(optional(loc,"hasMslAltitude")))out.put("msl_alt",optional(loc,"getMslAltitudeMeters"));
+        if(Boolean.TRUE.equals(optional(loc,"hasSpeed")))out.put("speed_ms",optional(loc,"getSpeed"));
+        if(Boolean.TRUE.equals(optional(loc,"hasBearing")))out.put("bearing",optional(loc,"getBearing"));
+        if(Boolean.TRUE.equals(optional(loc,"hasAccuracy")))out.put("accuracy_m",optional(loc,"getAccuracy"));
+        out.put("time_ms",optional(loc,"getTime"));
+        Object nanos=optional(loc,"getElapsedRealtimeNanos");
+        try { long now=((Number)Class.forName("android.os.SystemClock").getMethod("elapsedRealtimeNanos").invoke(null)).longValue();
+              if(nanos instanceof Number)out.put("age_s",(now-((Number)nanos).longValue())/1000000000L); } catch(Exception e) {}
+        return out;
+    }
+    static Map<String,Object> gnss(Object context, String[] args) throws Exception {
+        int seconds=20;
+        if(args.length>1)seconds=Math.max(1,Math.min(120,Integer.parseInt(args[1])));
+        Object lm=invoke(context,"getSystemService","location");
+        Map<String,Object> out=new LinkedHashMap<>();
+        out.put("enabled",optional(lm,"isLocationEnabled"));
+        out.put("gps_enabled",optional(lm,"isProviderEnabled","gps"));
+        out.put("last",place(optional(lm,"getLastKnownLocation","gps")));
+        if("last".equals(args.length>2?args[2]:"") || seconds<=1) return out;
+        Gnss g=new Gnss();
+        g.since=((Number)Class.forName("android.os.SystemClock").getMethod("elapsedRealtimeNanos").invoke(null)).longValue();
+        java.util.concurrent.Executor run=new java.util.concurrent.Executor(){public void execute(Runnable r){r.run();}};
+        invoke(lm,"registerGnssStatusCallback",run,g);
+        try {
+            invoke(lm,"requestLocationUpdates","gps",1000L,0f,run,g);
+            g.fixed.await(seconds,java.util.concurrent.TimeUnit.SECONDS);
+            // let a fresh fix settle for one more report, and the satellite list catch up
+            if(g.best!=null)Thread.sleep(1500);
+            for(int i=0;i<30 && g.status==null;i++)Thread.sleep(100);
+        } finally {
+            optional(lm,"removeUpdates",g);
+            optional(lm,"unregisterGnssStatusCallback",g);
+        }
+        out.put("fix",place(g.best));
+        out.put("events",new int[]{g.locs,g.stats,g.started});
+        if(g.ttff>=0)out.put("ttff_ms",g.ttff);
+        Object st=g.status;
+        if(st!=null) {
+            int n=((Number)invoke(st,"getSatelliteCount")).intValue(), used=0;
+            List<Object> sats=new ArrayList<>();
+            for(int i=0;i<n;i++){
+                Map<String,Object> s=new LinkedHashMap<>();
+                s.put("sys",invoke(st,"getConstellationType",i));s.put("svid",invoke(st,"getSvid",i));
+                s.put("cn0",invoke(st,"getCn0DbHz",i));boolean u=Boolean.TRUE.equals(invoke(st,"usedInFix",i));s.put("used",u);
+                if(u)used++;sats.add(s);
+            }
+            out.put("inview",n);out.put("used",used);out.put("sats",sats);
+        }
+        return out;
+    }
     public static void main(String[] args) {
         Map<String,Object> output=new LinkedHashMap<>();
         try {
@@ -274,6 +351,11 @@ public class CellProbe {
             Object attribution=invoke(builder,"build");
             Field attributionField=context.getClass().getDeclaredField("mAttributionSource");
             attributionField.setAccessible(true);attributionField.set(context,attribution);
+            if(args.length>0 && "gnss".equals(args[0])) {
+                try { output=gnss(context,args); }
+                catch(Throwable e){ Throwable r=e; while(r.getCause()!=null)r=r.getCause(); output.put("error",r.getClass().getSimpleName()+": "+r.getMessage()); }
+                System.out.println(json(output));System.exit(0);return;
+            }
             Object manager=invoke(context,"getSystemService","phone");
             if(args.length>0 && ("slots".equals(args[0]) || "set-data".equals(args[0]))) {
                 output=slots(context,manager,args);System.out.println(json(output));System.exit(0);return;

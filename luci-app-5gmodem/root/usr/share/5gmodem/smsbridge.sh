@@ -257,7 +257,7 @@ _kb_min() {
 # with the group); any other part with a taken number starts its own group.
 # 24 h: parts carry the SMSC time stamp, so they are seconds apart however late
 # they are delivered, and 256 long messages from one sender within a day do not
-# happen. Keep in step with sms_merge_parts() in readsms.js.
+# happen. Keep in step with sms_merge_parts() in sms.js.
 KB_WINDOW=1440
 
 _kb_build() {
@@ -733,6 +733,8 @@ _send_one() {
 	_send_pdu "$_so_port" "$_so_to" "$_so_txt" 2>/dev/null
 	_so_pdurc=$?
 	[ "$_so_pdurc" = 0 ] && return 0
+	# part of a long message is already out: no second attempt with the whole text
+	[ "$_so_pdurc" = 4 ] && return 4
 	_sms_tdtech "$_so_port" && return "$_so_pdurc"
 	if ! "$RES/smspdu.sh" needucs2 "$_so_txt"; then
 		_sms_run "$_so_tat" $(_smstool_at) -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null
@@ -920,8 +922,11 @@ _send_pdu() {
 			exec 3>&-
 		fi
 		case "$_sp_ans" in
-			OK:*) ;;
+			OK:*) _sp_sent=$((_sp_sent + 1)) ;;
 			*) _sp_rc=1
+			   # earlier parts of a long message already went out: the result is "unknown" (4), so
+			   # nobody resends the whole text and the recipient gets no duplicates
+			   [ "$_sp_sent" -gt 0 ] && _sp_rc=4
 			   # see docs/subsystems/sms.md#pdu-send-dialog
 			   printf '\033' > "$_sp_port" 2>/dev/null
 			   _sp_ceer=$(_sms_run 8 $(_smstool) -d "$_sp_port" at "AT+CEER" 2>/dev/null \
@@ -1044,9 +1049,12 @@ if hl_sms_web "$_TGT_SEC" "$PORT"; then
 			_c=$("$RES/hilink.sh" smscount "$_TGT_PATH" 2>/dev/null | tr -d '\r')
 			_u=$(printf '%s' "$_c" | sed -n 's|.*<LocalInbox>\(.*\)</LocalInbox>.*|\1|p')
 			_m=$(printf '%s' "$_c" | sed -n 's|.*<LocalMaxInbox>\(.*\)</LocalMaxInbox>.*|\1|p')
+			_st=$(printf '%s' "$_c" | sed -n 's|.*<LocalStore>\(.*\)</LocalStore>.*|\1|p')
 			[ -n "$_u" ] || _u=0
 			[ -n "$_m" ] || _m=100
-			echo "Storage type: ME, used: $_u, total: $_m"
+			# web-API sticks keep SMS in their own memory (ZTE falls back to the SIM when that is
+			# empty); "web: 1" tells the page that the SIM/modem storage choice does not apply
+			echo "Storage type: ${_st:-ME}, used: $_u, total: $_m, web: 1"
 			;;
 		delete)
 			if [ "$DEL" = all ]; then
@@ -1060,14 +1068,36 @@ if hl_sms_web "$_TGT_SEC" "$PORT"; then
 				"$RES/hilink.sh" smsdel "$DEL" "$_TGT_PATH"
 			fi ;;
 		delete-run)
-			for _dr_i in $(printf '%s' "$DEL" | tr ',' ' '); do
-				_dr_o=$("$RES/hilink.sh" smsdel "$_dr_i" "$_TGT_PATH" 2>/dev/null)
+			_dr_one() {
+				_dr_o=$("$RES/hilink.sh" smsdel "$1" "$_TGT_PATH" 2>/dev/null)
 				case "$_dr_o" in
-					*'"success":true'*) _dj_ok "$_dr_i" ;;
-					*) _dj_fail "$_dr_i" refused "$(printf '%s' "$_dr_o" | sed -n 's/.*"code":"\([0-9A-Za-z_-]*\)".*/\1/p')" ;;
+					*'"success":true'*) _dj_ok "$1" ;;
+					*) _dj_fail "$1" refused "$(printf '%s' "$_dr_o" | sed -n 's/.*"code":"\([0-9A-Za-z_-]*\)".*/\1/p')" ;;
 				esac
 				_dj_write running
-			done
+			}
+			# ZTE goform takes a list (msg_id=1;2;3;): 20 per request instead of one hilink.sh run
+			# per message (about a second each, 99 messages took minutes). A refused batch is
+			# retried one by one, so a firmware without list support still works.
+			_dr_b=""
+			case "$(uci -q get "$CFG.$_TGT_SEC.vidpid")" in 19d2:*) _dr_b=20 ;; esac
+			if [ -n "$_dr_b" ]; then
+				printf '%s\n' "$DEL" | tr ',' '\n' | grep -E '^[0-9]+$' | awk -v n="$_dr_b" '
+					{ b = b (b == "" ? "" : ";") $0; if (++c == n) { print b; b = ""; c = 0 } }
+					END { if (b != "") print b }' > "$_DJ_FILE.batches"
+				while read -r _dr_l; do
+					_dr_o=$("$RES/hilink.sh" smsdel "$_dr_l" "$_TGT_PATH" 2>/dev/null)
+					case "$_dr_o" in
+						*'"success":true'*)
+							for _dr_i in $(printf '%s' "$_dr_l" | tr ';' ' '); do _dj_ok "$_dr_i"; done
+							_dj_write running ;;
+						*) for _dr_i in $(printf '%s' "$_dr_l" | tr ';' ' '); do _dr_one "$_dr_i"; done ;;
+					esac
+				done < "$_DJ_FILE.batches"
+				rm -f "$_DJ_FILE.batches"
+			else
+				for _dr_i in $(printf '%s' "$DEL" | tr ',' ' '); do _dr_one "$_dr_i"; done
+			fi
 			_dj_write done ;;
 		send)   "$RES/hilink.sh" smssend "$SND_TO" "$SND_TXT" "$_TGT_PATH" ;;
 		*)    _kb_out "$("$RES/hilink.sh" smsread in "$_TGT_PATH")" ;;
@@ -1983,10 +2013,18 @@ case "$BOX" in
 		exit 1 ;;
 	queue-run)
 		[ -d "$SMSQ_DIR" ] || exit 0
+		# one message that keeps failing must not hold the rest: after a failure the next
+		# entry gets its turn in the same run (two failed attempts per run at most)
+		_qr_bad=0
 		for _qr_f in "$SMSQ_DIR"/*.sms; do
 			[ -f "$_qr_f" ] || continue
 			_q_send_one "$_qr_f"
-			break
+			case "$?" in
+				0) break ;;
+				2) continue ;;   # dropped (corrupt, too old, out of tries): not an attempt
+			esac
+			_qr_bad=$((_qr_bad + 1))
+			[ "$_qr_bad" -ge 2 ] && break
 		done
 		exit 0 ;;
 	queue-list)

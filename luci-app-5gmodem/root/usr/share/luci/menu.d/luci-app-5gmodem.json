@@ -31,9 +31,17 @@
 			"path": "modem5g/5gdetail"
 		}
 	},
+	"admin/modem/5gmodem/sms": {
+		"title": "SMS",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "modem5g/sms"
+		}
+	},
 	"admin/modem/5gmodem/esim": {
 		"title": "eSIM",
-		"order": 15,
+		"order": 45,
 		"action": {
 			"type": "view",
 			"path": "modem5g/5gesim"
@@ -41,7 +49,7 @@
 	},
 	"admin/modem/5gmodem/diagnostics": {
 		"title": "Modem",
-		"order": 20,
+		"order": 40,
 		"action": {
 			"type": "view",
 			"path": "modem5g/5gdebug"
@@ -49,14 +57,21 @@
 	},
 	"admin/modem/5gmodem/align": {
 		"title": "Alignment",
-		"order": 25,
+		"order": 55,
 		"action": {
 			"type": "view",
 			"path": "modem5g/align"
 		}
 	},
+	"admin/modem/5gmodem/gps": {
+		"title": "GPS",
+		"order": 50,
+		"action": {
+			"type": "view",
+			"path": "modem5g/gps"
+		}
+	},
 	"admin/modem/5gmodem/readsms": {
-		"title": "Inbox",
 		"order": 30,
 		"action": {
 			"type": "view",
@@ -64,7 +79,6 @@
 		}
 	},
 	"admin/modem/5gmodem/sendsms": {
-		"title": "Outbox",
 		"order": 40,
 		"action": {
 			"type": "view",
@@ -73,7 +87,7 @@
 	},
 	"admin/modem/5gmodem/sendussd": {
 		"title": "USSD",
-		"order": 50,
+		"order": 30,
 		"action": {
 			"type": "view",
 			"path": "modem5g/sendussd"
@@ -81,7 +95,7 @@
 	},
 	"admin/modem/5gmodem/sendat": {
 		"title": "AT",
-		"order": 60,
+		"order": 65,
 		"action": {
 			"type": "view",
 			"path": "modem5g/sendat"
@@ -89,7 +103,7 @@
 	},
 	"admin/modem/5gmodem/buttons": {
 		"title": "Buttons",
-		"order": 65,
+		"order": 70,
 		"action": {
 			"type": "view",
 			"path": "modem5g/buttons"
@@ -97,7 +111,7 @@
 	},
 	"admin/modem/5gmodem/stats": {
 		"title": "Statistics",
-		"order": 67,
+		"order": 60,
 		"action": {
 			"type": "view",
 			"path": "modem5g/5gstats"
@@ -105,7 +119,7 @@
 	},
 	"admin/modem/5gmodem/settings": {
 		"title": "Settings",
-		"order": 70,
+		"order": 80,
 		"action": {
 			"type": "view",
 			"path": "modem5g/5gsettings"

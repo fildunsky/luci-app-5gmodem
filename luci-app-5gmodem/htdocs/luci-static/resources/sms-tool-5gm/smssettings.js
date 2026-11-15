@@ -10,7 +10,7 @@
 
 	Licensed to the GNU General Public License v3.0.
 
-	Shared settings panels for the SMS views. Each view (Inbox / Send /
+	Shared settings panels for the SMS views. Each view (SMS /
 	USSD / AT) can embed the settings relevant to it behind a checkbox,
 	so the dedicated "SMS Settings" tab is no longer needed.
 */
@@ -241,7 +241,7 @@ function addReceiveIncoming(s) {
 
 	o = s.option(form.Button, '_fdelete');
 	o.title = _('Delete all messages');
-	o.description = _("This option deletes all SMS messages, including ones not visible on the Inbox tab");
+	o.description = _("This option deletes all SMS messages, including ones not visible on the SMS tab");
 	o.inputtitle = _('Delete all');
 	o.onclick = function() {
 		if (confirm(_('Delete all the messages?'))) {
@@ -587,7 +587,7 @@ function addTelegramForwarding(s) {
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Flag, 'fwd_delete', _('Delete from the modem after forwarding'),
-		_('A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without "Keep messages in router memory" it then disappears from the Inbox too.'));
+		_('A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without "Keep messages in router memory" it then disappears from the SMS tab too.'));
 	o.default = '0';
 	o.depends('tg_enabled', '1');
 	o.depends('ntfy_enabled', '1');
@@ -705,11 +705,11 @@ function addSendOptions(s) {
 		var cmd = uci.get('5gmodem', 'sms', 'tg_commands');
 		if (en !== '1' || !tok || !chat) {
 			return '<span style="opacity:.7">%s</span>'.format(
-				_('SMS can also be sent from a Telegram chat - set the bot up on the Inbox settings page.'));
+				_('SMS can also be sent from a Telegram chat - set the bot up on the Forwarding tab.'));
 		}
 		if (cmd !== '1') {
 			return '<span style="opacity:.7">%s</span>'.format(
-				_('The bot is connected for incoming messages. To send SMS from the chat, tick "Allow sending SMS from the chat" on the Inbox settings page.'));
+				_('The bot is connected for incoming messages. To send SMS from the chat, tick "Allow sending SMS from the chat" on the Forwarding tab.'));
 		}
 		return '%s <code>/sms &lt;%s&gt; &lt;%s&gt;</code>'.format(
 			_('Sending from the chat is on - write to the bot:'), _('number'), _('text'));
@@ -857,6 +857,24 @@ var GROUPS = {
 	ussd:    addUssdOptions
 };
 
+// The SMS page (sms.js) shows every SMS group in one form with LuCI section tabs.
+var SMS_TABS = [
+	[ 'store', _('Storage'), [ addReceiveIncoming ] ],
+	[ 'notify', _('Notifications'), [ addNotifications ] ],
+	[ 'fwd', _('Forwarding'), [ addEmailForwarding, addTelegramForwarding, addNtfyForwarding, addWebhookForwarding ] ],
+	[ 'cmd', _('Run commands from SMS'), [ addSmsCommands ] ],
+	[ 'send', _('Sending'), [ addSendOptions ] ]
+];
+
+// The group builders only call s.option(); route them into one tab.
+function tabProxy(s, tab) {
+	return {
+		option: function() {
+			return s.taboption.apply(s, [ tab ].concat(Array.prototype.slice.call(arguments)));
+		}
+	};
+}
+
 var styleInjected = false;
 function injectStyle() {
 	if (styleInjected) return;
@@ -888,7 +906,20 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 30946,
+	API: 40000,
+	// Resolves to the rendered form node (no wrapper); the caller adds its own collapsible block.
+	tabbedPanel: function() {
+		var m = new form.Map('5gmodem');
+		var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
+		s.addremove = false;
+		SMS_TABS.forEach(function(t) {
+			s.tab(t[0], t[1]);
+			var px = tabProxy(s, t[0]);
+			t[2].forEach(function(build) { build(px); });
+		});
+		return m.render();
+	},
+
 	panel: function(group) {
 		var build = GROUPS[group];
 		if (!build)

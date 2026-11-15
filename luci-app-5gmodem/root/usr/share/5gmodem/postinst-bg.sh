@@ -24,7 +24,9 @@ _pb_svc() {
 	if [ ! -e "/etc/5gmodem/.svc/$1" ]; then
 		mkdir -p /etc/5gmodem/.svc 2>/dev/null
 		: > "/etc/5gmodem/.svc/$1" 2>/dev/null
-		[ "$_pb_upgrade" = 1 ] || "/etc/init.d/$1" enable
+		# on an upgrade a service met for the first time is left as the user has it, except one
+		# that did not exist before ("new"): nobody could have switched it off, so it is enabled
+		{ [ "$_pb_upgrade" = 1 ] && [ "$3" != new ]; } || "/etc/init.d/$1" enable
 	fi
 	if "/etc/init.d/$1" enabled; then
 		"/etc/init.d/$1" "$2"
@@ -38,6 +40,7 @@ _pb_step services
 _pb_svc 5gmodem-mm-inhibit restart
 _pb_svc 5gmodem-usbports start
 _pb_svc 5gmodem-sessionwatch restart
+_pb_svc 5gmodem-gpsfeed restart new
 _pb_svc 5gmodem-btnleds start
 
 _pb_step system

@@ -1,5 +1,26 @@
 #!/bin/sh
 
+# for=<usb path>, anywhere in the arguments: the modem to restart instead of uci active_modem.
+# Its AT port, interface and USB path are used; an explicit second argument still wins.
+FOR=""
+for _fa in "$@"; do
+	shift
+	case "$_fa" in
+		for=*)
+			case "${_fa#for=}" in
+				''|*[!0-9A-Za-z.:_-]*) : ;;
+				*) FOR="${_fa#for=}" ;;
+			esac ;;
+		*) set -- "$@" "$_fa" ;;
+	esac
+done
+FORARG="${FOR:+for=$FOR}"
+# the modem this run is about
+_sel_modem() {
+	[ -n "$FOR" ] && { printf '%s\n' "$FOR"; return 0; }
+	uci -q get 5gmodem.@5gmodem[0].active_modem
+}
+
 MODE="$1"
 PORT="$2"
 case "$MODE" in
@@ -7,6 +28,15 @@ case "$MODE" in
 	/dev/*)    PORT="$MODE"; MODE="soft" ;;
 	*)         MODE="soft" ;;
 esac
+
+# An interface the user switched off (auto=0: "mobile data off", airplane mode, "Bring up on
+# boot" unticked) stays down after a modem restart.
+_rb_up() {
+	[ "$(uci -q get "network.$1.auto")" = 0 ] && return 0
+	ubus call "network.interface.$1" up >/dev/null 2>&1 || ifup "$1" >/dev/null 2>&1
+}
+# A restart brings the radio back: let "mobile.sh tick" put airplane mode on again.
+case "$MODE" in soft|hard|power|usbpower) rm -f /tmp/5gmodem/airplane.applied 2>/dev/null ;; esac
 
 POWER_GPIOS="modem_power modem_reset 4g 5g1 5g2"
 case "$(cat /tmp/sysinfo/board_name 2>/dev/null)" in
@@ -44,14 +74,14 @@ usb_power_method() {
 
 if [ "$MODE" = hasusbpower ]; then
 	_p="$PORT"
-	[ -n "$_p" ] || _p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	[ -n "$_p" ] || _p=$(_sel_modem)
 	echo "{\"path\":\"$_p\",\"method\":\"$(usb_power_method "$_p" 2>/dev/null)\"}"
 	exit 0
 fi
 
 if [ "$MODE" = usbpower ]; then
 	_p="$PORT"
-	[ -n "$_p" ] || _p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	[ -n "$_p" ] || _p=$(_sel_modem)
 	[ -n "$_p" ] || { echo '{"success":false,"error":"no modem path"}'; exit 0; }
 	_m=$(usb_power_method "$_p") || { echo '{"success":false,"error":"no usb power control"}'; exit 0; }
 	_pd=$(_usb_port_dir "$_p")
@@ -106,7 +136,7 @@ if [ "$MODE" = usbpower ]; then
 			sleep 5
 			ifdown "$_ifn" >/dev/null 2>&1
 			sleep 2
-			ifup "$_ifn" >/dev/null 2>&1
+			_rb_up "$_ifn"
 		fi
 	) >/dev/null 2>&1 </dev/null &
 	echo "{\"success\":true,\"mode\":\"usbpower\",\"method\":\"$_m\",\"path\":\"$_p\"}"
@@ -122,11 +152,24 @@ fi
 if [ "$MODE" = power ]; then
 	G="$PORT"; [ -n "$G" ] || G=$(first_power_gpio)
 	GP="/sys/class/gpio/$G/value"
-	[ -n "$G" ] && [ -e "$GP" ] || { echo '{"success":false,"error":"no modem power gpio"}'; exit 0; }
+	if [ -z "$G" ] || [ ! -e "$GP" ]; then
+		# no power GPIO on this board. Asked without a GPIO name (the preset SMS command "modem",
+		# a button): do the strongest restart there is instead of answering and doing nothing
+		if [ -z "$PORT" ]; then
+			_pf_p=$(_sel_modem)
+			if [ -n "$_pf_p" ] && usb_power_method "$_pf_p" >/dev/null 2>&1; then
+				logger -t 5gmodem "reboot: no modem power GPIO - power-cycling the USB port instead"
+				exec "$0" usbpower $FORARG
+			fi
+			logger -t 5gmodem "reboot: no modem power GPIO and no USB port power control - hard restart instead"
+			exec "$0" hard $FORARG
+		fi
+		echo '{"success":false,"error":"no modem power gpio"}'; exit 0
+	fi
 	_pg_on=$(cat "$GP" 2>/dev/null)
 	case "$_pg_on" in 0|1) ;; *) _pg_on=0 ;; esac
 	_pg_off=$((1 - _pg_on))
-	_pg_path=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)
+	_pg_path=$(_sel_modem 2>/dev/null)
 	_pg_was=0
 	_pg_dn=""
 	[ -n "$_pg_path" ] && [ -e "/sys/bus/usb/devices/$_pg_path" ] && {
@@ -224,6 +267,7 @@ if [ -n "$PORT" ]; then
 	_rb_am=${_rb_tp%%:*}
 	case "$_rb_am" in [0-9]*-[0-9]*) ;; *) _rb_am="" ;; esac
 fi
+[ -n "$_rb_am" ] || _rb_am="$FOR"
 [ -n "$_rb_am" ] || _rb_am="$_rb_act"
 _rb_if=""
 if [ -n "$_rb_am" ]; then
@@ -242,6 +286,21 @@ if [ -n "$_rb_am" ]; then
 	fi
 fi
 
+# detect.sh answers for uci active_modem only: another modem gets the port saved in its own
+# section, with the same ModemManager guard detect.sh applies
+if [ -z "$PORT" ] && [ -n "$FOR" ] && [ "$FOR" != "$_rb_act" ]; then
+	. /usr/share/5gmodem/lib.sh 2>/dev/null
+	PORT=$(uci -q get "5gmodem.$_rb_sec.at_port")
+	if proto_in mm "$(uci -q get "network.$_rb_if.proto" 2>/dev/null)"; then
+		. /usr/share/5gmodem/quirks.sh 2>/dev/null
+		if mm_at_allowed "$FOR" "$_rb_sec"; then
+			[ -n "$MM_AT_PORT" ] && PORT="$MM_AT_PORT"
+		else
+			PORT=""
+		fi
+	fi
+	[ -n "$PORT" ] || { echo '{"success":false,"error":"AT port not found"}'; exit 0; }
+fi
 [ -n "$PORT" ] || PORT=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 [ -n "$PORT" ] || { echo '{"success":false,"error":"AT port not found"}'; exit 0; }
 
@@ -311,7 +370,7 @@ if [ "$MODE" = "hard" ] || [ -n "$_rb_sr" ]; then
 				sleep 5; _n=$((_n + 1))
 			done ;;
 	  esac
-	  ubus call "network.interface.$IF" up >/dev/null 2>&1 || ifup "$IF" >/dev/null 2>&1
+	  _rb_up "$IF"
 	) >/dev/null 2>&1 </dev/null &
 	fi
 	if [ -n "$_rb_mi" ] && [ -n "$_AMP" ]; then
@@ -330,7 +389,7 @@ if [ "$MODE" = "hard" ] || [ -n "$_rb_sr" ]; then
 	  logger -t 5gmodem "sierra: $_rb_mi kept its old session after AT!RESET - reconnecting"
 	  ubus call "network.interface.$_rb_mi" down >/dev/null 2>&1
 	  sleep 3
-	  ubus call "network.interface.$_rb_mi" up >/dev/null 2>&1 || ifup "$_rb_mi" >/dev/null 2>&1
+	  _rb_up "$_rb_mi"
 	) >/dev/null 2>&1 </dev/null &
 	fi
 elif [ -n "$_rb_if" ] && [ "$(uci -q get "network.$_rb_if.proto")" = ccmni ]; then
@@ -340,7 +399,7 @@ elif [ -n "$_rb_if" ] && [ "$(uci -q get "network.$_rb_if.proto")" = ccmni ]; th
 		sleep 2
 		sms_tool -d "$PORT" at "AT+CFUN=4" >/dev/null 2>&1
 		at_unlock
-		ubus call "network.interface.$IF" up >/dev/null 2>&1 || ifup "$IF" >/dev/null 2>&1
+		_rb_up "$IF"
 	) >/dev/null 2>&1 </dev/null &
 	eval "exec $AT_LOCK_FD>&-"
 else
@@ -360,8 +419,7 @@ else
 		sleep 6
 		ubus call "network.interface.$IF" down >/dev/null 2>&1
 		sleep 3
-		ubus call "network.interface.$IF" up >/dev/null 2>&1 \
-			|| ifup "$IF" >/dev/null 2>&1
+		_rb_up "$IF"
 	) >/dev/null 2>&1 </dev/null &
 fi
 

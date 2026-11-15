@@ -1708,8 +1708,8 @@ msgstr "Cài đặt USSD"
 msgid "AT settings"
 msgstr "Cài đặt AT"
 
-msgid "This option deletes all SMS messages, including ones not visible on the Inbox tab"
-msgstr "Tùy chọn này xóa tất cả tin nhắn SMS, kể cả những tin không hiển thị trên tab Hộp thư đến"
+msgid "This option deletes all SMS messages, including ones not visible on the SMS tab"
+msgstr "Tùy chọn này xóa tất cả tin nhắn SMS, kể cả những tin không hiển thị trên tab SMS"
 
 msgid "Select 'No' if the router has a single LED or the LED serves several purposes. This option needs an LED defined in the system to work reliably when the LED is shared."
 msgstr "Chọn 'Không' nếu router chỉ có một đèn LED hoặc đèn LED dùng cho nhiều mục đích. Tùy chọn này cần một đèn LED được định nghĩa trong hệ thống để hoạt động ổn định khi đèn LED dùng chung."
@@ -1801,14 +1801,8 @@ msgstr "Cài đặt cập nhật"
 msgid "Release page"
 msgstr "Trang phát hành"
 
-msgid "Current version"
-msgstr "Phiên bản hiện tại"
-
 msgid "It also installs the translation if available"
 msgstr "Đồng thời cài đặt bản dịch nếu có"
-
-msgid "Checking the latest release…"
-msgstr "Đang kiểm tra bản phát hành mới nhất…"
 
 msgid "Could not check for updates"
 msgstr "Không thể kiểm tra cập nhật"
@@ -2046,12 +2040,6 @@ msgstr "Vui lòng chờ, đang đọc eUICC - cập nhật danh sách hồ sơ c
 
 msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
 msgstr "Đã tải hồ sơ eSIM. Đang khởi động lại modem để áp dụng..."
-
-msgid "Update installed. Refreshing resources…"
-msgstr "Đã cài bản cập nhật. Đang làm mới tài nguyên…"
-
-msgid "Update installed. Signing out to apply it…"
-msgstr "Đã cài bản cập nhật. Đang đăng xuất để áp dụng…"
 
 msgid "IP type"
 msgstr "Loại IP"
@@ -3832,14 +3820,9 @@ msgstr "Thu thập thống kê"
 msgid "Series live in RAM and are lost on reboot."
 msgstr "Chuỗi dữ liệu nằm trong RAM và bị mất khi khởi động lại."
 
-msgid "Keep monthly traffic across reboots"
-msgstr "Giữ lưu lượng hàng tháng qua các lần khởi động lại"
-
 msgid "Monthly totals are written to flash about once an hour. Ping series are never written there."
 msgstr "Tổng hàng tháng được ghi vào flash khoảng mỗi giờ một lần. Dữ liệu ping không bao giờ được ghi vào đó."
 
-msgid "Reset statistics"
-msgstr "Đặt lại thống kê"
 
 msgid "Uplink latency"
 msgstr "Độ trễ đường lên"
@@ -3997,14 +3980,6 @@ msgstr "số"
 msgid "text"
 msgstr "nội dung"
 
-msgid "APN database"
-msgstr "Cơ sở dữ liệu APN"
-
-msgid "Check the APN database"
-msgstr "Kiểm tra cơ sở dữ liệu APN"
-
-msgid "Update the APN database"
-msgstr "Cập nhật cơ sở dữ liệu APN"
 
 msgid "Checking the APN database…"
 msgstr "Đang kiểm tra cơ sở dữ liệu APN…"
@@ -4069,8 +4044,6 @@ msgstr "Số ưu tiên"
 msgid "Icons"
 msgstr "Biểu tượng"
 
-msgid "Large translucent mark on each uplink card"
-msgstr "Dấu mờ lớn trên mỗi thẻ đường lên"
 
 msgid "Free the modem and read eSIM"
 msgstr "Giải phóng modem và đọc eSIM"
@@ -4690,8 +4663,11 @@ msgstr "Âm thanh: bật"
 msgid "Sound: off"
 msgstr "Âm thanh: tắt"
 
-msgid "Interval, s"
-msgstr "Chu kỳ, giây"
+msgid "Refresh every"
+msgstr "Cập nhật mỗi"
+
+msgid "%s s"
+msgstr "%s giây"
 
 msgid "excellent"
 msgstr "rất tốt"
@@ -5137,8 +5113,8 @@ msgstr "Dùng chung với \"IP bên ngoài\" - đặt ở mục \"Dành cho chuy
 msgid "Show the external address"
 msgstr "Hiển thị địa chỉ bên ngoài"
 
-msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
-msgstr "Hiển thị cạnh địa chỉ do nhà mạng cấp - trong thẻ modem dưới dạng \"IPv4: 10.x.x.x | 1.2.3.4\". Sau CGNAT hoặc đường hầm, hai địa chỉ khác nhau, và sự khác biệt đó cho biết lưu lượng của chính router có đi qua VPN hay không. Tắt theo mặc định: đây là yêu cầu tới dịch vụ bên thứ ba."
+msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. It is a request to a third-party service."
+msgstr "Hiển thị cạnh địa chỉ do nhà mạng cấp - trong thẻ modem dưới dạng \"IPv4: 10.x.x.x | 1.2.3.4\". Sau CGNAT hoặc đường hầm, hai địa chỉ khác nhau, và sự khác biệt đó cho biết lưu lượng của chính router có đi qua VPN hay không. Đây là yêu cầu tới dịch vụ bên thứ ba."
 
 msgid "Used only when the service above returns an address but no country: the flag is then resolved by a second request, for the country alone. Use {ip} as the address placeholder."
 msgstr "Chỉ dùng khi dịch vụ trên trả về địa chỉ nhưng không có quốc gia: khi đó cờ được xác định bằng một yêu cầu thứ hai, chỉ cho quốc gia. Dùng {ip} làm chỗ giữ địa chỉ."
@@ -5356,9 +5332,6 @@ msgstr "tối đa"
 msgid "min"
 msgstr "tối thiểu"
 
-msgid "RSRP / SINR"
-msgstr "RSRP / SINR"
-
 msgid "Show signal history"
 msgstr "Hiển thị lịch sử tín hiệu"
 
@@ -5394,9 +5367,6 @@ msgstr "không được modem này hỗ trợ"
 
 msgid "the modem did not accept it"
 msgstr "modem không chấp nhận"
-
-msgid "Collect signal in the background"
-msgstr "Thu thập tín hiệu ở chế độ nền"
 
 msgid "Off"
 msgstr "Tắt"
@@ -5944,8 +5914,8 @@ msgstr "Xanh dương: LTE và đã kết nối. Xanh lá: đăng ký 3G hoặc 2
 msgid "Delete from the modem after forwarding"
 msgstr "Xóa khỏi modem sau khi chuyển tiếp"
 
-msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
-msgstr "Tin nhắn bị xóa khỏi modem khi mọi kênh đã bật (Telegram, ntfy, webhook) đã gửi xong và, nếu bật, lệnh SMS đã kiểm tra nó. Nếu không bật \"Lưu tin nhắn trong bộ nhớ router\", tin nhắn cũng biến mất khỏi Hộp thư đến."
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the SMS tab too."
+msgstr "Tin nhắn bị xóa khỏi modem khi mọi kênh đã bật (Telegram, ntfy, webhook) đã gửi xong và, nếu bật, lệnh SMS đã kiểm tra nó. Nếu không bật \"Lưu tin nhắn trong bộ nhớ router\", tin nhắn cũng biến mất khỏi tab SMS."
 
 msgid "Follow network address changes"
 msgstr "Theo dõi thay đổi địa chỉ từ mạng"
@@ -6169,3 +6139,1329 @@ msgstr "Tốc độ tải lên thường chỉ 1-2 Mbit/s khi chưa bật. Lựa
 
 msgid "Upload is aggregated too: %s"
 msgstr "Tải lên cũng được gộp sóng: %s"
+
+msgid "%s km/h"
+msgstr "%s km/h"
+
+msgid "%s m"
+msgstr "%s m"
+
+msgid "2D"
+msgstr "2D"
+
+msgid "3D"
+msgstr "3D"
+
+msgid "2GIS"
+msgstr "2GIS"
+
+msgid "AT commands"
+msgstr "Lệnh AT"
+
+msgid "Add the GNSS position, speed and satellites of the modem to the published file and to MQTT. Off by default: a stream of coordinates is a log of where the router has been. Each update asks the modem for the position."
+msgstr "Thêm vị trí GNSS, tốc độ và số vệ tinh của modem vào tệp được công bố và MQTT. Mặc định tắt: chuỗi tọa độ là nhật ký nơi router đã ở. Mỗi lần cập nhật sẽ hỏi modem vị trí."
+
+msgid "Address template of the map tiles with {z}, {x} and {y}. Empty - OpenStreetMap. Use your own server if OpenStreetMap does not open from your network."
+msgstr "Mẫu địa chỉ ô bản đồ có {z}, {x} và {y}. Để trống - OpenStreetMap. Dùng máy chủ riêng nếu không mở được OpenStreetMap từ mạng của bạn."
+
+msgid "Altitude"
+msgstr "Độ cao"
+
+msgid "An https:// address with {z}, {x} and {y}"
+msgstr "Địa chỉ https:// có {z}, {x} và {y}"
+
+msgid "Asking the modem…"
+msgstr "Đang hỏi modem…"
+
+msgid "Clear track"
+msgstr "Xóa lộ trình"
+
+msgid "Cold start"
+msgstr "Khởi động lạnh"
+
+msgid "Coordinates"
+msgstr "Tọa độ"
+
+msgid "Copied: %s"
+msgstr "Đã sao chép: %s"
+
+msgid "Copy coordinates"
+msgstr "Sao chép tọa độ"
+
+msgid "Could not load the map component."
+msgstr "Không tải được thành phần bản đồ."
+
+msgid "Course"
+msgstr "Hướng đi"
+
+msgid "Field reports: on some firmware the modem kept restarting in a loop after GNSS was turned off while it sat in a router. Turn it off only if you can reach the modem from a computer."
+msgstr "Theo phản hồi: trên một số firmware, modem liên tục khởi động lại sau khi tắt GNSS khi đang gắn trong router. Chỉ tắt nếu bạn có thể kết nối modem với máy tính."
+
+msgid "Fix"
+msgstr "Định vị"
+
+msgid "GPS"
+msgstr "GPS"
+
+msgid "Google Maps"
+msgstr "Google Maps"
+
+msgid "HDOP (lower is more accurate)"
+msgstr "HDOP (càng nhỏ càng chính xác)"
+
+msgid "Hide the map"
+msgstr "Ẩn bản đồ"
+
+msgid "Hot start"
+msgstr "Khởi động nóng"
+
+msgid "Include the position"
+msgstr "Kèm vị trí"
+
+msgid "Keep the position in the center"
+msgstr "Giữ vị trí ở giữa"
+
+msgid "Load the map as soon as the position is known instead of waiting for the \"Show on map\" button. The map service then learns the area every time the tab is opened."
+msgstr "Tải bản đồ ngay khi biết vị trí, không chờ nút \"Hiện trên bản đồ\". Khi đó dịch vụ bản đồ biết khu vực mỗi lần mở thẻ."
+
+msgid "Map"
+msgstr "Bản đồ"
+
+msgid "Map tiles"
+msgstr "Ô bản đồ"
+
+msgid "NMEA port %s"
+msgstr "Cổng NMEA %s"
+
+msgid "No GNSS receiver was found on this modem. Supported: Qualcomm modems with the QMI location service (also in MBIM mode), Quectel, SIMCom, Telit, MeiG, Fibocom (FM350 and Qualcomm-based), Foxconn/Dell (T77W968, T99W175, T99W373) and Sierra modems with a GNSS port. A receiver handled by ugps is shown too."
+msgstr "Không tìm thấy bộ thu GNSS trên modem này. Hỗ trợ: modem Qualcomm có dịch vụ định vị QMI (cả ở chế độ MBIM), Quectel, SIMCom, Telit, MeiG, Fibocom (FM350 và dòng Qualcomm), Foxconn/Dell (T77W968, T99W175, T99W373) và Sierra có cổng GNSS. Bộ thu do ugps quản lý cũng được hiển thị."
+
+msgid "On this modem the GNSS setting is stored in the modem and applied by its restart: the connection drops for about a minute."
+msgstr "Trên modem này, cài đặt GNSS được lưu trong modem và áp dụng bằng cách khởi động lại modem: kết nối mất khoảng một phút."
+
+msgid "Open the map at once"
+msgstr "Mở bản đồ ngay"
+
+msgid "OpenStreetMap"
+msgstr "OpenStreetMap"
+
+msgid "Position from the GNSS receiver built into the modem. The page asks the modem every few seconds while it is open; nothing runs in the background."
+msgstr "Vị trí từ bộ thu GNSS tích hợp trong modem. Trang hỏi modem vài giây một lần khi đang mở; không có gì chạy nền."
+
+msgid "Receiver"
+msgstr "Bộ thu"
+
+msgid "Restart the modem"
+msgstr "Khởi động lại modem"
+
+msgid "Restart the search"
+msgstr "Tìm lại từ đầu"
+
+msgid "Satellites (used / in view)"
+msgstr "Vệ tinh (đang dùng / nhìn thấy)"
+
+msgid "Show on map"
+msgstr "Hiện trên bản đồ"
+
+msgid "Source"
+msgstr "Nguồn"
+
+msgid "Speed"
+msgstr "Tốc độ"
+
+msgid "The \"GPS\" tab: position from the GNSS receiver of the modem and a map. It appears only for a modem with a receiver the app knows how to read."
+msgstr "Thẻ \"GPS\": vị trí từ bộ thu GNSS của modem và bản đồ. Chỉ hiện với modem có bộ thu mà ứng dụng đọc được."
+
+msgid "The map tiles are loaded by your browser from the map service, which learns the approximate area shown. The track is kept only while this page is open."
+msgstr "Trình duyệt tải ô bản đồ từ dịch vụ bản đồ, nên dịch vụ biết khu vực gần đúng đang hiển thị. Lộ trình chỉ được giữ khi trang này còn mở."
+
+msgid "The modem did not accept the command."
+msgstr "Modem không nhận lệnh."
+
+msgid "The modem restarts to apply the setting."
+msgstr "Modem đang khởi động lại để áp dụng cài đặt."
+
+msgid "The receiver is searching for satellites again. A cold start can take several minutes under open sky."
+msgstr "Bộ thu đang tìm lại vệ tinh. Khởi động lạnh có thể mất vài phút dưới bầu trời thoáng."
+
+msgid "Time (UTC)"
+msgstr "Thời gian (UTC)"
+
+msgid "Turn GNSS off"
+msgstr "Tắt GNSS"
+
+msgid "Turn GNSS on"
+msgstr "Bật GNSS"
+
+msgid "Warm start"
+msgstr "Khởi động ấm"
+
+msgid "Yandex Maps"
+msgstr "Yandex Maps"
+
+msgid "blocked in the modem (GTGPSSWITCH=0)"
+msgstr "bị khóa trong modem (GTGPSSWITCH=0)"
+
+msgid "searching for satellites"
+msgstr "đang tìm vệ tinh"
+
+msgid "ugps service"
+msgstr "dịch vụ ugps"
+
+msgid "QMI location service"
+msgstr "Dịch vụ định vị QMI"
+
+msgid "A cold start takes several minutes under open sky."
+msgstr "Khởi động lạnh mất vài phút dưới bầu trời thoáng."
+
+msgid "An http:// or https:// address without a query"
+msgstr "Địa chỉ http:// hoặc https:// không có tham số"
+
+msgid "Clock from GNSS"
+msgstr "Đồng hồ theo GNSS"
+
+msgid "Cold"
+msgstr "Lạnh"
+
+msgid "Coordinates are not determined yet"
+msgstr "Chưa xác định được tọa độ"
+
+msgid "E"
+msgstr "Đ"
+
+msgid "Fix %s"
+msgstr "Định vị %s"
+
+msgid "GNSS receiver"
+msgstr "Bộ thu GNSS"
+
+msgid "Latitude, longitude"
+msgstr "Vĩ độ, kinh độ"
+
+msgid "Letters, digits, dot, dash and underscore, up to 64"
+msgstr "Chữ cái, chữ số, dấu chấm, gạch ngang và gạch dưới, tối đa 64"
+
+msgid "Load the map"
+msgstr "Tải bản đồ"
+
+msgid "Load the map tiles as soon as the position is known. Off: the map waits for the \"Load the map\" button. The map service learns the area shown."
+msgstr "Tải ô bản đồ ngay khi biết vị trí. Tắt: bản đồ chờ nút \"Tải bản đồ\". Dịch vụ bản đồ biết khu vực đang hiển thị."
+
+msgid "Loading the map…"
+msgstr "Đang tải bản đồ…"
+
+msgid "N"
+msgstr "B"
+
+msgid "NE"
+msgstr "ĐB"
+
+msgid "NMEA over the network"
+msgstr "NMEA qua mạng"
+
+msgid "NW"
+msgstr "TB"
+
+msgid "No coordinates"
+msgstr "Không có tọa độ"
+
+msgid "Open in"
+msgstr "Mở trong"
+
+msgid "Phone location service (Android)"
+msgstr "Dịch vụ định vị của điện thoại (Android)"
+
+msgid "Readings"
+msgstr "Số liệu"
+
+msgid "Receiver is off"
+msgstr "Bộ thu đang tắt"
+
+msgid "S"
+msgstr "N"
+
+msgid "SE"
+msgstr "ĐN"
+
+msgid "SW"
+msgstr "TN"
+
+msgid "Satellites"
+msgstr "Vệ tinh"
+
+msgid "Satellites in view: %s, used: %s"
+msgstr "Vệ tinh nhìn thấy: %s, đang dùng: %s"
+
+msgid "Searching for satellites"
+msgstr "Đang tìm vệ tinh"
+
+msgid "Seconds between positions. The shortest is 30."
+msgstr "Số giây giữa các lần gửi vị trí. Tối thiểu 30."
+
+msgid "Send the position to a Traccar server over the OsmAnd protocol, for example http://192.168.1.10:5055. Empty - off. The position leaves the router: everyone with access to that server sees where the router is. Nothing is sent without a fix."
+msgstr "Gửi vị trí tới máy chủ Traccar qua giao thức OsmAnd, ví dụ http://192.168.1.10:5055. Để trống - tắt. Vị trí rời khỏi router: ai truy cập được máy chủ đó đều thấy router ở đâu. Không có định vị thì không gửi gì."
+
+msgid "Set the router clock from the GNSS receiver when there is no NTP sync, for example with no internet after a boot. Never changes a clock that NTP has synced."
+msgstr "Đặt đồng hồ router theo bộ thu GNSS khi không có đồng bộ NTP, ví dụ không có internet sau khi khởi động. Không bao giờ thay đổi đồng hồ đã được NTP đồng bộ."
+
+msgid "Start mode"
+msgstr "Chế độ khởi động"
+
+msgid "TCP port that streams the position as NMEA (GGA and RMC once a second) to gpsd, navigation apps or a car head unit, for example 10110. Empty - off. It listens on the LAN address only, without a password. Needs the socat or ncat package."
+msgstr "Cổng TCP phát vị trí dạng NMEA (GGA và RMC mỗi giây) cho gpsd, ứng dụng dẫn đường hoặc đầu xe hơi, ví dụ 10110. Để trống - tắt. Chỉ lắng nghe trên địa chỉ LAN, không có mật khẩu. Cần gói socat hoặc ncat."
+
+msgid "The external USB receiver on %s needs no control; this page only shows its data."
+msgstr "Bộ thu USB ngoài trên %s không cần điều khiển; trang này chỉ hiển thị dữ liệu."
+
+msgid "The identifier of this device on the Traccar server."
+msgstr "Mã định danh của thiết bị này trên máy chủ Traccar."
+
+msgid "The map appears after the receiver is turned on and gets a fix."
+msgstr "Bản đồ xuất hiện sau khi bật bộ thu và có định vị."
+
+msgid "The map is not loaded"
+msgstr "Bản đồ chưa được tải"
+
+msgid "The map opens at the modem position as soon as coordinates appear."
+msgstr "Bản đồ mở tại vị trí modem ngay khi có tọa độ."
+
+msgid "The map service learns the area where the router is."
+msgstr "Dịch vụ bản đồ biết khu vực router đang ở."
+
+msgid "The receiver is managed by the ugps service; this page only shows its data."
+msgstr "Bộ thu do dịch vụ ugps quản lý; trang này chỉ hiển thị dữ liệu."
+
+msgid "This modem has no GNSS receiver that the app can read"
+msgstr "Modem này không có bộ thu GNSS mà ứng dụng đọc được"
+
+msgid "Tiles are loaded by your browser from %s, which learns the area shown. The track is kept only while this page is open."
+msgstr "Trình duyệt tải ô bản đồ từ %s, nơi biết khu vực đang hiển thị. Lộ trình chỉ được giữ khi trang này còn mở."
+
+msgid "Traccar device ID"
+msgstr "ID thiết bị Traccar"
+
+msgid "Traccar interval"
+msgstr "Chu kỳ Traccar"
+
+msgid "Traccar server"
+msgstr "Máy chủ Traccar"
+
+msgid "Turn the receiver on to get coordinates."
+msgstr "Bật bộ thu để lấy tọa độ."
+
+msgid "Under open sky the first fix takes from 30 s to several minutes."
+msgstr "Dưới bầu trời thoáng, lần định vị đầu mất từ 30 giây đến vài phút."
+
+msgid "W"
+msgstr "T"
+
+msgid "Waiting for the first fix"
+msgstr "Đang chờ lần định vị đầu tiên"
+
+msgid "above sea level"
+msgstr "trên mực nước biển"
+
+msgid "lower is more accurate"
+msgstr "càng nhỏ càng chính xác"
+
+msgid "updated %s s ago"
+msgstr "cập nhật %s giây trước"
+
+msgid "used / in view"
+msgstr "đang dùng / nhìn thấy"
+
+msgid "%d of %d buttons configured"
+msgstr "Đã cấu hình %d / %d nút"
+
+msgid "%d of %d on"
+msgstr "Bật %d / %d"
+
+msgid "%d parts"
+msgstr "%d phần"
+
+msgid "%s (by modem)"
+msgstr "%s (theo modem)"
+
+msgid "AT command console"
+msgstr "Bảng điều khiển lệnh AT"
+
+msgid "Back"
+msgstr "Quay lại"
+
+msgid "Base station"
+msgstr "Trạm gốc"
+
+msgid "Collected every 10 s while this page is open"
+msgstr "Thu thập mỗi 10 giây khi trang này đang mở"
+
+msgid "Collecting"
+msgstr "Đang thu thập"
+
+
+msgid "Commands go through atcmd.sh: the port and the command form are checked on the router. The reply is awaited up to %d seconds."
+msgstr "Lệnh đi qua atcmd.sh: cổng và dạng lệnh được kiểm tra trên router. Chờ phản hồi tối đa %d giây."
+
+msgid "Connection"
+msgstr "Kết nối"
+
+msgid "Conversations"
+msgstr "Hội thoại"
+
+msgid "Delete the conversation"
+msgstr "Xóa hội thoại"
+
+msgid "Delete the conversation (%d messages)?"
+msgstr "Xóa hội thoại (%d tin nhắn)?"
+
+msgid "Drive not mounted"
+msgstr "Ổ đĩa chưa được gắn"
+
+msgid "Active profile: %s"
+msgstr "Hồ sơ đang hoạt động: %s"
+
+msgid "Feed"
+msgstr "Dòng tin"
+
+msgid "Forwarding"
+msgstr "Chuyển tiếp"
+
+msgid "GPS tab"
+msgstr "Thẻ GPS"
+
+msgid "GSM-7: 160 characters per SMS, 153 per part"
+msgstr "GSM-7: 160 ký tự mỗi SMS, 153 mỗi phần"
+
+msgid "History is kept until the page is closed · ↑ recalls the previous command"
+msgstr "Lịch sử được giữ đến khi đóng trang · ↑ gọi lại lệnh trước"
+
+msgid "How the app talks to the modem"
+msgstr "Cách ứng dụng giao tiếp với modem"
+
+msgid "How to use it"
+msgstr "Cách sử dụng"
+
+msgid "In queue: %d"
+msgstr "Trong hàng đợi: %d"
+
+msgid "Installing"
+msgstr "Đang cài đặt"
+
+msgid "It is sent in the background when the modem is free; you can close the page."
+msgstr "Tin sẽ được gửi nền khi modem rảnh; bạn có thể đóng trang."
+
+msgid "My codes"
+msgstr "Mã của tôi"
+
+msgid "New SMS appear here on their own: the page checks the modem every 15 seconds."
+msgstr "SMS mới tự xuất hiện ở đây: trang kiểm tra modem mỗi 15 giây."
+
+msgid "No new messages"
+msgstr "Không có tin nhắn mới"
+
+msgid "No profile is enabled"
+msgstr "Không có hồ sơ nào được bật"
+
+msgid "Not sent"
+msgstr "Chưa gửi"
+
+msgid "Nothing found"
+msgstr "Không tìm thấy"
+
+msgid "Notifications"
+msgstr "Thông báo"
+
+msgid "Phone storage: %s messages"
+msgstr "Bộ nhớ điện thoại: %s tin nhắn"
+
+msgid "Physical SIM is active"
+msgstr "SIM vật lý đang hoạt động"
+
+msgid "Pick a code from the list or type one below."
+msgstr "Chọn mã trong danh sách hoặc nhập bên dưới."
+
+msgid "Pick a template or type a command below."
+msgstr "Chọn mẫu hoặc nhập lệnh bên dưới."
+
+msgid "Port"
+msgstr "Cổng"
+
+msgid "Ports and interface"
+msgstr "Cổng và giao diện"
+
+msgid "Profiles"
+msgstr "Hồ sơ"
+
+msgid "Profiles: %d"
+msgstr "Hồ sơ: %d"
+
+msgid "Ready to send USSD codes"
+msgstr "Sẵn sàng gửi mã USSD"
+
+msgid "Retry"
+msgstr "Thử lại"
+
+msgid "SMS can also be sent from a Telegram chat - set the bot up on the Forwarding tab."
+msgstr "Cũng có thể gửi SMS từ chat Telegram - thiết lập bot ở thẻ Chuyển tiếp."
+
+msgid "SMS only"
+msgstr "Chỉ SMS"
+
+msgid "Search by sender and text"
+msgstr "Tìm theo người gửi và nội dung"
+
+msgid "Select a conversation on the left"
+msgstr "Chọn một hội thoại bên trái"
+
+msgid "Select several"
+msgstr "Chọn nhiều"
+
+msgid "Sending"
+msgstr "Gửi"
+
+msgid "Sending to contacts: %d, delay %s s"
+msgstr "Gửi tới danh bạ: %d, độ trễ %s giây"
+
+msgid "Session open"
+msgstr "Phiên đang mở"
+
+msgid "Shared with \"External IP\" - set it in the \"External IP\" section"
+msgstr "Dùng chung với \"IP bên ngoài\" - đặt trong mục \"IP bên ngoài\""
+
+msgid "Storage"
+msgstr "Lưu trữ"
+
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Forwarding tab."
+msgstr "Bot đã kết nối cho tin đến. Để gửi SMS từ chat, đánh dấu \"Cho phép gửi SMS từ chat\" ở thẻ Chuyển tiếp."
+
+msgid "The first points appear within 10-20 seconds. With the page closed, the signal is collected only when background collection is on."
+msgstr "Các điểm đầu xuất hiện sau 10-20 giây. Khi đóng trang, tín hiệu chỉ được thu thập nếu bật thu thập nền."
+
+msgid "The message is queued."
+msgstr "Tin nhắn đã vào hàng đợi."
+
+msgid "The modem does not answer USSD"
+msgstr "Modem không trả lời USSD"
+
+msgid "The modem is in %s: USSD needs the voice channel"
+msgstr "Modem đang ở %s: USSD cần kênh thoại"
+
+msgid "The modem is managed by ModemManager"
+msgstr "Modem do ModemManager quản lý"
+
+msgid "The network registered this SIM for SMS only"
+msgstr "Mạng chỉ đăng ký SIM này cho SMS"
+
+msgid "The request can be sent, but most likely there will be no reply."
+msgstr "Có thể gửi yêu cầu, nhưng nhiều khả năng sẽ không có phản hồi."
+
+msgid "The request goes through 3G and returns to %s"
+msgstr "Yêu cầu đi qua 3G rồi quay về %s"
+
+msgid "The sender is alphanumeric, you cannot reply to it. To write to a number, use \"New SMS\"."
+msgstr "Người gửi là tên chữ, không thể trả lời. Để nhắn tới số, dùng \"SMS mới\"."
+
+msgid "To e-mail"
+msgstr "Tới e-mail"
+
+msgid "Traffic for %s"
+msgstr "Lưu lượng %s"
+
+msgid "USSD codes"
+msgstr "Mã USSD"
+
+msgid "USSD unavailable"
+msgstr "USSD không khả dụng"
+
+msgid "USSD works"
+msgstr "USSD hoạt động"
+
+msgid "Unicode: 70 characters per SMS, 67 per part"
+msgstr "Unicode: 70 ký tự mỗi SMS, 67 mỗi phần"
+
+msgid "Up to date"
+msgstr "Đã cập nhật"
+
+msgid "Waiting for the active modem. If the selected modem is not the active one, switch to it in the modem bar."
+msgstr "Đang chờ modem đang hoạt động. Nếu modem đã chọn không phải modem hoạt động, hãy chuyển sang nó ở thanh modem."
+
+msgid "all automatic"
+msgstr "tất cả tự động"
+
+msgid "alphanumeric sender"
+msgstr "người gửi dạng chữ"
+
+msgid "consent needed"
+msgstr "cần đồng ý"
+
+msgid "eSIM active"
+msgstr "eSIM đang hoạt động"
+
+msgid "eSIM management is unavailable"
+msgstr "Không thể quản lý eSIM"
+
+msgid "from modem %s"
+msgstr "từ modem %s"
+
+msgid "messages: %d"
+msgstr "tin nhắn: %d"
+
+
+msgid "sent from this page"
+msgstr "gửi từ trang này"
+
+msgid "short number"
+msgstr "số ngắn"
+
+msgid "today"
+msgstr "hôm nay"
+
+msgid "via 3G"
+msgstr "qua 3G"
+
+msgid "waiting for a reply"
+msgstr "đang chờ phản hồi"
+
+msgid "yesterday"
+msgstr "hôm qua"
+
+msgid "Paused"
+msgstr "Tạm dừng"
+
+msgid "Collection"
+msgstr "Thu thập"
+
+msgid "Keep after reboot"
+msgstr "Giữ sau khi khởi động lại"
+
+
+msgid "Collect in background"
+msgstr "Thu thập nền"
+
+msgid "Collect in background:"
+msgstr "Thu thập nền:"
+
+msgid "Deletes all collected charts and monthly traffic"
+msgstr "Xóa toàn bộ biểu đồ đã thu thập và lưu lượng theo tháng"
+
+msgid "Store in:"
+msgstr "Lưu tại:"
+
+msgid "every 5 minutes"
+msgstr "mỗi 5 phút"
+
+msgid "every minute"
+msgstr "mỗi phút"
+
+msgid "Asking GitHub for the latest release"
+msgstr "Đang hỏi GitHub bản phát hành mới nhất"
+
+msgid "Check again"
+msgstr "Kiểm tra lại"
+
+msgid "Check the internet connection or pick another interface in \"Download through\" below."
+msgstr "Kiểm tra kết nối internet hoặc chọn giao diện khác ở mục \"Tải xuống qua\" bên dưới."
+
+msgid "Checking for updates…"
+msgstr "Đang kiểm tra cập nhật…"
+
+msgid "GitHub is not reachable"
+msgstr "Không truy cập được GitHub"
+
+msgid "Install %s"
+msgstr "Cài đặt %s"
+
+msgid "Installed: %s"
+msgstr "Đã cài: %s"
+
+msgid "Installing %s…"
+msgstr "Đang cài đặt %s…"
+
+msgid "Installing…"
+msgstr "Đang cài đặt…"
+
+msgid "Not checked"
+msgstr "Chưa kiểm tra"
+
+msgid "Offline"
+msgstr "Ngoại tuyến"
+
+msgid "Refreshing resources…"
+msgstr "Đang làm mới tài nguyên…"
+
+msgid "Signing out to apply it…"
+msgstr "Đang đăng xuất để áp dụng bản cập nhật…"
+
+msgid "Try again"
+msgstr "Thử lại"
+
+msgid "Update failed"
+msgstr "Cập nhật thất bại"
+
+msgid "Update now"
+msgstr "Cập nhật ngay"
+
+msgid "Updates have not been checked yet"
+msgstr "Chưa kiểm tra cập nhật"
+
+msgid "Updating…"
+msgstr "Đang cập nhật…"
+
+msgid "Version %s"
+msgstr "Phiên bản %s"
+
+msgid "Version %s installed"
+msgstr "Đã cài phiên bản %s"
+
+msgid "Version %s is available"
+msgstr "Đã có phiên bản %s"
+
+msgid "What's new in %s"
+msgstr "Có gì mới trong %s"
+
+msgid "checked at %s"
+msgstr "kiểm tra lúc %s"
+
+msgid "released %s"
+msgstr "phát hành %s"
+
+msgid "not registered, not searching"
+msgstr "chưa đăng ký, không tìm mạng"
+
+msgid "registered, home network"
+msgstr "đã đăng ký, mạng nhà"
+
+msgid "not registered, searching for a network"
+msgstr "chưa đăng ký, đang tìm mạng"
+
+msgid "registration denied by the network"
+msgstr "mạng từ chối đăng ký"
+
+msgid "unknown"
+msgstr "không rõ"
+
+msgid "registered, roaming"
+msgstr "đã đăng ký, chuyển vùng"
+
+msgid "registered for SMS only, home network"
+msgstr "chỉ đăng ký SMS, mạng nhà"
+
+msgid "registered for SMS only, roaming"
+msgstr "chỉ đăng ký SMS, chuyển vùng"
+
+msgid "emergency calls only"
+msgstr "chỉ cuộc gọi khẩn cấp"
+
+msgid "Signal level: CSQ %s ≈ %s dBm%s"
+msgstr "Mức tín hiệu: CSQ %s ≈ %s dBm%s"
+
+msgid "Signal level: CSQ %s ≈ %s dBm (extended scale)"
+msgstr "Mức tín hiệu: CSQ %s ≈ %s dBm (thang mở rộng)"
+
+msgid "Signal level: unknown (99), the modem has not measured it"
+msgstr "Mức tín hiệu: không rõ (99), modem chưa đo"
+
+msgid "Bit error rate: not reported (normal for LTE and 5G)"
+msgstr "Tỷ lệ lỗi bit: không báo (bình thường với LTE và 5G)"
+
+msgid "Bit error rate: class %s of 7 (0 is best)"
+msgstr "Tỷ lệ lỗi bit: cấp %s trên 7 (0 là tốt nhất)"
+
+msgid "No measurements: 99 and 255 mean no data for that network type"
+msgstr "Không có số đo: 99 và 255 nghĩa là không có dữ liệu cho loại mạng đó"
+
+msgid "automatic"
+msgstr "tự động"
+
+msgid "deregistered from the network"
+msgstr "đã hủy đăng ký khỏi mạng"
+
+msgid "manual, automatic if that fails"
+msgstr "thủ công, tự động nếu thất bại"
+
+msgid "Operator selection: %s"
+msgstr "Chọn nhà mạng: %s"
+
+msgid "No operator: the modem is not registered"
+msgstr "Không có nhà mạng: modem chưa đăng ký"
+
+msgid "Network code (MCC MNC): %s %s"
+msgstr "Mã mạng (MCC MNC): %s %s"
+
+msgid "Operator: %s"
+msgstr "Nhà mạng: %s"
+
+msgid "Network type: %s"
+msgstr "Loại mạng: %s"
+
+msgid "State: %s"
+msgstr "Trạng thái: %s"
+
+msgid "Area code (LAC/TAC): %s, cell ID: %s"
+msgstr "Mã vùng (LAC/TAC): %s, ID ô: %s"
+
+msgid "Cell ID: %s"
+msgstr "ID ô: %s"
+
+msgid "Base station (eNB) %s, sector %s"
+msgstr "Trạm gốc (eNB) %s, sector %s"
+
+msgid "Profile %s: APN \"%s\", %s"
+msgstr "Hồ sơ %s: APN \"%s\", %s"
+
+msgid "Profiles without an APN: %s (the network picks the default one)"
+msgstr "Hồ sơ không có APN: %s (mạng chọn APN mặc định)"
+
+msgid "Profile %s has an address: %s"
+msgstr "Hồ sơ %s có địa chỉ: %s"
+
+msgid "No profile has an address yet"
+msgstr "Chưa hồ sơ nào có địa chỉ"
+
+msgid "Attached to the packet service: mobile data is available"
+msgstr "Đã gắn vào dịch vụ gói: có dữ liệu di động"
+
+msgid "Not attached to the packet service: no mobile data"
+msgstr "Chưa gắn vào dịch vụ gói: không có dữ liệu di động"
+
+msgid "Active profiles: %s"
+msgstr "Hồ sơ đang hoạt động: %s"
+
+msgid "No profile is active"
+msgstr "Không hồ sơ nào hoạt động"
+
+msgid "The SIM is ready, no code is needed"
+msgstr "SIM sẵn sàng, không cần mã"
+
+msgid "The SIM waits for the PIN code"
+msgstr "SIM đang chờ mã PIN"
+
+msgid "The SIM is blocked: the PUK code is needed"
+msgstr "SIM bị khóa: cần mã PUK"
+
+msgid "The SIM waits for the PIN2 code"
+msgstr "SIM đang chờ mã PIN2"
+
+msgid "The SIM waits for the PUK2 code"
+msgstr "SIM đang chờ mã PUK2"
+
+msgid "The modem is locked to another operator (network lock code needed)"
+msgstr "Modem bị khóa với nhà mạng khác (cần mã mở khóa mạng)"
+
+msgid "The SIM is not ready yet"
+msgstr "SIM chưa sẵn sàng"
+
+msgid "SIM state: %s"
+msgstr "Trạng thái SIM: %s"
+
+msgid "Modem date and time: %s"
+msgstr "Ngày giờ của modem: %s"
+
+msgid "Time zone: UTC%s"
+msgstr "Múi giờ: UTC%s"
+
+msgid "Minimum functionality: the radio is off"
+msgstr "Chức năng tối thiểu: radio tắt"
+
+msgid "Full functionality: the radio is on"
+msgstr "Đầy đủ chức năng: radio bật"
+
+msgid "Flight mode: the transmitter and receiver are off"
+msgstr "Chế độ máy bay: bộ phát và bộ thu tắt"
+
+msgid "Factory test mode"
+msgstr "Chế độ kiểm tra của nhà máy"
+
+msgid "Offline mode: the radio is off"
+msgstr "Chế độ ngoại tuyến: radio tắt"
+
+msgid "Mode %s"
+msgstr "Chế độ %s"
+
+msgid "Connected to the cell (RRC connected): data is being exchanged"
+msgstr "Đã kết nối với ô (RRC connected): đang trao đổi dữ liệu"
+
+msgid "Idle (RRC idle): no traffic right now, the connection itself is kept"
+msgstr "Chờ (RRC idle): hiện không có lưu lượng, kết nối vẫn được giữ"
+
+msgid "%s: %s digits"
+msgstr "%s: %s chữ số"
+
+msgid "A number is stored on the SIM"
+msgstr "Có số được lưu trên SIM"
+
+msgid "No own number is stored on the SIM"
+msgstr "SIM không lưu số của chính nó"
+
+msgid "The reply also shows the IMEI"
+msgstr "Phản hồi cũng có IMEI"
+
+msgid "registered, idle"
+msgstr "đã đăng ký, chờ"
+
+msgid "connected, data is flowing"
+msgstr "đã kết nối, dữ liệu đang truyền"
+
+msgid "searching for a cell"
+msgstr "đang tìm ô"
+
+msgid "limited service (emergency calls only)"
+msgstr "dịch vụ hạn chế (chỉ cuộc gọi khẩn cấp)"
+
+msgid "Cell state: %s"
+msgstr "Trạng thái ô: %s"
+
+msgid "5G NSA anchor:"
+msgstr "Neo 5G NSA:"
+
+msgid "5G NSA carrier:"
+msgstr "Sóng mang 5G NSA:"
+
+msgid "No service"
+msgstr "Không có dịch vụ"
+
+msgid "Network: %s, band %s, channel %s"
+msgstr "Mạng: %s, băng tần %s, kênh %s"
+
+msgid "Primary carrier: %s"
+msgstr "Sóng mang chính: %s"
+
+msgid "Added carriers: %s"
+msgstr "Sóng mang bổ sung: %s"
+
+msgid "No added carriers: aggregation is not in use"
+msgstr "Không có sóng mang bổ sung: không dùng gộp sóng"
+
+msgid "Antenna branches: %s dBm; the signal is heard on %s of %s"
+msgstr "Nhánh ăng-ten: %s dBm; nghe được tín hiệu ở %s trên %s"
+
+msgid "Data interface: %s"
+msgstr "Giao diện dữ liệu: %s"
+
+msgid "Cell lock is off"
+msgstr "Khóa ô đang tắt"
+
+msgid "Cell lock is on"
+msgstr "Khóa ô đang bật"
+
+msgid "Active SIM slot: %s"
+msgstr "Khe SIM đang dùng: %s"
+
+msgid "A SIM card is inserted"
+msgstr "Đã lắp thẻ SIM"
+
+msgid "no service"
+msgstr "không có dịch vụ"
+
+msgid "limited service"
+msgstr "dịch vụ hạn chế"
+
+msgid "normal service"
+msgstr "dịch vụ bình thường"
+
+msgid "limited regional service"
+msgstr "dịch vụ khu vực hạn chế"
+
+msgid "power saving"
+msgstr "tiết kiệm điện"
+
+msgid "Service: %s"
+msgstr "Dịch vụ: %s"
+
+msgid "calls only"
+msgstr "chỉ cuộc gọi"
+
+msgid "data only"
+msgstr "chỉ dữ liệu"
+
+msgid "calls and data"
+msgstr "cuộc gọi và dữ liệu"
+
+msgid "camped on a cell"
+msgstr "đã bám ô"
+
+msgid "Network: %s"
+msgstr "Mạng: %s"
+
+msgid "Cell %s, PCI %s, band %s, channel %s"
+msgstr "Ô %s, PCI %s, băng tần %s, kênh %s"
+
+msgid "Cells heard: %s; the strongest is PCI %s on channel %s, RSRP %s dBm"
+msgstr "Số ô nghe được: %s; mạnh nhất là PCI %s trên kênh %s, RSRP %s dBm"
+
+msgid "Network mode: %s"
+msgstr "Chế độ mạng: %s"
+
+msgid "online"
+msgstr "trực tuyến"
+
+msgid "offline"
+msgstr "ngoại tuyến"
+
+msgid "band %s"
+msgstr "băng tần %s"
+
+msgid "Temperature: %s °C"
+msgstr "Nhiệt độ: %s °C"
+
+msgid "The SIM is inserted and unlocked"
+msgstr "SIM đã lắp và đã mở khóa"
+
+msgid "The SIM is ready"
+msgstr "SIM sẵn sàng"
+
+msgid "LTE bands: %s"
+msgstr "Băng tần LTE: %s"
+
+msgid "5G bands: %s"
+msgstr "Băng tần 5G: %s"
+
+msgid "Modem identification: manufacturer, model and firmware version."
+msgstr "Nhận dạng modem: nhà sản xuất, mẫu và phiên bản firmware."
+
+msgid "Modem manufacturer."
+msgstr "Nhà sản xuất modem."
+
+msgid "Modem model."
+msgstr "Mẫu modem."
+
+msgid "Firmware version."
+msgstr "Phiên bản firmware."
+
+msgid "Modem IMEI: the device number in the mobile network."
+msgstr "IMEI của modem: số thiết bị trong mạng di động."
+
+msgid "SIM subscriber identity (IMSI): it identifies the subscription in the operator network."
+msgstr "Mã thuê bao SIM (IMSI): nhận dạng thuê bao trong mạng nhà mạng."
+
+msgid "Serial number of the SIM card (ICCID), the one printed on the card."
+msgstr "Số sê-ri của thẻ SIM (ICCID), số in trên thẻ."
+
+msgid "Own phone number stored on the SIM. Many operators do not store it, then the reply has no number."
+msgstr "Số điện thoại của chính SIM. Nhiều nhà mạng không lưu, khi đó phản hồi không có số."
+
+msgid "Selects the phone book for the next commands (\"ON\" holds the own numbers of the SIM)."
+msgstr "Chọn danh bạ cho các lệnh tiếp theo (\"ON\" chứa số của chính SIM)."
+
+msgid "Sets the character set for text in commands and replies."
+msgstr "Đặt bộ ký tự cho văn bản trong lệnh và phản hồi."
+
+msgid "Writes an entry to the selected phone book."
+msgstr "Ghi một mục vào danh bạ đã chọn."
+
+msgid "Model, firmware and hardware versions"
+msgstr "Mẫu, phiên bản firmware và phần cứng"
+
+msgid "Received signal strength (RSSI) and bit error rate: the oldest and roughest signal measure, 0-31."
+msgstr "Cường độ tín hiệu thu (RSSI) và tỷ lệ lỗi bit: thước đo tín hiệu cũ và thô nhất, 0-31."
+
+msgid "Extended signal quality: 2G, 3G and LTE levels in one reply."
+msgstr "Chất lượng tín hiệu mở rộng: mức 2G, 3G và LTE trong một phản hồi."
+
+msgid "Current operator and how it was chosen."
+msgstr "Nhà mạng hiện tại và cách chọn."
+
+msgid "Registration for calls and SMS (circuit-switched network)."
+msgstr "Đăng ký cho cuộc gọi và SMS (mạng chuyển mạch kênh)."
+
+msgid "Registration in the 2G/3G packet (data) network."
+msgstr "Đăng ký trong mạng gói (dữ liệu) 2G/3G."
+
+msgid "Registration in the LTE network."
+msgstr "Đăng ký trong mạng LTE."
+
+msgid "Registration in the 5G network (5G core; NSA mode shows up in +CEREG)."
+msgstr "Đăng ký trong mạng 5G (lõi 5G; chế độ NSA hiển thị ở +CEREG)."
+
+msgid "Radio connection state: connected or idle."
+msgstr "Trạng thái kết nối vô tuyến: đã kết nối hoặc chờ."
+
+msgid "Data connection profiles (PDP contexts): number, IP type and APN."
+msgstr "Hồ sơ kết nối dữ liệu (PDP context): số, loại IP và APN."
+
+msgid "Addresses the network gave to each data profile."
+msgstr "Địa chỉ mạng cấp cho từng hồ sơ dữ liệu."
+
+msgid "Attach to the packet service (mobile data)."
+msgstr "Gắn vào dịch vụ gói (dữ liệu di động)."
+
+msgid "Which data profiles are active."
+msgstr "Hồ sơ dữ liệu nào đang hoạt động."
+
+msgid "Connection parameters the network gave to the profile: address, gateway, DNS, MTU."
+msgstr "Tham số kết nối mạng cấp cho hồ sơ: địa chỉ, cổng, DNS, MTU."
+
+msgid "DNS servers of the profile."
+msgstr "Máy chủ DNS của hồ sơ."
+
+msgid "SIM state: ready, or waiting for the PIN or PUK code."
+msgstr "Trạng thái SIM: sẵn sàng, hoặc đang chờ mã PIN hay PUK."
+
+msgid "Modem clock. Most modems take the time from the network."
+msgstr "Đồng hồ modem. Phần lớn modem lấy giờ từ mạng."
+
+msgid "Radio function mode."
+msgstr "Chế độ chức năng vô tuyến."
+
+msgid "Reboots the modem. The connection drops for about a minute."
+msgstr "Khởi động lại modem. Kết nối mất khoảng một phút."
+
+msgid "Turns the radio off (flight mode). There is no connection until AT+CFUN=1."
+msgstr "Tắt radio (chế độ máy bay). Không có kết nối cho đến khi gửi AT+CFUN=1."
+
+msgid "Minimum functionality: the radio and the SIM are off."
+msgstr "Chức năng tối thiểu: radio và SIM tắt."
+
+msgid "Turns the radio on (full functionality)."
+msgstr "Bật radio (đầy đủ chức năng)."
+
+msgid "Serving cell: network type, band, channel and signal levels."
+msgstr "Ô phục vụ: loại mạng, băng tần, kênh và mức tín hiệu."
+
+msgid "Neighbour cells the modem hears; the modem picks among them when it changes cells."
+msgstr "Các ô lân cận modem nghe được; modem chọn trong số đó khi đổi ô."
+
+msgid "Access technology, operator code, band and channel."
+msgstr "Công nghệ truy cập, mã nhà mạng, băng tần và kênh."
+
+msgid "Carrier aggregation: the primary carrier (PCC) and the added ones (SCC)."
+msgstr "Gộp sóng mang: sóng mang chính (PCC) và các sóng bổ sung (SCC)."
+
+msgid "RSRP on each antenna branch; -140 and lower means the branch hears nothing."
+msgstr "RSRP trên từng nhánh ăng-ten; -140 trở xuống nghĩa là nhánh không nghe được gì."
+
+msgid "Temperatures of the modem sensors, °C."
+msgstr "Nhiệt độ các cảm biến của modem, °C."
+
+msgid "USB data interface mode."
+msgstr "Chế độ giao diện dữ liệu USB."
+
+msgid "Allowed bands as bit masks."
+msgstr "Các băng tần được phép dưới dạng mặt nạ bit."
+
+msgid "Lock to a specific cell: shows whether it is on."
+msgstr "Khóa vào một ô cụ thể: cho biết có đang bật không."
+
+msgid "Active SIM slot."
+msgstr "Khe SIM đang dùng."
+
+msgid "SIM card detection: whether a card is inserted."
+msgstr "Phát hiện thẻ SIM: thẻ có được lắp không."
+
+msgid "Operator configuration profiles (MBN) in the modem; the active one is marked with 1."
+msgstr "Hồ sơ cấu hình nhà mạng (MBN) trong modem; hồ sơ đang dùng được đánh dấu 1."
+
+msgid "Signal levels of the network in use."
+msgstr "Mức tín hiệu của mạng đang dùng."
+
+msgid "System information: service, roaming, SIM and network type."
+msgstr "Thông tin hệ thống: dịch vụ, chuyển vùng, SIM và loại mạng."
+
+msgid "Signal quality: RSRP, RSRQ, RSSI and SINR."
+msgstr "Chất lượng tín hiệu: RSRP, RSRQ, RSSI và SINR."
+
+msgid "Serving cell: cell ID, PCI, band and channel."
+msgstr "Ô phục vụ: ID ô, PCI, băng tần và kênh."
+
+msgid "Carrier aggregation: the primary carrier and the added ones."
+msgstr "Gộp sóng mang: sóng mang chính và các sóng bổ sung."
+
+msgid "Cells the modem hears: PCI, channel and RSRP of each."
+msgstr "Các ô modem nghe được: PCI, kênh và RSRP của từng ô."
+
+msgid "Network type and service domain (calls, data)."
+msgstr "Loại mạng và miền dịch vụ (cuộc gọi, dữ liệu)."
+
+msgid "Network mode preference."
+msgstr "Ưu tiên chế độ mạng."
+
+msgid "Uplink carrier aggregation (sending over several carriers)."
+msgstr "Gộp sóng mang đường lên (gửi qua nhiều sóng mang)."
+
+msgid "Switches to the physical SIM. The modem re-registers on the network."
+msgstr "Chuyển sang SIM vật lý. Modem đăng ký lại vào mạng."
+
+msgid "Switches to the eSIM. The modem re-registers on the network."
+msgstr "Chuyển sang eSIM. Modem đăng ký lại vào mạng."
+
+msgid "Engineering information: cell, band and signal levels."
+msgstr "Thông tin kỹ thuật: ô, băng tần và mức tín hiệu."
+
+msgid "Serving cell: network type, state, band and signal."
+msgstr "Ô phục vụ: loại mạng, trạng thái, băng tần và tín hiệu."
+
+msgid "Modem temperature, °C."
+msgstr "Nhiệt độ modem, °C."
+
+msgid "Radio status: cell, channel, signal levels and operator."
+msgstr "Trạng thái vô tuyến: ô, kênh, mức tín hiệu và nhà mạng."
+
+msgid "Channel quality indicator (CQI) reported to the cell: 0-15, higher is better."
+msgstr "Chỉ số chất lượng kênh (CQI) báo cho ô: 0-15, càng cao càng tốt."
+
+msgid "Whether receiving on four antennas is turned off."
+msgstr "Việc thu bằng bốn ăng-ten có bị tắt không."
+
+msgid "Thermal mitigation level: how much the modem slows down to cool off."
+msgstr "Mức giảm nhiệt: modem chậm lại bao nhiêu để hạ nhiệt."
+
+msgid "Last GNSS position fix. The position itself is not repeated here."
+msgstr "Lần định vị GNSS gần nhất. Vị trí không được nhắc lại ở đây."
+
+msgid "Network mode and allowed bands."
+msgstr "Chế độ mạng và các băng tần được phép."
+
+msgid "Carrier aggregation: carriers, bandwidth, MIMO and modulation."
+msgstr "Gộp sóng mang: sóng mang, băng thông, MIMO và điều chế."
+
+msgid "Receive paths in use (main, AUX, MIMO)."
+msgstr "Các đường thu đang dùng (chính, AUX, MIMO)."
+
+msgid "5G cell and signal levels (the reply takes about 3 seconds)."
+msgstr "Ô 5G và mức tín hiệu (phản hồi mất khoảng 3 giây)."
+
+msgid "Changes the USB composition: the modem reconnects with other ports and the connection drops."
+msgstr "Thay đổi cấu hình USB: modem kết nối lại với các cổng khác và mất kết nối."
+
+msgid "The reply has no data in the expected form: this modem may not support the command."
+msgstr "Phản hồi không có dữ liệu theo dạng mong đợi: có thể modem này không hỗ trợ lệnh."
+
+msgid "Explanation"
+msgstr "Giải thích"
+
+msgid "Install updates"
+msgstr "Cài đặt bản cập nhật"
+
+msgid "Update the APN database"
+msgstr "Cập nhật cơ sở dữ liệu APN"
+
+msgid "Updates of the app and the APN database"
+msgstr "Cập nhật ứng dụng và cơ sở dữ liệu APN"
+
+msgid "Available: 5gmodem %s and APN database %s"
+msgstr "Có sẵn: 5gmodem %s và cơ sở dữ liệu APN %s"
+
+msgid "APN database: could not check"
+msgstr "cơ sở dữ liệu APN: không kiểm tra được"
+
+msgid "Version %s is up to date"
+msgstr "Phiên bản %s là mới nhất"
+
+msgid "Could not check the app: %s"
+msgstr "Không kiểm tra được ứng dụng: %s"
+
+msgid "APN database %s is available"
+msgstr "Đã có cơ sở dữ liệu APN %s"
+
+msgid "Everything is up to date"
+msgstr "Mọi thứ đều mới nhất"
+
+msgid "APN database %s"
+msgstr "cơ sở dữ liệu APN %s"
+
+msgid "APN database %s installed"
+msgstr "Đã cài cơ sở dữ liệu APN %s"
+
+msgid "The APN database was not updated: %s"
+msgstr "Cơ sở dữ liệu APN chưa được cập nhật: %s"
+
+msgid "APN in the modem"
+msgstr "APN trong modem"
+
+msgid "APN: Latin letters, digits, dots, hyphens"
+msgstr "APN: chữ Latinh, số, dấu chấm, gạch nối"
+
+msgid "Now:"
+msgstr "Hiện tại:"
+
+msgid "Reading…"
+msgstr "Đang đọc…"
+
+msgid "Saved. The stick is reconnecting."
+msgstr "Đã lưu. USB đang kết nối lại."
+
+msgid "Stick's own choice"
+msgstr "Để USB tự chọn"
+
+msgid "The stick did not return its APN settings."
+msgstr "USB không trả về cài đặt APN."
+
+msgid "The stick keeps the APN in its own memory. \"Write\" saves it as the \"5gmodem\" profile, makes it the default and reconnects the stick; the connection drops for a few seconds."
+msgstr "USB lưu APN trong bộ nhớ riêng. Ghi sẽ lưu thành hồ sơ \"5gmodem\", đặt làm mặc định và kết nối lại USB; kết nối mất vài giây."
+
+msgid "The stick refused the APN (%s)"
+msgstr "USB từ chối APN (%s)"
+
+msgid "Write to the modem"
+msgstr "Ghi vào modem"
+
+msgid "Writing and reconnecting the stick…"
+msgstr "Đang ghi và kết nối lại USB…"
+
+msgid "empty"
+msgstr "trống"
+
+msgid "for this operator: %s"
+msgstr "cho nhà mạng này: %s"
+
+msgid "profile %s"
+msgstr "hồ sơ %s"
+
+msgid "the stick's own choice"
+msgstr "USB tự chọn"
+
+msgid "Add host"
+msgstr "Thêm máy chủ"
+
+msgid "Add service"
+msgstr "Thêm dịch vụ"
+
+msgid "Host or IP address"
+msgstr "Máy chủ hoặc địa chỉ IP"
+
+msgid "Web server: parallel requests"
+msgstr "Máy chủ web: số yêu cầu song song"
+
+msgid "How many requests the router web server (uhttpd) handles at once. OpenWrt ships 3. If pages load slowly, buttons or data appear late or freeze, set 10: it is safe on routers with 128 MB of RAM or more. This router has %d MB. The web server restarts after saving."
+msgstr "Số yêu cầu mà máy chủ web của router (uhttpd) xử lý cùng lúc. OpenWrt mặc định là 3. Nếu trang tải chậm, nút hoặc dữ liệu hiện muộn hay bị treo, hãy đặt 10: an toàn với router có từ 128 MB RAM trở lên. Router này có %d MB. Máy chủ web sẽ khởi động lại sau khi lưu."
+
+msgid "no reply"
+msgstr "không phản hồi"
+
+msgid "Could not change the web server setting."
+msgstr "Không thể thay đổi cài đặt máy chủ web."
+
+msgid "GNSS antenna"
+msgstr "Ăng-ten GNSS"
+
+msgid "GNSS connector, passive antenna"
+msgstr "Cổng GNSS, ăng-ten thụ động"
+
+msgid "GNSS connector, active antenna (power on the connector)"
+msgstr "Cổng GNSS, ăng-ten chủ động (cấp nguồn trên cổng)"
+
+msgid "GNSS connector, active antenna, high gain"
+msgstr "Cổng GNSS, ăng-ten chủ động, độ lợi cao"
+
+msgid "AUX (diversity) connector, passive antenna"
+msgstr "Cổng AUX (diversity), ăng-ten thụ động"
+
+msgid "GNSS antenna connector changed. The search starts over."
+msgstr "Đã đổi cổng ăng-ten GNSS. Việc tìm kiếm bắt đầu lại."
+
+msgid "The connector the receiver listens on, stored in the modem. No satellites at all usually means the antenna sits on the other connector."
+msgstr "Cổng mà bộ thu nhận tín hiệu, được lưu trong modem. Nếu hoàn toàn không thấy vệ tinh, thường là ăng-ten đang cắm ở cổng kia."
+
+msgid "Anonymous"
+msgstr "Ẩn danh"
+
+msgid "Masks IMEI, IMSI, ICCID, EID, serial and phone numbers, the public IP and MAC addresses of the router and coordinates. The first digits stay: they name the modem model and the operator."
+msgstr "Che IMEI, IMSI, ICCID, EID, số sê-ri và số điện thoại, địa chỉ IP công cộng và MAC của router cùng tọa độ. Các chữ số đầu được giữ lại: chúng cho biết mẫu modem và nhà mạng."
+
+msgid "Map style"
+msgstr "Kiểu bản đồ"
+
+msgid "The map shown on the GPS tab: pick a ready style or type an https:// address template of your own tile server with {z}, {x} and {y}. Empty - OpenStreetMap. The style can also be switched right under the map; that choice is kept in the browser."
+msgstr "Bản đồ trên tab GPS: chọn một kiểu có sẵn hoặc nhập mẫu địa chỉ https:// của máy chủ tile riêng với {z}, {x} và {y}. Để trống - OpenStreetMap. Cũng có thể đổi kiểu ngay dưới bản đồ; lựa chọn đó được lưu trong trình duyệt."
+
+msgid "Could not save the settings."
+msgstr "Không thể lưu cài đặt."

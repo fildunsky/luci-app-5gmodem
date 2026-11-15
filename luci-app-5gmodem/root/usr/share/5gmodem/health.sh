@@ -528,9 +528,10 @@ mm_registered_now() {
 
 sim_absent() {
 	if [ "$(uci -q get "$CFG.$1.kind")" = "hilink" ]; then
-		_sa_ss=$("$RES/hilink.sh" json "$2" 2>/dev/null \
-			| jsonfilter -e '@.sim_status' 2>/dev/null)
-		case "$_sa_ss" in 0|255) return 0 ;; esac
+		_sa_js=$("$RES/hilink.sh" json "$2" 2>/dev/null)
+		# Huawei reports sim_status; ZTE/Tenda/ASR report the state in registration.
+		case "$(printf '%s' "$_sa_js" | jsonfilter -e '@.sim_status' 2>/dev/null)" in 0|255) return 0 ;; esac
+		[ "$(printf '%s' "$_sa_js" | jsonfilter -e '@.registration' 2>/dev/null)" = "SIM not inserted" ] && return 0
 		return 1
 	fi
 	_sa_idx=$("$RES/modemswitch.sh" mmindex "$2" 2>/dev/null)
@@ -1106,8 +1107,12 @@ getconf)
 		[ -n "$(uci -q get "$CFG.$_gc_s.path")" ] || continue
 		_gc_heal="$_gc_heal,\"$_gc_n\":\"$(uci -q get "$CFG.$_gc_s.heal")\""
 	done
-	printf '{"enabled":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"sta_park":%s,"manual":"%s","proxy_guard":%s,"lock_release":%s,"power_script":"%s","heal":{%s}}\n' \
-		"${H_EN:-0}" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "$H_STAPARK" "$H_MAN" "$H_PG" "$H_LR" "$H_PSCRIPT" "${_gc_heal#,}"
+	# the stored value, not H_EN: with the "Internet priority" tile hidden H_EN is forced to 0,
+	# and the settings form (which saves everything it shows) used to write that 0 back for good
+	_gc_en=$(conf enabled); [ "$_gc_en" = 1 ] || _gc_en=0
+	_gc_sup=0; [ "$(uci -q get "$CFG.@5gmodem[0].widget_netpri")" = "0" ] && _gc_sup=1
+	printf '{"enabled":%s,"suppressed":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"sta_park":%s,"manual":"%s","proxy_guard":%s,"lock_release":%s,"power_script":"%s","heal":{%s}}\n' \
+		"$_gc_en" "$_gc_sup" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "$H_STAPARK" "$H_MAN" "$H_PG" "$H_LR" "$H_PSCRIPT" "${_gc_heal#,}"
 	;;
 setheal)
 	case "$3" in ''|none|ifup|reboot|power) ;; *) echo '{"error":"bad level"}'; exit 1 ;; esac
@@ -1126,7 +1131,22 @@ setconf)
 	for _sc in "$@"; do
 		_sc_k="${_sc%%=*}"; _sc_v="${_sc#*=}"
 		case "$_sc_k" in
-			enabled|interval|targets|fail_n|ok_n|failover|failback|healing|heal_wifi|sta_park|heal_cooldown|manual|proxy_guard|lock_release) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
+			# each value is checked: getconf prints them as raw JSON, and targets end up as ping arguments
+			enabled|failover|healing|heal_wifi|sta_park|proxy_guard|lock_release)
+				case "$_sc_v" in 0|1) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;; *) echo '{"error":"bad value"}'; exit 1 ;; esac ;;
+			interval|fail_n|ok_n|heal_cooldown)
+				case "$_sc_v" in ''|*[!0-9]*) echo '{"error":"bad value"}'; exit 1 ;; esac
+				uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
+			failback)
+				case "$_sc_v" in demote|restore|'') uci -q set "$CFG.health.$_sc_k=$_sc_v" ;; *) echo '{"error":"bad value"}'; exit 1 ;; esac ;;
+			targets)
+				# hosts and addresses separated by spaces; none may start with "-" (a ping option)
+				case " $_sc_v" in *[!A-Za-z0-9.:\ _-]*|*" -"*) echo '{"error":"bad targets"}'; exit 1 ;; esac
+				uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
+			manual)
+				# interface names separated by spaces
+				case "$_sc_v" in *[!A-Za-z0-9.\ _-]*) echo '{"error":"bad value"}'; exit 1 ;; esac
+				uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
 			power_script)
 				case "$_sc_v" in
 					'') uci -q delete "$CFG.health.power_script" ;;

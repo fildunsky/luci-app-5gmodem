@@ -535,7 +535,7 @@ function pingBadge(info) {
 function _pDot(st) { return (st && st.done) ? (st.ok ? 'on' : 'off') : 'unknown'; }
 function _pMs(st) {
 	if (!(st && st.done)) { return '\u00a0'; }
-	return (st.ok && st.ms != null) ? (st.ms + ' ' + _('ms')) : ('— ' + _('ms'));
+	return (st.ok && st.ms != null) ? (st.ms + ' ' + _('ms')) : _('no reply');
 }
 function _pTip(st, info) {
 	if (st && st.done && !st.ok && st.why === 'dns') {
@@ -594,33 +594,68 @@ function _npCssEsc(v) {
 	return (window.CSS && CSS.escape) ? CSS.escape(v) : v.replace(/["\\]/g, '\\$&');
 }
 var _pingBusy = {};
+// netpri.sh ping answers at once from the router's cache and probes in the background
+// ("busy" while a probe runs, "pending" before the first result): re-ask shortly until it is done.
+var _pingRetry = {};
+var _pingTimer = {};   // one re-ask timer per host, however many callers asked
+function pingExec(host) {
+	return L.resolveDefault(fs.exec_direct(BIN, [ 'ping', host ]), '');
+}
+// While a probe runs the value shows three bouncing dots instead of the cached number, so the
+// number no longer flips between the old value and '…' on every re-ask.
+function pingDots(host, on) {
+	document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"] .netpri-ip').forEach(function(el) {
+		var has = !!el.querySelector('.netpri-dots');
+		if (on && !has) {
+			if (_pingAnim[host]) { window.cancelAnimationFrame(_pingAnim[host]); _pingAnim[host] = null; }
+			el.textContent = '';
+			el.appendChild(E('span', { 'class': 'netpri-dots', 'aria-label': _('Checking…') }, [ E('i'), E('i'), E('i') ]));
+		} else if (!on && has) {
+			el.textContent = _pMs(_pingState[host]);
+		}
+	});
+}
 function pingOnce(host) {
 	host = String(host).trim();
 	if (_pingBusy[host]) { return Promise.resolve(); }
 	_pingBusy[host] = true;
-	var _hadPrev = (_pingState[host] && _pingState[host].ok && _pingState[host].ms != null);
-	document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"]').forEach(function(c) { c.classList.add('ping-busy'); });
-	if (!_hadPrev) {
-		document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"] .netpri-ip').forEach(function(el) { el.textContent = '…'; });
-	}
-	return L.resolveDefault(fs.exec_direct(BIN, [ 'ping', host ]), '').then(function(out) {
+	var sel = '.netpri-status[data-host="' + _npCssEsc(host) + '"]';
+	return pingExec(host).then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+		_pingBusy[host] = false;
+		if (j.busy || j.pending) {
+			if (_pingTimer[host]) { window.clearTimeout(_pingTimer[host]); _pingTimer[host] = null; }
+			// stop when the card is gone (page left, widget removed) or after 40 tries
+			if (document.querySelector(sel) && (_pingRetry[host] = (_pingRetry[host] || 0) + 1) <= 40) {
+				_pingTimer[host] = window.setTimeout(function() { _pingTimer[host] = null; pingOnce(host); }, 1000);
+			} else {
+				_pingRetry[host] = 0;
+				document.querySelectorAll(sel).forEach(function(c) { c.classList.remove('ping-busy'); });
+				pingDots(host, false);
+				return;
+			}
+			document.querySelectorAll(sel).forEach(function(c) { c.classList.add('ping-busy'); });
+			pingDots(host, true);
+			npFitRow();
+			return;
+		}
+		_pingRetry[host] = 0;
+		if (_pingTimer[host]) { window.clearTimeout(_pingTimer[host]); _pingTimer[host] = null; }
 		var prev = (_pingState[host] && _pingState[host].ok && _pingState[host].ms != null)
 			? _pingState[host].ms : 0;
 		_pingState[host] = { done: true, ok: !!j.ok, ms: (j.ms != null ? j.ms : null),
 		                     why: j.why || null, ip: j.ip || null };
 		try { window.localStorage.setItem('netpri-pingstate', JSON.stringify(_pingState)); } catch (e) {}
 		mutil.lsTouch('netpri-pingstate');
-		_pingBusy[host] = false;
-		document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"]').forEach(function(c) { c.classList.remove('ping-busy'); });
+		document.querySelectorAll(sel).forEach(function(c) { c.classList.remove('ping-busy'); });
 		updatePingCard(host);
-		document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"] .netpri-svcdot').forEach(function(d) {
+		document.querySelectorAll(sel + ' .netpri-svcdot').forEach(function(d) {
 			d.classList.remove('ping-flash');
 			void d.offsetWidth;
 			d.classList.add('ping-flash');
 			window.setTimeout(function() { d.classList.remove('ping-flash'); }, 800);
 		});
-		if (j.ok && j.ms != null) { animatePingMs(host, prev, j.ms); }
+		if (j.ok && j.ms != null && prev) { animatePingMs(host, prev, j.ms); }
 	});
 }
 var _npExtipSub = null;
@@ -1398,7 +1433,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30946,
+	API: 40000,
 	mount: function() {
 		var wrap = E('div', { 'class': 'netpri-mount' });
 		var redraw = function(l2) {

@@ -57,8 +57,10 @@ const seen = () => JSON.parse(JSON.stringify(executed));
 const bandsContext = { _: value => value, E: element, window: { setTimeout() {} },
   ui: { showModal(title, body) { modals.push({ title, body }); }, hideModal() { modals.push('hide'); }, addNotification() {}, addTimeLimitedNotification() {} },
   fs: { exec(command, args) { executed.push(args); return Promise.resolve({ code: 0, stdout: 'ok' }); } },
-  loadBandsModemband() {}, _lastPoll: null };
+  loadBandsModemband() {}, _lastPoll: null, ctx: null };
 vm.createContext(bandsContext);
+// execW: write actions wait for a running tab switch (none here)
+vm.runInContext(bands.slice(bands.indexOf('function execW('), bands.indexOf('var ctx = null;')), bandsContext);
 vm.runInContext(bands.slice(bands.indexOf('var _lastPoll = null;'), bands.indexOf('function setBands3gAT(')), bandsContext);
 const apply = async (poll, id) => { bandsContext._lastPoll = poll; modals.length = 0; executed.length = 0; await bandsContext.setNetModeAT(id, 'label'); };
 (async () => {
@@ -75,5 +77,9 @@ const apply = async (poll, id) => { bandsContext._lastPoll = poll; modals.length
     assert.deepEqual(seen(), [['setmode', id]], JSON.stringify([poll, id]));
     assert.ok(modals.every(modal => modal === 'hide' || !modal.title), 'no confirmation expected');
   }
+  // With a page modem the write names it, so it cannot land on another modem.
+  bandsContext.ctx = { pagePath: () => '2-1' };
+  await apply({ backend: 'qmi', volte: '0' }, '4');
+  assert.deepEqual(seen(), [['setmode', '4', 'for=2-1']]);
   console.log('PASS: Android band and mode controls, battery details, carrier aggregation and VoLTE rows');
 })().catch(error => { console.error(error); process.exit(1); });

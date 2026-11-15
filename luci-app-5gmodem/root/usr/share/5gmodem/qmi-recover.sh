@@ -57,7 +57,8 @@ qmi_pool_recover() {
 	_qr_recent "$_mk" && return 1
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
-		at_query "$_t" "AT" 5 | grep -q "OK" || continue
+		# AT_QUERY_RAW: plain sms_tool output has no OK line, so no port ever passed this check
+		AT_QUERY_RAW=1 at_query "$_t" "AT" 5 | tr -d '\r' | grep -q '^OK' || continue
 		logger -t 5gmodem "$_trig on $_qp - resetting the modem (AT+CFUN=1,1 on $_t)"
 		cut -d. -f1 /proc/uptime > "$_mk" 2>/dev/null
 		at_query "$_t" "AT+CFUN=1,1" 5 >/dev/null 2>&1
@@ -74,7 +75,8 @@ qmi_force_reset() {
 	_lm=$("$RES/listmodems.sh" 2>/dev/null)
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_fr_p\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
-		at_query "$_t" "AT" 5 | grep -q "OK" || continue
+		# AT_QUERY_RAW: plain sms_tool output has no OK line, so no port ever passed this check
+		AT_QUERY_RAW=1 at_query "$_t" "AT" 5 | tr -d '\r' | grep -q '^OK' || continue
 		logger -t 5gmodem "${2:-reset needed} on $_fr_p - resetting the modem (AT+CFUN=1,1 on $_t)"
 		cut -d. -f1 /proc/uptime > "$_mk" 2>/dev/null
 		at_query "$_t" "AT+CFUN=1,1" 5 >/dev/null 2>&1

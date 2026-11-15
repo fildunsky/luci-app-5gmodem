@@ -433,7 +433,12 @@ usb-serial itself (`fastboot_rescue`, at most once a minute, 3 attempts).
   real failures: a removed Telit's section kept claiming an interface name and a Compal picked up
   its proto=qmi on MBIM hardware. Deleting a profile also deletes its interface; an orphan interface
   once fought another modem for `/dev/cdc-wdm0`.
-- Cards are reloaded after interface re-creation; the block renders once and is not polled.
+- Layout: header card, slot warnings, saved profiles (collapsible, cards in a grid, the active modem marked), the connection form, LED indicator and antennas side by side, and Diagnostics (collapsible: report, three debug tools, terminal output with Clear/Download).
+- The header card uses the classes and hierarchy of the Network-page modem card (`tginfo-*`): title with the VID:PID and protocol chips, chip icon with the temperature under it, a status column (small "Firmware" label, the version as the bold main line, the USB path), an info column (bold "Interface:" line, then "Port:", "AT:" when the AT port differs, and "APN:" with the manual/automatic mode), and the state chip with "Recreate interface" on the right. There are no reading tiles any more. A HiLink modem has no AT snapshot: the status column shows "HiLink" and the web address from its profile, and the port row is hidden. On phones the right column is hidden (the chip moves into the title, the button stays under the form) and the info column wraps under the status.
+- Profile cards keep the pre-redesign structure on `tg-hist-card`: name and VID:PID with the state chip (and the HiLink web address) on the right, a rule, two-sided lines (interface | APN, protocol badge and eSIM | PDP type), marks, saved bands, and the masked IMEI with the USB path next to the Delete button at the bottom of the card.
+- The modem/foreign-interface warnings ("a different modem is now in this USB port", "interface created for a different modem") are alerts on the page with a "Recreate interface" button, not global notifications.
+- Profile cards show the IMEI masked to the last four digits; the full value is in the tooltip.
+- Cards are reloaded after interface re-creation; the block renders once and is not polled. The first load runs after the page is inserted, because `fillProfiles` looks its nodes up by id.
 - Power shortage (powercheck.sh): the modem comes up partially and looks like a software bug; the
   whole card is tinted.
 - MM visibility marker is shown only when it disagrees with the protocol (MM would steal the
@@ -470,6 +475,8 @@ usb-serial itself (`fastboot_rescue`, at most once a minute, 3 attempts).
   `mm-inhibit.sh`), not `uci.apply()`: apply would also commit half-edited structural fields and
   re-create the interface. The eSIM tab override goes through the backend because `uci.add` of a
   named `m_<path>` section did not stick when the section did not exist yet.
+- The form is still **one** `TypedSection` (`savePending`, `lookupOption` and the instant toggles rely on it); its options are grouped with native section tabs (`s.tab`/`s.taboption`): Ports and interface, APN, Network, For experts. With tabs declared LuCI renders only options that belong to a tab, so every option must be a `taboption`.
+- "Create/Recreate modem interface" (and the HiLink/tethering DHCP variant) is not a form option any more: one handler (`doMkIface`, using the map directly) serves the header button, the slot warnings and the action row under the tabs. `Map.save()` re-renders the map (`renderContents`), so the view wraps `m.renderContents` to put the action row back into the section after every render.
 - The LED level block is outside the form: saving the form rewrites hidden port fields.
 - `ui.Dropdown` emits `cbi-dropdown-change`, not native `change`. `RichListValue` is used for all
   lists, falling back to `ListValue` on old LuCI. Nested arrays in `E()` children are stringified
@@ -513,6 +520,13 @@ sms fields.
 - Fallback port for MM modems: their section has no `at_port` on purpose; the second AT tty from
   `listmodems` is used (the first is usually MM's). Read after `uci.load`, otherwise `active_modem`
   was undefined.
+- Layout (2026-11 redesign, styles in `view/modem5g/page-at.css`, loaded as `link#tg-page-at-css`):
+  header card with the port badge and model, a terminal on the left, templates on the right. The
+  terminal keeps every command of the visit with its time; `OK` is green, `ERROR`/`+CME ERROR`/
+  `+CMS ERROR` and stderr lines are red. Arrow Up/Down in the field recall earlier commands (memory
+  only, up to 50). The clear button empties the terminal and the field.
+- Templates: the file is chosen in a select (the family file is marked "by modem"), the commands are
+  listed under their `## Section` headings, a click puts the command into the field.
 - UI traps fixed in the audit of 2026-09-12: an empty placeholder selection erased the typed command;
   a `mousedown` handler overwrote the input when merely opening the list; bare Delete cleared the
   whole field (now only with Ctrl/Shift).

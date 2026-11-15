@@ -9,6 +9,7 @@
 'require sms-tool-5gm.editors as editors';
 'require view.modem5g.mutil as mutil';
 'require view.modem5g.fresh as fresh';
+'require view.modem5g.atexplain as atexplain';
 
 /*
 	Copyright 2022-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -78,31 +79,6 @@ function parseTemplates(content) {
 	return out;
 }
 
-function templateLabel(t) {
-	return (t.name === t.code) ? t.code : (t.name + ' → ' + t.code);
-}
-
-function fillTemplateSelect(sel, content) {
-	if (!sel) { return; }
-	sel.innerHTML = '';
-	var ph = document.createElement('option');
-	ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
-	sel.appendChild(ph);
-	var group = null;
-	parseTemplates(content).forEach(function(it) {
-		if (it.type === 'section') {
-			group = document.createElement('optgroup');
-			group.label = it.name;
-			sel.appendChild(group);
-			return;
-		}
-		var o = document.createElement('option');
-		o.value = it.code;
-		o.textContent = templateLabel(it);
-		(group || sel).appendChild(o);
-	});
-}
-
 function atFamilyFor(vp, model) {
 	vp = String(vp || '').toLowerCase();
 	var m = String(model || '').toLowerCase();
@@ -127,35 +103,63 @@ function atFilePath(name) {
 	                             : '/etc/5gmodem/modem/atcmmds/' + name;
 }
 
+// Page layout: header card like the Network page, a terminal with the session's commands on the
+// left, templates on the right. See docs/subsystems/diagnostics.md, "AT console".
+var AT_TIMEOUT = 8;
+var CSS_ID = 'tg-page-at-css';
+function loadPageCss() {
+	if (document.getElementById(CSS_ID)) { return; }
+	document.head.appendChild(E('link', { 'id': CSS_ID, 'rel': 'stylesheet', 'type': 'text/css',
+		'href': L.resource('view/modem5g/page-at.css') }));
+}
 
-function typewrite(el, text) {
-	el.classList.add('has-output');
-	if (el._twTimer) { clearInterval(el._twTimer); el._twTimer = null; }
-	if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-		el.textContent = text;
-		return;
+var ICONS = {
+	term: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></g>',
+	send: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></g>',
+	trash: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></g>',
+	pen: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/></g>',
+	warn: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.5 20h19Z"/><path d="M12 10v4.5M12 17.2v.3"/></g>'
+};
+function svg(name, size) {
+	return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+function icon(name, size, cls) {
+	var s = E('span', { 'class': cls || 'tg-at-i' });
+	s.innerHTML = svg(name, size);
+	return s;
+}
+function pill(kind, text, cls) {
+	return E('span', { 'class': 'tg-at-pill ' + kind + (cls ? ' ' + cls : '') }, [ E('i'), E('span', {}, text) ]);
+}
+function iconButton(name, label, cls, attrs) {
+	var b = E('button', Object.assign({ 'type': 'button', 'class': 'cbi-button ' + (cls || '') }, attrs || {}));
+	b.innerHTML = svg(name, 15);
+	if (label) { b.appendChild(E('span', {}, label)); }
+	return b;
+}
+
+function hms() {
+	var d = new Date(), p = function(n) { return (n < 10 ? '0' : '') + n; };
+	return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+
+function atPort() {
+	var port = uci.get('5gmodem', 'sms', 'atport');
+	if (!port) {
+		var ap = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '').replace(/[^A-Za-z0-9]/g, '_');
+		if (ap) { port = uci.get('5gmodem', 'm_' + ap, 'at_port') || ''; }
 	}
-	el.textContent = '';
-	var i = 0, n = text.length;
-	var step = Math.max(1, Math.ceil(n / 90));
-	el._twTimer = setInterval(function() {
-		if (i >= n) { clearInterval(el._twTimer); el._twTimer = null; return; }
-		el.textContent += text.slice(i, i + step);
-		i += step;
-		el.scrollTop = el.scrollHeight;
-	}, 28);
+	return port || window._sendatLmPort || '';
 }
 
 return view.extend({
 	viewName: 'sendat',
-	
+
 	restoreSettingsFromLocalStorage: function() {
 		try {
-			let selectedFile = localStorage.getItem('luci-app-' + this.viewName
+			return localStorage.getItem('luci-app-' + this.viewName
 				+ '-selectedFile:' + (window._sendatLmVp || ''));
-			return selectedFile;
 		} catch(e) {
-			console.error('localStorage not available:', e);
 			return null;
 		}
 	},
@@ -164,149 +168,207 @@ return view.extend({
 		try {
 			localStorage.setItem('luci-app-' + this.viewName
 				+ '-selectedFile:' + (window._sendatLmVp || ''), fileName);
-		} catch(e) {
-			console.error('localStorage not available:', e);
-		}
+		} catch(e) {}
 	},
-	
-	handleCommand: function(exec, args) {
-		let buttons = document.querySelectorAll('.cbi-button');
 
-		for (let i = 0; i < buttons.length; i++)
-			buttons[i].setAttribute('disabled', 'true');
-			
+	/* ---------- terminal ---------- */
+
+	termEmpty: function() {
+		var t = this._t;
+		t.term.innerHTML = '';
+		t.term.appendChild(E('div', { 'class': 'tg-at-empty' }, _('Pick a template or type a command below.')));
+	},
+
+	addEntry: function(cmd) {
+		var t = this._t;
+		var empty = t.term.querySelector('.tg-at-empty');
+		if (empty) { empty.remove(); }
+		var out = E('div', { 'class': 'tg-at-out' }, [ E('span', { 'class': 'tg-at-spin' }) ]);
+		var el = E('div', { 'class': 'tg-at-entry' }, [
+			E('div', { 'class': 'tg-at-cmdline' }, [
+				E('span', { 'class': 't' }, hms()), ' ',
+				E('span', { 'class': 'p' }, '›'), ' ',
+				E('span', { 'class': 'c' }, cmd)
+			]),
+			out
+		]);
+		t.term.appendChild(el);
+		t.term.scrollTop = t.term.scrollHeight;
+		return { el: el, out: out, cmd: cmd };
+	},
+
+	fillEntry: function(entry, stdout, stderr) {
+		var out = entry.out;
+		out.innerHTML = '';
+		var lines = [];
+		String(stdout || '').split('\n').forEach(function(l) { if (l !== '') { lines.push([ l, false ]); } });
+		String(stderr || '').split('\n').forEach(function(l) { if (l !== '') { lines.push([ l, true ]); } });
+		if (!lines.length) { lines.push([ _('No response from modem'), true ]); }
+		lines.forEach(function(it) {
+			var l = it[0], cls = '';
+			if (it[1] || /^(\+CM[ES] )?ERROR\b/.test(l.trim())) { cls = 'e'; }
+			else if (/^OK$/.test(l.trim())) { cls = 'ok'; }
+			out.appendChild(E('div', cls ? { 'class': cls } : {}, l));
+		});
+		this.explainEntry(entry, stdout);
+		if (this._t) { this._t.term.scrollTop = this._t.term.scrollHeight; }
+	},
+
+	// Our own reading of a known command and its reply, under the raw answer (atexplain.js).
+	explainEntry: function(entry, stdout) {
+		var ex = null;
+		try { ex = atexplain.explain(entry.cmd, stdout); } catch (e) {}
+		if (!ex) { return; }
+		var many = ex.length > 1;
+		var box = E('div', { 'class': 'tg-at-expl' }, [ E('div', { 'class': 'tg-at-expl-h' }, _('Explanation')) ]);
+		ex.forEach(function(it) {
+			box.appendChild(E('div', { 'class': 'tg-at-expl-m' }, [
+				many ? E('code', {}, [ it.cmd ]) : '', many ? ' ' : '', it.meaning ]));
+			if (it.lines.length) {
+				box.appendChild(E('ul', { 'class': 'tg-at-expl-l' }, it.lines.map(function(l) { return E('li', {}, [ l ]); })));
+			}
+		});
+		entry.el.appendChild(box);
+	},
+
+	setBusy: function(on) {
+		this._busy = !!on;
+		if (this._t) { this._t.send.disabled = !!on; }
+	},
+
+	handleCommand: function(exec, args, cmd) {
+		var self = this;
+		var entry = this.addEntry(cmd);
+		this.setBusy(true);
 		return fs.exec(exec, args).then(function(res) {
-			let out = document.querySelector('.atcommand-output');
-			out.style.display = '';
-
-			res.stdout = res.stdout?.replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, "") || '';
-			res.stderr = res.stderr?.replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, "") || '';
-			
-			if (res.stdout === undefined || res.stderr === undefined || res.stderr.includes('undefined') || res.stdout.includes('undefined')) {
-				return;
-			}
-			else {
-				var _text = (res.stdout || '') +
-					((res.stderr && res.stdout) ? '\n' : '') + (res.stderr || '');
-				typewrite(out, _text.trim() ? _text : _('No response from modem'));
-			}
-
+			var so = (res && res.stdout || '').replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, '');
+			var se = (res && res.stderr || '').replace(/^(?=\n)$|^\s*|\s*$|\n\n+/gm, '');
+			self.fillEntry(entry, so, se);
 		}).catch(function(err) {
-			ui.addNotification(null, E('p', [ err ]));
+			self.fillEntry(entry, '', String(err));
 		}).finally(function() {
-			for (let i = 0; i < buttons.length; i++)
-			buttons[i].removeAttribute('disabled');
-
+			self.setBusy(false);
 		});
 	},
 
 	handleGo: function(ev, confirmed) {
-		let atcmd = document.getElementById('cmdvalue').value;
-		let port = uci.get('5gmodem', 'sms', 'atport');
-		if (!port) {
-			var _ap = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '').replace(/[^A-Za-z0-9]/g, '_');
-			if (_ap) { port = uci.get('5gmodem', 'm_' + _ap, 'at_port') || ''; }
-		}
-		if (!port) { port = window._sendatLmPort || ''; }
+		if (this._busy) { return false; }
+		var input = document.getElementById('cmdvalue');
+		var atcmd = String((input && input.value) || '').trim();
+		var port = atPort();
 
-		if ( atcmd.length < 2 )
-		{
+		if (atcmd.length < 2) {
 			ui.addNotification(null, E('p', _('Please specify the command to send')), 'info');
 			return false;
 		}
-		else {
-		if ( !port )
-			{
-			ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
-			return false;
-			}
-			else {
-			if (!confirmed && isDangerousAt(atcmd)) {
-				var self = this;
-				ui.showModal(_('Dangerous AT command'), [
-					E('p', {}, _('This command can change the modem composition or disable its ports for good. On some modules it removes all USB ports, and only reflashing over EDL brings them back.')),
-					E('p', {}, E('strong', {}, [ atcmd ])),
-					E('div', { 'class': 'right' }, [
-						E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Cancel') ]),
-						' ',
-						E('button', { 'class': 'btn cbi-button-action important', 'click': function() {
-							ui.hideModal();
-							self.handleGo(ev, true);
-						} }, [ _('Send anyway') ])
-					])
-				]);
-				return false;
-			}
-			return this.handleCommand('/usr/share/5gmodem/atcmd.sh', [ port, atcmd, '8' ]);
-			}
-		}
-		if ( !port )
-		{
+		if (!port) {
 			ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
 			return false;
 		}
+		if (!confirmed && isDangerousAt(atcmd)) {
+			var self = this;
+			var m = ui.showModal(_('Dangerous AT command'), [
+				E('div', { 'class': 'tg-at-warnrow' }, [ icon('warn', 18),
+					E('p', {}, _('This command can change the modem composition or disable its ports for good. On some modules it removes all USB ports, and only reflashing over EDL brings them back.')) ]),
+				E('pre', { 'class': 'tg-at-danger-cmd' }, atcmd),
+				E('div', { 'class': 'right' }, [
+					E('button', { 'class': 'cbi-button', 'click': ui.hideModal }, [ _('Cancel') ]),
+					' ',
+					E('button', { 'class': 'cbi-button cbi-button-negative', 'click': function() {
+						ui.hideModal();
+						self.handleGo(ev, true);
+					} }, [ _('Send anyway') ])
+				])
+			]);
+			if (m && m.classList) { m.classList.add('tg-at-modal'); }
+			return false;
+		}
+
+		var h = this._hist;
+		if (h[h.length - 1] !== atcmd) { h.push(atcmd); if (h.length > 50) { h.shift(); } }
+		this._histPos = null;
+		return this.handleCommand('/usr/share/5gmodem/atcmd.sh', [ port, atcmd, String(AT_TIMEOUT) ], atcmd);
 	},
 
 	handleClear: function(ev) {
-		let out = document.querySelector('.atcommand-output');
-		out.style.display = 'none';
-
-		let ov = document.getElementById('cmdvalue');
-		ov.value = '';
-
-		document.getElementById('cmdvalue').focus();
+		if (this._t) { this.termEmpty(); }
+		var ov = document.getElementById('cmdvalue');
+		if (ov) { ov.value = ''; ov.focus(); }
 	},
 
-	handleCopy: function(ev) {
-		let x = document.getElementById('tk').value;
-		if (!x) { return; }
-
-		let out = document.querySelector('.atcommand-output');
-		out.style.display = 'none';
-
-		let ov = document.getElementById('cmdvalue');
-		ov.value = x;
+	handleCopy: function(code) {
+		var ov = document.getElementById('cmdvalue');
+		if (!ov || !code) { return; }
+		ov.value = code;
+		ov.focus();
 	},
 
-	handleFileChange: function(ev) {
-		let selectedFile = ev.target.value;
-		let selectElement = document.getElementById('tk');
-		
-		if (!selectElement || !selectedFile) return;
-		
-		this.saveSettingsToLocalStorage(selectedFile);
+	recall: function(dir) {
+		var h = this._hist, ov = document.getElementById('cmdvalue');
+		if (!h.length || !ov) { return; }
+		var pos = (this._histPos == null) ? h.length : this._histPos;
+		pos += dir;
+		if (pos < 0) { pos = 0; }
+		if (pos >= h.length) { this._histPos = null; ov.value = ''; return; }
+		this._histPos = pos;
+		ov.value = h[pos];
+	},
 
-		return fs.read_direct(atFilePath(selectedFile)).then(function(content) {
-			fillTemplateSelect(selectElement, content);
-			let cmdInput = document.getElementById('cmdvalue');
-			if (cmdInput) cmdInput.value = '';
+	handleFileChange: function(fileName) {
+		var self = this;
+		if (!fileName) { return; }
+		this.saveSettingsToLocalStorage(fileName);
+		return fs.read_direct(atFilePath(fileName)).then(function(content) {
+			self.fillList(parseTemplates(content));
 		}).catch(function(err) {
-			console.error('Error loading AT commands file:', err);
-			ui.addNotification(null, E('p', [ _('Error loading AT commands file:') + ' ' + selectedFile ]), 'error');
+			self.fillList([]);
+			ui.addNotification(null, E('p', [ _('Error loading AT commands file:') + ' ' + fileName ]), 'error');
+		});
+	},
+
+	fillList: function(items) {
+		var self = this, host = this._t && this._t.list;
+		if (!host) { return; }
+		host.innerHTML = '';
+		if (!items.some(function(it) { return it.type === 'cmd'; })) {
+			host.appendChild(E('div', { 'class': 'tg-at-none' }, _('No AT commands available')));
+			return;
+		}
+		items.forEach(function(it) {
+			if (it.type === 'section') {
+				host.appendChild(E('div', { 'class': 'tg-at-grp' }, [ it.name ]));
+				return;
+			}
+			var same = (it.name === it.code);
+			host.appendChild(E('div', {
+				'class': 'tg-at-row' + (same ? ' same' : ''), 'role': 'button', 'tabindex': '0', 'title': it.code,
+				'click': function() { self.handleCopy(it.code); },
+				'keydown': function(ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); self.handleCopy(it.code); } }
+			}, same ? [ E('code', {}, [ it.code ]) ] : [ E('span', {}, [ it.name ]), E('code', {}, [ it.code ]) ]));
 		});
 	},
 
 	handleModemChange: function(ev) {
 		let sections = uci.sections('defmodems', 'defmodems');
 		if (!sections || sections.length === 0) return;
-		
+
 		let serialModems = sections.filter(function(s) {
 			return s.modemdata === 'serial';
 		});
-		
+
 		if (serialModems.length === 0) return;
-		
+
 		let currentPort = uci.get('5gmodem', 'sms', 'atport');
 		let currentIndex = serialModems.findIndex(function(s) {
 			return s.comm_port === currentPort;
 		});
-		
+
 		if (currentIndex === -1) currentIndex = 0;
-		
+
 		let direction = ev.currentTarget.classList.contains('next') ? 1 : -1;
 		let newIndex = (currentIndex + direction + serialModems.length) % serialModems.length;
 		let newModem = serialModems[newIndex];
-		
+
 		if (newModem && newModem.comm_port) {
 			uci.set('5gmodem', 'sms', 'atport', newModem.comm_port);
 			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'smsopt', 'atport=' + newModem.comm_port ]), null).then(function() {
@@ -321,7 +383,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30946, [ editors, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40000, [ editors, modemtabs, mutil, atexplain ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -350,27 +412,104 @@ return view.extend({
 		});
 	},
 
+	renderHead: function() {
+		var port = atPort();
+		var model = String(window._sendatLmModel || '');
+		var ico = E('div', { 'class': 'tginfo-signal tg-at-ico' + (port ? '' : ' bad') });
+		ico.innerHTML = svg('term', 36);
+		ico.appendChild(E('medium', {}, 'AT'));
+		var kind = port ? 'ok' : 'bad';
+		var text = port ? _('AT port') : _('Modem AT port not found');
+		return E('div', { 'class': 'cbi-section tg-pg-head tg-at-head' }, [
+			E('h3', { 'class': 'tg-pg-title tg-at-title' }, [
+				E('span', {}, 'AT'),
+				port ? E('span', { 'class': 'tg-proto-badge' }, port) : '',
+				pill(kind, text, 'tg-at-pillm')
+			]),
+			E('div', { 'class': 'tginfo-general' }, [
+				ico,
+				E('div', { 'class': 'tginfo-status' }, [
+					model ? E('div', { 'class': 'tginfo-reg' }, _('Modem') + ' ' + model) : '',
+					E('div', { 'class': 'tginfo-op tg-at-main' }, _('AT command console')),
+					E('div', { 'class': 'tginfo-loc' }, _('Commands go through atcmd.sh: the port and the command form are checked on the router. The reply is awaited up to %d seconds.').format(AT_TIMEOUT))
+				]),
+				E('div', { 'class': 'tginfo-right' }, [ pill(kind, text) ])
+			])
+		]);
+	},
+
+	renderModemPager: function() {
+		let sections = uci.sections('defmodems', 'defmodems') || [];
+		let serialModems = sections.filter(function(s) { return s.modemdata === 'serial'; });
+		if (!serialModems.length) { return ''; }
+		let currentPort = uci.get('5gmodem', 'sms', 'atport');
+		let currentModem = serialModems.find(function(s) { return s.comm_port === currentPort; }) || serialModems[0];
+		let label = currentModem.modem + (currentModem.user_desc ? ' (' + currentModem.user_desc + ')' : '');
+		let buttonsDisabled = (serialModems.length > 1) ? null : true;
+		return E('div', { 'class': 'tg-at-pager' }, [
+			E('span', { 'class': 'tg-at-lbl' }, _('Select modem')),
+			E('div', { 'class': 'pager center tg-row' }, [
+				E('button', { 'class': 'btn cbi-button-neutral tg-col-narrow prev', 'aria-label': _('Previous modem'),
+					'click': ui.createHandlerFn(this, 'handleModemChange'), 'disabled': buttonsDisabled }, [ ' ◄ ' ]),
+				E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
+				E('button', { 'class': 'btn cbi-button-neutral tg-col-narrow next', 'aria-label': _('Next modem'),
+					'click': ui.createHandlerFn(this, 'handleModemChange'), 'disabled': buttonsDisabled }, [ ' ► ' ])
+			])
+		]);
+	},
+
 	render: function (loadResults) {
 		modemtabs.attach();
+		loadPageCss();
+		var self = this;
+		this._hist = [];
+		this._histPos = null;
 
-	let info = _('User interface for sending AT commands using sms-tool').format('');
-	
-		let sections = uci.sections('defmodems', 'defmodems');
-		let serialModems = [];
-		
-		if (sections && sections.length > 0) {
-			serialModems = sections.filter(function(s) {
-				return s.modemdata === 'serial';
-			});
-		}
-		
-		let currentPort = uci.get('5gmodem', 'sms', 'atport');
-		let currentModem = serialModems.find(function(s) {
-			return s.comm_port === currentPort;
+		/* ---------- terminal ---------- */
+		var t = this._t = {};
+		t.term = E('div', { 'class': 'tg-at-term', 'aria-live': 'polite' });
+		t.input = E('input', {
+			'class': 'cbi-input-text',
+			'type': 'text',
+			'id': 'cmdvalue',
+			'autocomplete': 'off',
+			'autocapitalize': 'characters',
+			'spellcheck': 'false',
+			'placeholder': _('Command to send'),
+			'aria-label': _('Command to send'),
+			'data-tooltip': _('Press [Enter] to send the command, press [Ctrl+Delete] to clear the field'),
+			'keydown': function(ev) {
+				if (ev.keyCode === 13) {
+					ev.preventDefault();
+					self.handleGo(ev);
+				}
+				else if (ev.keyCode === 46 && (ev.ctrlKey || ev.shiftKey)) {
+					ev.preventDefault();
+					t.input.value = '';
+					t.input.focus();
+				}
+				else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+					ev.preventDefault();
+					self.recall(ev.key === 'ArrowUp' ? -1 : 1);
+				}
+			}
 		});
-		
-		if (!currentModem && serialModems.length > 0) currentModem = serialModems[0];
-		
+		t.send = iconButton('send', _('Send command'), 'cbi-button-action important', {
+			'id': 'execute', 'click': function(ev) { self.handleGo(ev); } });
+		var clr = iconButton('trash', '', 'tg-at-ico-btn', {
+			'id': 'clr', 'title': _('Clear form'), 'aria-label': _('Clear form'),
+			'click': function(ev) { self.handleClear(ev); } });
+		var console_ = E('div', { 'class': 'cbi-section tg-at-console' }, [
+			E('div', { 'class': 'tg-at-bar' }, [
+				E('span', {}, _('Reply')),
+				E('span', { 'class': 'tg-at-hint' }, _('History is kept until the page is closed · ↑ recalls the previous command'))
+			]),
+			t.term,
+			E('div', { 'class': 'tg-at-in' }, [ t.input, t.send, clr ])
+		]);
+		this.termEmpty();
+
+		/* ---------- templates ---------- */
 		let atFiles = loadResults[1] || [];
 		let userFiles = atFiles.filter(function(file) {
 			return file.type === 'file' && file.name && file.name.match(/\.user$/);
@@ -381,181 +520,57 @@ return view.extend({
 			return (ga - gb) || a.name.localeCompare(b.name);
 		});
 		if (loadResults[0]) { userFiles.push({ type: 'file', name: '__user__' }); }
-	
-		return E('div', { 'class': 'cbi-map', 'id': 'map' }, [
-				E('div', { 'class': 'cbi-section tgpage' }, [
-					E('div', { 'class': 'cbi-section-node' }, [
-						(function() {
-							if (serialModems.length > 0) {
-								let label = currentModem.modem + (currentModem.user_desc ? ' (' + currentModem.user_desc + ')' : '');
-								let buttonsDisabled = (serialModems.length > 1) ? null : true;
-								
-								return E('div', { 'class': 'cbi-value' }, [
-									E('label', { 'class': 'cbi-value-title' }, [ _('Select modem') ]),
-									E('div', { 'class': 'cbi-value-field' }, [
-										E('div', { 'class': 'controls' }, [
-											E('div', { 'class': 'pager center tg-row' }, [
-												E('button', { 
-													'class': 'btn cbi-button-neutral tg-col-narrow prev',
-													'aria-label': _('Previous modem'), 
-													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'disabled': buttonsDisabled
-												}, [ ' ◄ ' ]),
-												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
-												E('button', { 
-													'class': 'btn cbi-button-neutral tg-col-narrow next',
-													'aria-label': _('Next modem'), 
-													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'disabled': buttonsDisabled
-												}, [ ' ► ' ])
-											])
-										])
-									])
-								]);
-							} else {
-								return E('div');
-							}
-						}.bind(this))(),
-						(function() {
-							if (userFiles.length > 0) {
-								let savedFile = this.restoreSettingsFromLocalStorage();
-								let fam = atFamilyFor(window._sendatLmVp, window._sendatLmModel);
-								let fileToLoad = userFiles[0].name;
-								let checkedIndex = 0;
-								[savedFile, (fam ? fam + '.user' : null), 'generic.user'].some(function(want) {
-									if (!want) { return false; }
-									let idx = userFiles.findIndex(function(f) { return f.name === want; });
-									if (idx !== -1) { fileToLoad = want; checkedIndex = idx; return true; }
-									return false;
-								});
 
-								setTimeout(function() {
-									L.resolveDefault(fs.read_direct(atFilePath(fileToLoad)), '').then(function(content) {
-										fillTemplateSelect(document.getElementById('tk'), content);
-									}).catch(function(err) {
-										console.error('Error loading initial AT commands file:', err);
-									});
-								}, 100);
-								
-								return E('div', { 'class': 'cbi-value' }, [
-									E('label', { 'class': 'cbi-value-title' }, [ _('Defined AT command files') ]),
-									E('div', { 'class': 'cbi-value-field' }, 
-										E('div', {}, 
-											userFiles.map(function(file, index) {
-												let fileName = file.name;
-												let displayName = (fileName === '__user__')
-													? _('My commands')
-													: fileName.replace(/\.user$/, '').toUpperCase();
-												
-												return E('label', {
-													'class': 'tg-atfile',
-													'style': 'margin-right: 15px; display:inline-flex;align-items:center;gap:6px;vertical-align:middle;',
-													'data-tooltip': _('Select file with AT commands to load')
-												}, [
-													E('input', {
-														'type': 'radio',
-														'name': 'at_file',
-														'value': fileName,
-														'change': ui.createHandlerFn(this, 'handleFileChange'),
-														'checked': index === checkedIndex ? true : null
-													}),
-													' ',
-													displayName
-												]);
-											}.bind(this))
-										)
-									)
-								]);
-							} else {
-								return E('div');
-							}
-						}.bind(this))(),
-						E('div', { 'class': 'cbi-value' }, [
-							E('label', { 'class': 'cbi-value-title' }, [ _('User AT commands') ]),
-							E('div', { 'class': 'cbi-value-field' }, [
-								E('select', {
-										'id': 'tk',
-										'class': 'cbi-input-select tg-field',
-										'change': ui.createHandlerFn(this, 'handleCopy')
-									    },
-									(function() {
-										let content = '';
-										if (userFiles.length === 0 && loadResults[0]) {
-											content = loadResults[0];
-										}
+		var fam = atFamilyFor(window._sendatLmVp, window._sendatLmModel);
+		var famFile = fam ? fam + '.user' : null;
+		var start = null;
+		if (userFiles.length) {
+			var saved = this.restoreSettingsFromLocalStorage();
+			start = userFiles[0].name;
+			[ saved, famFile, 'generic.user' ].some(function(want) {
+				if (!want) { return false; }
+				if (userFiles.some(function(f) { return f.name === want; })) { start = want; return true; }
+				return false;
+			});
+		}
 
-										if (!content || !content.trim()) {
-											return [E('option', { 'value': '' }, _('No AT commands available'))];
-										}
-										let nodes = [ E('option', { 'value': '', 'disabled': true, 'selected': true }, '—') ];
-										let group = null;
-										parseTemplates(content).forEach(function(it) {
-											if (it.type === 'section') {
-												group = E('optgroup', { 'label': it.name }, []);
-												nodes.push(group);
-												return;
-											}
-											let opt = E('option', { 'value': it.code }, [ templateLabel(it) ]);
-											if (group) { group.appendChild(opt); } else { nodes.push(opt); }
-										});
-										return nodes;
-									})()
-								)
-							]) 
-						]),
-						E('div', { 'class': 'cbi-value' }, [
-							E('label', { 'class': 'cbi-value-title' }, [ _('Command to send') ]),
-							E('div', { 'class': 'cbi-value-field' }, [
-							E('input', {
-								'class': 'tg-field',
-								'type': 'text',
-								'id': 'cmdvalue',
-								'data-tooltip': _('Press [Enter] to send the command, press [Ctrl+Delete] to clear the field'),
-								'keydown': function(ev) {
-									 if (ev.keyCode === 13)  
-										{
-										let execBtn = document.getElementById('execute');
-											if (execBtn) {
-												execBtn.click();
-											}
-										}
-									 if (ev.keyCode === 46 && (ev.ctrlKey || ev.shiftKey))
-										{
-										ev.preventDefault();
-										let del = document.getElementById('cmdvalue');
-											if (del) {
-												let ov = document.getElementById('cmdvalue');
-												ov.value = '';
-												document.getElementById('cmdvalue').focus();
-											}
-										}
-								    }																														
-								}),
-							])
-						]),
-					])
-				]),
-				E('div', { 'class': 'right tg-actrow' }, [
-					E('button', {
-						'class': 'cbi-button',
-						'click': ui.createHandlerFn(this, function() {
-							new editors.atCommandsManagerDialog(_('AT templates')).show();
-						})
-					}, [ _('AT templates') ]),
-					E('button', {
-						'class': 'cbi-button cbi-button-remove',
-						'id': 'clr',
-						'click': ui.createHandlerFn(this, 'handleClear')
-					}, [ _('Clear form') ]),
-					E('button', {
-						'class': 'cbi-button cbi-button-action important',
-						'id': 'execute',
-						'click': ui.createHandlerFn(this, 'handleGo')
-					}, [ _('Send command') ]),
-				]),
-				E('p', _('Reply')),
-				E('pre', { 'class': 'atcommand-output', 'style': 'display:none' }),
+		t.list = E('div', { 'class': 'tg-at-list' });
+		var fileSel = '';
+		if (userFiles.length) {
+			fileSel = E('select', {
+				'class': 'cbi-input-select tg-at-file',
+				'aria-label': _('Defined AT command files'),
+				'title': _('Select file with AT commands to load'),
+				'change': function(ev) { self.handleFileChange(ev.target.value); }
+			}, userFiles.map(function(f) {
+				var label = (f.name === '__user__') ? _('My commands') : f.name.replace(/\.user$/, '').toUpperCase();
+				if (f.name === famFile) { label = _('%s (by modem)').format(label); }
+				return E('option', { 'value': f.name, 'selected': (f.name === start) ? true : null }, label);
+			}));
+		}
+		var tplSec = E('div', { 'class': 'cbi-section tg-at-tplsec' }, [
+			E('h3', {}, _('AT commands')),
+			this.renderModemPager(),
+			fileSel,
+			t.list,
+			E('div', { 'class': 'tg-at-actions' }, [
+				iconButton('pen', _('AT templates'), '', { 'click': function() {
+					new editors.atCommandsManagerDialog(_('AT templates')).show();
+				} })
+			])
+		]);
+		if (start) {
+			t.list.appendChild(E('div', { 'class': 'tg-at-none' }, E('span', { 'class': 'tg-at-spin' })));
+			L.resolveDefault(fs.read_direct(atFilePath(start)), '').then(function(content) {
+				self.fillList(parseTemplates(content));
+			});
+		} else {
+			this.fillList([]);
+		}
 
-			]);
+		return E('div', { 'class': 'tg-at' }, [
+			this.renderHead(),
+			E('div', { 'class': 'tg-at-grid' }, [ console_, E('div', { 'class': 'tg-at-side' }, [ tplSec ]) ])
+		]);
 	}
 });

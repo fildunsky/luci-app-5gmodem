@@ -713,16 +713,27 @@ _clash_ping() {
 	[ -n "$_cp_ctl" ] || _cp_ctl=9090
 	_cp_sec=$(sed -n 's/^ *secret *: *\(.*\)$/\1/p' \
 		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1 | tr -d '"'"'"' ')
-	set --
-	[ -n "$_cp_sec" ] && set -- -H "Authorization: Bearer $_cp_sec"
+	# the secret goes to curl through stdin (-K -), not argv
+	_cp_curl() {
+		if [ -n "$_cp_sec" ]; then
+			printf 'header = "Authorization: Bearer %s"\n' "$(curl_kq "$_cp_sec")" | curl -K - "$@"
+		else
+			curl "$@"
+		fi
+	}
+	# deadline: up to 4 groups x 2 URLs x 4 s made a blocked site cost ~30 s, and the page waits on it
+	_cp_end=$(( $(cut -d. -f1 /proc/uptime) + 8 ))
 	_cp_n=0
-	for _cp_g in $(curl -s -m 3 "$@" "http://127.0.0.1:$_cp_ctl/proxies" 2>/dev/null \
+	for _cp_g in $(_cp_curl -s -m 3 "http://127.0.0.1:$_cp_ctl/proxies" 2>/dev/null \
 		| grep -o '"name":"[A-Za-z0-9_.-]*"' | cut -d'"' -f4 | sort -u); do
 		case "$_cp_g" in GLOBAL|DIRECT|REJECT*|PASS*|COMPATIBLE|'') continue ;; esac
 		_cp_n=$((_cp_n + 1)); [ "$_cp_n" -gt 4 ] && break
 		for _cp_u in "https%3A%2F%2F$_cp_h%2Fgenerate_204" "https%3A%2F%2F$_cp_h%2F"; do
-			_cp_d=$(curl -s -m 6 "$@" \
-				"http://127.0.0.1:$_cp_ctl/proxies/$_cp_g/delay?timeout=4000&url=$_cp_u" 2>/dev/null \
+			_cp_left=$(( _cp_end - $(cut -d. -f1 /proc/uptime) ))
+			[ "$_cp_left" -gt 0 ] || return 1
+			[ "$_cp_left" -lt 4 ] || _cp_left=4
+			_cp_d=$(_cp_curl -s -m $((_cp_left + 1)) \
+				"http://127.0.0.1:$_cp_ctl/proxies/$_cp_g/delay?timeout=${_cp_left}000&url=$_cp_u" 2>/dev/null \
 				| sed -n 's/.*"delay":\([0-9]*\).*/\1/p')
 			[ -n "$_cp_d" ] && { printf '{"ok":1,"ms":%s,"via":"proxy"}\n' "$_cp_d"; return 0; }
 		done
@@ -1164,6 +1175,41 @@ order)
 	;;
 
 ping)
+	# The page never waits for a probe: a blocked site takes up to ~20 s, and uhttpd runs only
+	# 3 CGI scripts at once (max_requests 3), so waiting probes stalled the whole page. The probe
+	# runs detached and writes /tmp/5gmodem/ping/<host>.json; the page gets the last result at
+	# once, "busy":1 while a fresh one is being taken, and "pending":1 before the first one.
+	# the host comes from the page: letters, digits, dot, dash, colon only, and never an option
+	case "${2:-}" in -*|*[!A-Za-z0-9.:_-]*) echo '{"ok":0}'; exit 0 ;; esac
+	[ "${#2}" -le 120 ] || { echo '{"ok":0}'; exit 0; }
+	if [ -z "$NETPRI_PING_FG" ]; then
+		_pg_h="${2:-youtube.com}"
+		_pg_d=/tmp/5gmodem/ping
+		_pg_k=$(printf '%s' "$_pg_h" | tr -c 'A-Za-z0-9.-' '_')
+		_pg_f="$_pg_d/$_pg_k.json"; _pg_l="$_pg_d/$_pg_k.lock"
+		mkdir -p "$_pg_d" 2>/dev/null
+		# a lock left by a killed probe (busybox "-mmin +1" means two minutes or more)
+		[ -d "$_pg_l" ] && [ -n "$(find "$_pg_l" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir "$_pg_l" 2>/dev/null
+		# a result younger than 15 s is the answer: the page re-asks every second while "busy", and
+		# a shorter window started a new probe on every re-ask over a slow link
+		_pg_fresh=""
+		if [ -s "$_pg_f" ]; then
+			_pg_a=$(( $(date +%s) - $(date -r "$_pg_f" +%s 2>/dev/null || echo 0) ))
+			[ "$_pg_a" -ge 0 ] && [ "$_pg_a" -lt 15 ] && _pg_fresh=1
+		fi
+		if [ -z "$_pg_fresh" ] && mkdir "$_pg_l" 2>/dev/null; then
+			( NETPRI_PING_FG=1 sh /usr/share/5gmodem/netpri.sh ping "$_pg_h" > "$_pg_f.tmp" 2>/dev/null
+			  [ -s "$_pg_f.tmp" ] && mv -f "$_pg_f.tmp" "$_pg_f" || rm -f "$_pg_f.tmp"
+			  rmdir "$_pg_l" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
+		fi
+		_pg_b=""; [ -d "$_pg_l" ] && _pg_b=',"busy":1'
+		if [ -s "$_pg_f" ]; then
+			sed -n "1s/}[[:space:]]*\$/$_pg_b}/p" "$_pg_f"
+		else
+			printf '{"ok":0,"pending":1%s}\n' "$_pg_b"
+		fi
+		exit 0
+	fi
 	_TG_CIDR_PKG=/usr/share/5gmodem/telegram-cidr.txt
 	_TG_CIDR_NEW=/etc/5gmodem/telegram-cidr.txt
 	_tg_cidr_file() {

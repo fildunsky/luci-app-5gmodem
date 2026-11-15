@@ -54,11 +54,29 @@ setbands() {
 		printf "%d,%d,%d,%d,%d,%d,%d,%d", m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8]
 	}')
 	[ -n "$_zs_m" ] || return 1
+	# GW510-U writes the mask to flash for longer than sms_tool waits ("No response") and
+	# answers +CME ERROR: 8012/8013 while busy, also for a few seconds after cfun changes;
+	# a command sent then is dropped (a lost cfun=1 left the radio off). So the write is
+	# repeated until the mask reads back, and cfun=1 until it is accepted.
 	sms_tool -d $_DEVICE at "at+cfun=0" >/dev/null 2>&1
-	_zs_o=$(sms_tool -d $_DEVICE at "at+zlteband=$_zs_m" 2>&1)
-	sms_tool -d $_DEVICE at "at+cfun=1" >/dev/null 2>&1
-	case "$_zs_o" in *ERROR*|*"No response"*) echo "$_zs_o"; return 1 ;; esac
-	return 0
+	_zs_ok=""; _zs_t=0; _zs_o=""
+	while [ -z "$_zs_ok" ] && [ "$_zs_t" -lt 3 ]; do
+		_zs_o=$(sms_tool -d $_DEVICE at "at+zlteband=$_zs_m" 2>&1)
+		_zs_i=0
+		while [ "$_zs_i" -lt 8 ]; do
+			case "$(_zx_mask zlteband ZLTEBAND)" in "$_zs_m"|"$_zs_m,0") _zs_ok=1; break ;; esac
+			sleep 2; _zs_i=$((_zs_i + 1))
+		done
+		_zs_t=$((_zs_t + 1))
+	done
+	_zs_i=0
+	while [ "$_zs_i" -lt 8 ]; do
+		case "$(sms_tool -d $_DEVICE at "at+cfun=1" 2>&1)" in *ERROR*|*"No response"*) ;; *) break ;; esac
+		sleep 2; _zs_i=$((_zs_i + 1))
+	done
+	[ -n "$_zs_ok" ] && return 0
+	echo "${_zs_o:-band mask did not read back}"
+	return 1
 }
 
 _MODES="1:Авто 8:2G 2:3G 4:4G"

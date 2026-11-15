@@ -61,6 +61,113 @@ else { document.addEventListener('DOMContentLoaded', detectBoxedHeading); }
 
 var ListDropdown = form.RichListValue || form.ListValue;
 
+(function() {
+	if (document.getElementById('tg-page-modem-css')) { return; }
+	var l = document.createElement('link');
+	l.id = 'tg-page-modem-css';
+	l.rel = 'stylesheet';
+	l.href = L.resource('view/modem5g/page-modem.css');
+	document.head.appendChild(l);
+})();
+
+var PHONE_MQ = '(max-width: 700px)';
+
+var ICONS = {
+	chip: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/><path d="M9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/></g>',
+	refresh: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13a8.5 8.5 0 1 1-2.6-7.2L20.5 8"/><path d="M20.5 3v5h-5"/></g>',
+	trash: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></g>',
+	file: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l5 5v13H6Z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></g>',
+	down: '<path d="M12 3v12M7 10l5 5 5-5M4 20.5h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+	info: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.3"/></g>',
+	warn: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.5 20h19Z"/><path d="M12 10v4.5M12 17.2v.3"/></g>',
+	chev: '<path d="M7 10l5 5 5-5z" fill="currentColor"/>'
+};
+function svg(name, size) {
+	return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+function icon(name, size) {
+	var s = E('span', { 'class': 'tg-modem-i' });
+	s.innerHTML = svg(name, size);
+	return s;
+}
+function pill(kind, text) {
+	return E('span', { 'class': 'tg-modem-pill ' + kind }, [ E('i'), E('span', {}, text || '') ]);
+}
+function ucfirst(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+function maskImei(v) {
+	v = String(v || '');
+	return v.length > 6 ? '••••' + v.slice(-4) : v;
+}
+
+// collapsibleSection() of 5gdetail.js (same storage keys) with a summary on the right.
+function collapsible(key, titleText, content, defOpen, attrs) {
+	var open = defOpen, stored = null;
+	try { stored = window.localStorage.getItem('5gm-blk-' + key); } catch (e) {}
+	if (stored === '0' || stored === '1') { open = stored === '1'; }
+	var chev = E('span', { 'class': 'tg-modem-chev' });
+	chev.innerHTML = svg('chev', 16);
+	var sum = E('span', { 'class': 'tg-modem-sum' }, '');
+	var body = E('div', { 'class': 'tg-collapse' }, [ E('div', { 'class': 'tg-collapse-inner' }, content) ]);
+	var title = E('h3', { 'class': 'tg-modem-coll', 'role': 'button', 'tabindex': '0' }, [ chev, E('span', {}, titleText), sum ]);
+	var set = function(v, persist) {
+		body.classList.toggle('open', v);
+		chev.classList.toggle('open', v);
+		title.classList.toggle('open', v);
+		title.setAttribute('aria-expanded', String(v));
+		if (persist) { try { window.localStorage.setItem('5gm-blk-' + key, v ? '1' : '0'); } catch (e) {} }
+	};
+	title.addEventListener('click', function() { set(!body.classList.contains('open'), true); });
+	title.addEventListener('keydown', function(ev) {
+		if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); set(!body.classList.contains('open'), true); }
+	});
+	set(open, false);
+	var a = { 'class': 'cbi-section tg5g', 'data-blk': key };
+	if (attrs) { for (var k in attrs) { a[k] = attrs[k]; } }
+	return { node: E('div', a, [ title, body ]), sum: sum };
+}
+
+function tileEl(name, bar) {
+	var t = { now: E('span', {}, '-'), unit: E('small', {}, '') };
+	t.val = E('div', { 'class': 'tg-hist-now dash' }, [ t.now, ' ', t.unit ]);
+	var kids = [ E('div', { 'class': 'tg-hist-h' }, E('span', { 'class': 'tg-hist-name' }, E('b', {}, name))), t.val ];
+	if (bar) {
+		t.fill = E('div', { 'class': 'tg-mbar-fill' });
+		t.bar = E('div', { 'class': 'tg-mbar', 'style': 'visibility:hidden' }, E('div', { 'class': 'tg-mbar-t' }, t.fill));
+		kids.push(t.bar);
+	}
+	t.foot = E('span', {}, '');
+	t.footRow = E('div', { 'class': 'tg-hist-f', 'style': 'display:none' }, t.foot);
+	kids.push(t.footRow);
+	t.card = E('div', { 'class': 'tg-hist-card' }, kids);
+	return t;
+}
+function setTile(t, val, unit, foot, mono) {
+	var none = (val === null || val === undefined || val === '' || val === '-');
+	t.now.textContent = none ? '-' : String(val);
+	t.now.className = (!none && mono) ? 'tg-modem-mono' : '';
+	t.unit.textContent = none ? '' : (unit || '');
+	t.val.classList.toggle('dash', none);
+	t.foot.textContent = foot || '';
+	t.footRow.style.display = foot ? '' : 'none';
+}
+
+// Header card handles; filled from the snapshot (fillModemInfo) and the profile list (fillProfiles).
+var _hd = null;
+
+// Interface line of the header card: the modem interface name (the protocol is the chip in the title).
+function setHeadTech() {
+	if (!_hd) { return; }
+	var t = _hd.tech;
+	t.innerHTML = '';
+	t.appendChild(E('span', { 'class': 'tginfo-iplabel' }, _('Interface') + ':'));
+	if (!_hd.ifName) {
+		t.appendChild(E('span', { 'class': 'tg-modem-sub' }, _('no interface')));
+		return;
+	}
+	t.appendChild(E('span', { 'class': 'tg-modem-mono' }, _hd.ifName));
+}
+
+
 return view.extend({
 	handleCommand: function(exec, args) {
 		var buttons = document.querySelectorAll('.diag-action > .cbi-button');
@@ -135,7 +242,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30946, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40000, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -156,20 +263,21 @@ return view.extend({
 	},
 
 	renderProfiles: function() {
-				var box = E('div', { 'id': 'mprof-box' }, [
+		var box = E('div', { 'id': 'mprof-box' }, [
 			E('div', { 'id': 'mprof-warn' }),
-			E('div', {
-				'id': 'mprof-list',
-				'style': 'display:flex; flex-wrap:wrap; gap:.6em; margin-bottom:.4em'
-			}, [ E('span', { 'style': 'opacity:.6' }, _('Loading…')) ]),
-			E('div', { 'id': 'mprof-mm', 'style': 'margin-top:.5em' })
+			E('div', { 'id': 'mprof-list', 'class': 'tg-modem-prof' }, [
+				E('span', { 'class': 'tg-modem-muted' }, _('Loading…'))
+			]),
+			E('div', { 'id': 'mprof-mm', 'class': 'tg-modem-mm' })
 		]);
 		profilesView = this;
-		this.loadProfiles();
-		return E('div', { 'class': 'cbi-section tg5g' }, [
-			E('h3', {}, _('Saved modem profiles')),
-			box
-		]);
+		var isPhone = !!(window.matchMedia && window.matchMedia(PHONE_MQ).matches);
+		var blk = collapsible('mprof', _('Saved modem profiles'), [ box ], !isPhone);
+		this._profSum = blk.sum;
+		// fillProfiles() looks its targets up by id: load once the page is in the document.
+		var self = this;
+		window.setTimeout(function() { self.loadProfiles(); }, 0);
+		return blk.node;
 	},
 
 	loadProfiles: function() {
@@ -192,32 +300,20 @@ return view.extend({
 		if (mmrow) {
 			var run = mm && mm.running == 1;
 			mmrow.innerHTML = '';
-			var mmcol = run ? '#5cb85c' : '#d9534f';
-			mmrow.appendChild(E('span', {
-				'style': 'display:inline-flex;align-items:center;gap:.45em;'
-			}, [
-				E('span', {
-					'style': 'display:block;width:5px;height:5px;border-radius:50%;' +
-						'flex:0 0 auto;box-sizing:border-box;' +
-						'border:1px solid ' + mmcol + ';background:' + mmcol + ';' +
-						'box-shadow:0 0 4px 1px ' + mmcol + ';'
-				}),
-				E('span', { 'style': 'opacity:.75; font-size:88%' },
-					run ? _('ModemManager is running')
-					    : _('ModemManager is stopped — no connected modem needs it'))
-			]));
+			mmrow.appendChild(E('span', { 'class': 'tg-modem-dot' + (run ? ' on' : '') }));
+			mmrow.appendChild(E('span', {}, run ? _('ModemManager is running')
+				: _('ModemManager is stopped — no connected modem needs it')));
 		}
 		var warn = document.getElementById('mprof-warn');
 		var box = document.getElementById('mprof-list');
 		if (!box) { return; }
+		if (this._profSum) { this._profSum.textContent = list.length ? _('Profiles: %d').format(list.length) : ''; }
 
 		if (warn && pw && pw.suspect) {
 			warn.innerHTML = '';
 			var mA = parseInt(pw.total_ma, 10) || 0;
-			warn.appendChild(E('div', {
-				'class': 'alert-message warning',
-				'style': 'margin-bottom:.6em'
-			}, [
+			warn.appendChild(E('div', { 'class': 'alert-message warning tg-modem-alert' }, [
+				icon('warn', 17),
 				E('div', {}, [
 					E('strong', {}, _('Not enough power?') + ' '),
 					_('%d modems request %d mA. Such a modem answers AT commands, but its interface stays down — a powered USB hub helps.')
@@ -228,7 +324,7 @@ return view.extend({
 
 		box.innerHTML = '';
 		if (!list.length) {
-			box.appendChild(E('span', { 'style': 'opacity:.6' }, _('No modems seen yet')));
+			box.appendChild(E('span', { 'class': 'tg-modem-muted' }, _('No modems seen yet')));
 			return;
 		}
 		var self = this;
@@ -239,50 +335,20 @@ return view.extend({
 				var cl = String(p.celllock).split(' ');
 				out.push({ txt: cl[0] === 'cell'
 					? _('locked to cell %s/%s').format(cl[1], cl[2])
-					: _('locked to frequency %s').format(cl[1]), color: '#d9534f' });
+					: _('locked to frequency %s').format(cl[1]), cls: 'bad' });
 			}
 			var isMM = mutil.isMMProto(p.proto);
 			if (p.mm_exclude === '0' && !isMM && p.proto) {
-				out.push({ txt: _('visible to ModemManager'), color: '#e58a00' });
+				out.push({ txt: _('visible to ModemManager'), cls: 'warn' });
 			} else if (p.mm_exclude === '1' && isMM) {
-				out.push({ txt: _('hidden from ModemManager'), color: '#e58a00' });
+				out.push({ txt: _('hidden from ModemManager'), cls: 'warn' });
 			}
 			return out;
 		};
-		var anyMarks = list.some(function(p) { return marksOf(p).length > 0; });
 		var mmRunning = !!(mm && mm.running == 1);
 		var lowPower = ' ' + String((pw && pw.paths) || '') + ' ';
 		list.forEach(function(p) {
-			var st = 'flex:1 1 18em; min-width:16em; text-align:left; padding:.6em .8em; ' +
-				'border-radius:8px; cursor:default;';
-			if (p.active) { st += 'border-color:var(--proton-accent,#3a7bd5);'; }
-			if (!p.present) { st += 'opacity:.6;'; }
 			var isLow = lowPower.indexOf(' ' + p.path + ' ') >= 0;
-
-			var head = E('div', {
-				'style': 'border-bottom:1px solid currentColor; padding-bottom:.4em;'
-			}, [
-				E('div', { 'class': 'mprof-head' }, [
-					E('div', { 'style': 'min-width:0' }, [
-						E('strong', { 'class': 'mprof-name' }, [ p.model || p.path ]),
-						p.vidpid ? E('div', {
-							'class': 'mprof-name',
-							'style': 'font-size:78%; opacity:.55; margin-top:-.15em'
-						}, [ p.vidpid ]) : ''
-					]),
-					E('div', { 'style': 'display:flex; flex-direction:column; align-items:flex-end; gap:.1em; white-space:nowrap' }, [
-						E('span', { 'style': 'font-size:85%; opacity:.8' },
-							p.present ? _('connected') : _('not connected')),
-						(p.kind === 'hilink' && p.webaddr) ? E('a', {
-							'href': 'http://' + p.webaddr + '/html/home.html',
-							'target': '_blank', 'rel': 'noreferrer',
-							'style': 'font-size:78%; opacity:.7'
-						}, [ p.webaddr ]) : ''
-					])
-				])
-			]);
-			head.style.borderBottomColor = 'rgba(128,128,128,.35)';
-
 			var protoNice = mutil.protoLabel(p.proto) || '—';
 			var isHilink = (p.kind === 'hilink');
 			if (isHilink) { protoNice = 'HiLink'; }
@@ -293,32 +359,54 @@ return view.extend({
 				})[String(p.pdptype).toLowerCase()] || p.pdptype;
 			}
 
+			if (p.active && _hd && !_hd.root.classList.contains('none')) {
+				if (p.vidpid) { _hd.vidpid.textContent = p.vidpid; _hd.vidpid.style.display = ''; }
+				_hd.usb.textContent = 'USB ' + p.path;
+				if (_hd.hilink) {
+					// a HiLink modem has no AT snapshot: the profile is all the header has
+					_hd.reg.textContent = 'HiLink';
+					_hd.main.textContent = p.webaddr || '-';
+					_hd.main.classList.toggle('none', !p.webaddr);
+					_hd.ico.className = 'tginfo-signal tg-modem-ico ' + (p.present ? 'ok' : 'off');
+				}
+				if (!_hd.haveName && (p.model || p.path)) { _hd.name.textContent = p.model || p.path; }
+			}
+
+			// Card layout (as before the redesign): name and VID:PID with the state on the right, a rule,
+			// then two-sided lines (interface | APN, protocol and eSIM | PDP type), marks, saved bands,
+			// and the IMEI / USB path with the Delete button at the bottom.
 			var card = E('div', {
-				'class': 'btn cbi-button mprof-card' + (isLow ? ' mprof-lowpower' : ''),
-				'title': isLow ? _('the data interface did not come up — not enough power?') : '',
-				'style': st
+				'class': 'tg-hist-card tg-modem-pcard' + (p.active ? ' cur' : '') + (p.present ? '' : ' gone') + (isLow ? ' tg-modem-warncard' : ''),
+				'title': isLow ? _('the data interface did not come up — not enough power?') : ''
 			}, [
-				head,
-				E('div', { 'class': 'mprof-line', 'style': 'margin-top:.45em' }, [
-					E('span', { 'class': 'mprof-if' }, [ p.iface || _('no interface') ]),
-					E('span', {}, [
-						E('strong', {}, 'APN:'), ' ',
-						p.apn || _('default')
+				E('div', { 'class': 'tg-modem-phead' }, [
+					E('div', { 'class': 'tg-modem-pid' }, [
+						E('b', { 'class': 'tg-modem-mono tg-modem-pname' }, [ p.model || p.path ]),
+						p.vidpid ? E('span', { 'class': 'tg-modem-mono tg-modem-pvid', 'title': _('USB vendor and product ID') }, [ p.vidpid ]) : ''
+					]),
+					E('div', { 'class': 'tg-modem-pst' }, [
+						pill(p.present ? 'ok' : 'off', p.present ? _('connected') : _('not connected')),
+						(isHilink && p.webaddr) ? E('a', {
+							'href': 'http://' + p.webaddr + '/html/home.html',
+							'target': '_blank', 'rel': 'noreferrer'
+						}, [ p.webaddr ]) : ''
 					])
 				]),
-				E('div', { 'class': 'mprof-line' }, [
-					E('span', { 'style': 'display:flex; align-items:baseline; gap:.6em; min-width:0' }, [
-						E('span', { 'class': 'mprof-proto' }, [
+				E('div', { 'class': 'tg-modem-pline' }, [
+					E('span', { 'class': 'tg-modem-mono tg-modem-pif' }, [ p.iface || _('no interface') ]),
+					E('span', { 'class': 'tg-modem-papn' }, [ 'APN: ', p.apn ? E('span', { 'class': 'tg-modem-mono' }, [ p.apn ]) : _('default') ])
+				]),
+				E('div', { 'class': 'tg-modem-pline' }, [
+					E('span', { 'class': 'tg-modem-pproto' }, [
+						E('span', { 'class': 'tg-proto-badge' }, [
 							mmRunning && p.mm_exclude === '1' ? E('img', {
 								'src': mutil.icon('icons/5gmodem/cghost.svg'),
 								'width': 12, 'height': 12, 'alt': '',
-								'title': _('hidden from ModemManager'),
-								'style': 'margin-right:.3em; opacity:.75; flex:0 0 auto'
+								'title': _('hidden from ModemManager')
 							}) : '',
 							protoNice
 						]),
 						p.esim ? E('span', {
-							'style': 'opacity:.8',
 							'title': (p.esim === 'forced-yes' || p.esim === 'forced-no')
 								? _('set manually in the modem settings')
 								: _('detected by probing the modem')
@@ -330,28 +418,23 @@ return view.extend({
 							                          _('no (manually)')
 						]) : ''
 					]),
-					E('span', { 'style': 'opacity:.8; flex:0 0 auto' }, [ pdpNice ])
+					E('span', {}, [ pdpNice ])
 				])
 			]);
 
 			var marks = marksOf(p);
 			if (marks.length) {
-				var mrow = E('div', { 'style': 'font-size:80%; margin-top:.3em' }, []);
-				marks.forEach(function(m, i) {
-					if (i) { mrow.appendChild(document.createTextNode(' · ')); }
-					mrow.appendChild(E('span', { 'style': 'color:' + m.color }, [ m.txt ]));
-				});
-				card.appendChild(mrow);
-			} else if (anyMarks) {
-				card.appendChild(E('div', {
-					'style': 'font-size:80%; margin-top:.3em; visibility:hidden'
-				}, '\u00a0'));
+				card.appendChild(E('div', { 'class': 'pf' }, marks.map(function(m) {
+					return E('span', { 'class': 'tg-modem-mark ' + m.cls }, [ m.txt ]);
+				})));
 			}
-
 			if (p.iface_shared) {
-				card.appendChild(E('div', {
-					'style': 'font-size:80%; color:#e58a00; margin-top:.3em'
-				}, [ _('shares interface %s with another profile').format(p.iface) ]));
+				card.appendChild(E('div', { 'class': 'pf' }, [ E('span', { 'class': 'tg-modem-mark warn' },
+					[ _('shares interface %s with another profile').format(p.iface) ]) ]));
+			}
+			if (isLow) {
+				card.appendChild(E('div', { 'class': 'pf tg-modem-lowtxt' },
+					[ ucfirst(_('the data interface did not come up — not enough power?')) ]));
 			}
 
 			var savedBands = (function() {
@@ -362,7 +445,7 @@ return view.extend({
 						return (/^[0-9]+$/).test(b);
 					});
 					if (bs.length) {
-						parts.push({ label: label, bands: bs.map(function(b) { return pfx + b; }).join(' ') });
+						parts.push({ label: label, bands: bs.map(function(b) { return pfx + b; }) });
 					}
 				};
 				add(p.save_band, 'B', '4G');
@@ -371,27 +454,25 @@ return view.extend({
 				return parts;
 			})();
 			if (savedBands.length) {
-				var sbWrap = E('div', {
-					'style': 'font-size:72%; opacity:.55; margin:1em 0 .5em; line-height:1.4; word-break:break-word'
-				}, [ E('div', {}, E('strong', {}, _('Saved bands') + ':')) ]);
+				var sb = E('div', { 'class': 'tg-modem-psb' }, [ E('div', { 'class': 'pf' }, [ _('Saved bands') + ':' ]) ]);
 				savedBands.forEach(function(part) {
-					sbWrap.appendChild(E('div', {}, [ E('strong', {}, part.label), ' ' + part.bands ]));
+					sb.appendChild(E('div', { 'class': 'bands' }, [ E('b', {}, part.label) ].concat(
+						part.bands.map(function(b) { return E('span', {}, b); }))));
 				});
-				card.appendChild(sbWrap);
+				card.appendChild(sb);
 			}
 
-			card.appendChild(E('div', { 'class': 'mprof-foot' }, [
-				E('div', { 'style': 'font-size:80%; opacity:.6; line-height:1.5' }, [
-					p.imei ? ('IMEI ' + p.imei) : _('IMEI unknown'), E('br'),
-					p.path
+			card.appendChild(E('div', { 'class': 'tg-modem-pfoot' }, [
+				E('div', { 'class': 'pf' }, [
+					E('div', { 'title': p.imei ? 'IMEI ' + p.imei : '' }, [ p.imei ? ('IMEI ' + maskImei(p.imei)) : _('IMEI unknown') ]),
+					E('div', {}, [ 'USB ' + p.path ])
 				]),
 				E('button', {
 					'class': 'btn cbi-button cbi-button-remove',
-					'style': 'margin-left:0; flex:0 0 auto',
 					'click': ui.createHandlerFn(this, function() {
 						return self.confirmDelete(p);
 					})
-				}, _('Delete'))
+				}, [ icon('trash', 15), _('Delete') ])
 			]));
 			box.appendChild(card);
 		});
@@ -670,12 +751,12 @@ return view.extend({
 		var detText = function(v) {
 			return v === 'connected' ? _('antenna detected') : (v === 'absent' ? _('no antenna detected') : _('detector unavailable'));
 		};
-		var statusNode = E('div', { 'class': 'cbi-value-description' }, []);
+		var a1 = tileEl(_('Antenna %d').format(1)), a2 = tileEl(_('Antenna %d').format(2));
 		var paint = function(s) {
-			statusNode.textContent = [
-				_('Antenna %d').format(1) + ': ' + chainText(s.chain1) + ', ' + detText(s.detect1),
-				_('Antenna %d').format(2) + ': ' + chainText(s.chain2) + ', ' + detText(s.detect2)
-			].join(' · ');
+			setTile(a1, s.chain1 ? chainText(s.chain1) : null, '', detText(s.detect1));
+			setTile(a2, s.chain2 ? chainText(s.chain2) : null, '', detText(s.detect2));
+			a1.card.classList.toggle('tg-modem-on', s.detect1 === 'connected');
+			a2.card.classList.toggle('tg-modem-on', s.detect2 === 'connected');
 		};
 		paint(st);
 
@@ -696,11 +777,11 @@ return view.extend({
 				E('label', { 'class': 'cbi-value-title' }, _('Antenna mode')),
 				E('div', { 'class': 'cbi-value-field' }, [
 					sel,
-					statusNode,
 					E('div', { 'class': 'cbi-value-description' },
 						_('Applies immediately, no Save needed. Automatic modes check the connectors every 3 seconds. The detector only sees antennas that short the connector to ground; a passive antenna may stay undetected while plugged in.'))
 				])
-			])
+			]),
+			E('div', { 'class': 'tg-modem-ant' }, [ a1.card, a2.card ])
 		]);
 	},
 
@@ -709,30 +790,48 @@ return view.extend({
 			.then(function(r) {
 				var j = {};
 				try { j = JSON.parse((r && r.stdout) || '{}'); } catch (e) { return; }
-				var tbl = document.getElementById('dbg-info-table');
-				var msg = document.getElementById('dbg-no-modem');
+				if (!_hd) { return; }
 				if (j.error && j.error !== 'busy' && !j.modem) {
-					if (tbl) { tbl.style.display = 'none'; }
-					if (msg) { msg.style.display = ''; }
+					// a HiLink modem has no AT snapshot: fillProfiles() fills the header from its profile
+					if (_hd.hilink) { return; }
+					_hd.root.classList.add('none');
+					_hd.title.textContent = _('Modem');
+					_hd.ico.className = 'tginfo-signal tg-modem-ico off';
+					_hd.temp.textContent = '';
+					_hd.reg.textContent = '';
+					_hd.main.textContent = _('No modem detected. Insert a modem, then reload the page.');
+					_hd.main.classList.add('none');
+					_hd.usb.textContent = '';
+					_hd.vidpid.style.display = 'none';
 					return;
 				}
-				if (tbl) { tbl.style.display = ''; }
-				if (msg) { msg.style.display = 'none'; }
-				var put = function(id, v) {
-					var el = document.getElementById(id);
-					if (el && v != null && String(v) !== '') { el.textContent = String(v); }
-				};
-				put('dbg-modem', j.modem + modeSuffix(j));
-				put('dbg-firmware', j.firmware);
-				put('dbg-cport', j.cport);
-				put('dbg-protocol', mutil.protoLabel(j.protocol));
-
-				var t = j.mtemp;
-				if (t != null && String(t).length > 1 && String(t).indexOf(' ') < 0 && String(t) != '-') {
-					put('dbg-mtemp', String(t).replace('&deg;', '°'));
-					var row = document.getElementById('dbg-temp-row');
-					if (row) { row.style.display = ''; }
+				if (j.error === 'busy' && !j.modem) { return; }
+				_hd.root.classList.remove('none');
+				if (j.modem) { _hd.name.textContent = j.modem + modeSuffix(j); _hd.haveName = true; }
+				if (j.protocol) { _hd.proto.textContent = mutil.protoLabel(j.protocol); _hd.proto.style.display = ''; }
+				if (j.vidpid && j.vidpid !== '-' && j.vidpid !== ':') { _hd.vidpid.textContent = j.vidpid; _hd.vidpid.style.display = ''; }
+				if (j.path && j.path !== '-') { _hd.usb.textContent = 'USB ' + j.path; }
+				_hd.ico.className = 'tginfo-signal tg-modem-ico ok';
+				var fw = (j.firmware != null && String(j.firmware) !== '' && String(j.firmware) !== '-') ? String(j.firmware) : '';
+				if (fw || !_hd.hilink) {
+					_hd.reg.textContent = _('Firmware');
+					_hd.main.textContent = fw || '-';
+					_hd.main.classList.toggle('none', !fw);
 				}
+				var cport = (j.cport != null && String(j.cport) !== '' && String(j.cport) !== '-') ? String(j.cport) : '';
+				_hd.port.textContent = cport || '-';
+				// HiLink reports the web address as its port; the status column shows it already
+				_hd.portRow.style.display = _hd.hilink ? 'none' : '';
+				var atp = _hd.atPort && _hd.atPort !== cport ? _hd.atPort : '';
+				_hd.at.textContent = atp;
+				_hd.atRow.style.display = atp ? '' : 'none';
+
+				// mtemp arrives as "38°C", "38 &deg;C" or "-"
+				var tn = (j.mtemp != null) ? parseFloat(String(j.mtemp)) : NaN;
+				var lvl = isNaN(tn) ? -1 : (tn < 60 ? 0 : tn < 70 ? 1 : 2);
+				_hd.temp.textContent = isNaN(tn) ? '' : Math.round(tn) + '°C';
+				_hd.temp.className = [ 'ok', 'warn', 'bad' ][lvl] || '';
+				_hd.temp.title = isNaN(tn) ? '' : _('Temperature');
 			});
 	},
 
@@ -767,15 +866,23 @@ return view.extend({
 		var m, s, o;
 		m = new form.Map('5gmodem', '', '');
 
-		s = m.section(form.TypedSection, '5gmodem', '', null);
-		s.anonymous = true;
+		var pageAlerts = [];
 
-		o = s.option(form.Flag, 'auto_port', _('Auto-detect port and interface'),
+		/* One TypedSection must remain: savePending(), lookupOption() and the instant toggles
+		   below work on its options. The groups are native section tabs. */
+		s = m.section(form.TypedSection, '5gmodem', _('Connection'), null);
+		s.anonymous = true;
+		s.tab('ports', _('Ports and interface'));
+		s.tab('apn', _('APN'));
+		s.tab('net', _('Network'));
+		s.tab('expert', _('For experts'));
+
+		o = s.taboption('ports', form.Flag, 'auto_port', _('Auto-detect port and interface'),
 			_('Automatically find the modem AT port and its network interface (via ModemManager when available). Turn this off to select them manually below.'));
 		o.default = '1';
 		o.rmempty = false;
 
-		o = s.option(ListDropdown, 'network', _('Interface'),
+		o = s.taboption('ports', ListDropdown, 'network', _('Interface'),
 			_('Network interface for Internet access'));
 		o.depends('auto_port', '0');
 		o.rmempty = true;
@@ -786,7 +893,7 @@ return view.extend({
 			if (nm && nm != 'loopback') { o.value(nm, nm + (iface.proto ? ' (' + mutil.protoLabel(iface.proto) + ')' : '')); }
 		});
 
-		o = s.option(form.Value, 'device',
+		o = s.taboption('ports', form.Value, 'device',
 			_('Port for modem communication'),
 			_("Port used to read modem/connection info: one of the available ttyUSBX ports.<br /> <br />HiLink and other modems with a web interface are found automatically and need no port."));
 		devs.sort(function(a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
@@ -797,7 +904,7 @@ return view.extend({
 		/* see docs/subsystems/diagnostics.md#hidden-port-fields-must-survive-save */
 		o.remove = function() { return Promise.resolve(); };
 
-		o = s.option(form.Value, 'at_port',
+		o = s.taboption('ports', form.Value, 'at_port',
 			_('Port for AT / SMS / USSD'),
 			_('AT command port used for SMS, USSD and AT commands. On most modems it is the same as the modem communication port.'));
 		devs.forEach(dev => o.value('/dev/' + dev.name, portLabel(dev.name)));
@@ -822,7 +929,7 @@ return view.extend({
 		var activeIsHilink = (activeKind === 'hilink' || activeKind === 'tether');
 
 		if (!activeIsHilink) {
-		o = s.option(ListDropdown, 'iface_proto', _('Interface protocol'),
+		o = s.taboption('ports', ListDropdown, 'iface_proto', _('Interface protocol'),
 			_('Protocol for the "Create modem interface" button. "Auto" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem).'));
 		o.value('auto', _('Auto (detect)'));
 		var protoLabels = {
@@ -869,23 +976,23 @@ return view.extend({
 
 		var mForeignIf = mSec ? (uci.get('5gmodem', mSec, 'foreign_iface') || '') : '';
 		if (mForeignIf) {
-			ui.addNotification(null, E('p', {}, [
+			pageAlerts.push([
 				E('strong', {}, [ _('Interface “%s” was created for a different modem').format(mForeignIf) ]), ' ',
 				_('It is bound to this modem only because the kernel reused the device node, so its settings (APN in particular) may belong to the previous modem and SIM. Create the interface anew below - the APN is filled from the operator detected right now.')
-			]), 'warning');
+			]);
 		}
 
 		var mImeiChanged = mSec ? (uci.get('5gmodem', mSec, 'imei_changed') || '') : '';
 		if (mImeiChanged === '1') {
-			ui.addNotification(null, E('p', {}, [
+			pageAlerts.push([
 				E('strong', {}, _('A different modem is now in this USB port')), ' ',
 				_('Its IMEI does not match the one seen here before - the modems were probably swapped. The settings of this slot (the interface and its APN in particular) belong to the previous modem and its SIM. Check them below and create the interface anew if needed.')
-			]), 'warning');
+			]);
 			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'ackswap', mSec ]), null);
 		}
 
 
-		o = s.option(ListDropdown, '_apn_mode', _('APN selection'));
+		o = s.taboption('apn', ListDropdown, '_apn_mode', _('APN selection'));
 		o.value('auto', _('Automatic (by operator)'));
 		o.value('manual', _('Manual'));
 		o.default = 'auto';
@@ -911,7 +1018,7 @@ return view.extend({
 			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
 			return uci.get('5gmodem', sec, 'apn_mode') === 'manual';
 		};
-		o = s.option(form.Value, '_apn', _('APN'),
+		o = s.taboption('apn', form.Value, '_apn', _('APN'),
 			_('APN for the modem interface. Auto-filled from the detected operator; you can change it. Leave empty for the provider default.'));
 		o.placeholder = 'internet';
 		o.rmempty = true;
@@ -952,8 +1059,75 @@ return view.extend({
 			return uci.get('network', mIfName, 'apn') || '';
 		};
 
+		// A ZTE web-API stick keeps its APN in its own profiles, not in the router interface
+		// (that is plain DHCP): the APN tab reads and writes the stick instead (hilink.sh zteapn).
+		var activePath = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
+		var activeVp = activePath ? String(uci.get('5gmodem', 'm_' + activePath.replace(/[^A-Za-z0-9]/g, '_'), 'vidpid') || '') : '';
+		if (activeKind === 'hilink' && /^19d2:/.test(activeVp)) {
+			s.children = s.children.filter(function(c) { return c.option !== '_apn_mode' && c.option !== '_apn'; });
+			o = s.taboption('apn', form.DummyValue, '_zte_apn', _('APN in the modem'),
+				_('The stick keeps the APN in its own memory. "Write" saves it as the "5gmodem" profile, makes it the default and reconnects the stick; the connection drops for a few seconds.'));
+			o.cfgvalue = function() { return ''; };
+			o.write = function() {};
+			o.remove = function() {};
+			o.renderWidget = function() {
+				var cur = E('div', { 'class': 'tg-modem-zapn-cur' }, [ _('Reading…') ]);
+				var inp = E('input', { 'type': 'text', 'class': 'cbi-input-text', 'placeholder': 'internet', 'spellcheck': 'false' });
+				var pdp = E('select', { 'class': 'cbi-input-select' }, [
+					E('option', { 'value': 'IP' }, [ 'IPv4' ]), E('option', { 'value': 'IPv4v6' }, [ 'IPv4 + IPv6' ]) ]);
+				var st = E('div', { 'class': 'tg-modem-zapn-st' }, '');
+				var btnW = E('button', { 'type': 'button', 'class': 'cbi-button cbi-button-action' }, [ _('Write to the modem') ]);
+				var btnA = E('button', { 'type': 'button', 'class': 'cbi-button' }, [ _("Stick's own choice") ]);
+				var busy = function(on) { btnW.disabled = btnA.disabled = inp.disabled = pdp.disabled = on; };
+				var want = '';
+				var paint = function(d) {
+					if (!d || d.mode == null) { dom.content(cur, [ _('The stick did not return its APN settings.') ]); return; }
+					var auto = d.mode === 'auto';
+					var shown = auto ? (d.auto_apn || '') : (d.apn || '');
+					dom.content(cur, [ _('Now:') + ' ', E('b', { 'class': 'tg-modem-mono' }, [ shown || _('empty') ]),
+						' · ', auto ? _("the stick's own choice") : _('profile %s').format(d.profile || '-'),
+						want && want !== shown ? E('span', { 'class': 'tg-modem-zapn-hint' }, [ ' · ' + _('for this operator: %s').format(want) ]) : '' ]);
+					if (!inp.value) { inp.value = want || shown || ''; }
+					if (d.pdp === 'IPv4v6') { pdp.value = 'IPv4v6'; }
+				};
+				var reload = function() {
+					return Promise.all([
+						L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/hilink.sh', [ 'zteapn', 'get', activePath ]), '{}'),
+						L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'apnfor' ]), '')
+					]).then(function(r) {
+						var d = {}; try { d = JSON.parse(r[0] || '{}'); } catch (e) {}
+						want = String(r[1] || '').trim();
+						paint(d);
+					});
+				};
+				var write = function(apn) {
+					busy(true);
+					st.className = 'tg-modem-zapn-st';
+					st.textContent = _('Writing and reconnecting the stick…');
+					return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/hilink.sh', [ 'zteapn', 'set', apn, pdp.value, activePath ]), '{}').then(function(out) {
+						var d = {}; try { d = JSON.parse(out || '{}'); } catch (e) {}
+						st.className = 'tg-modem-zapn-st ' + (d.success ? 'ok' : 'bad');
+						st.textContent = d.success ? _('Saved. The stick is reconnecting.') : _('The stick refused the APN (%s)').format(d.error || '?');
+						return reload();
+					}).then(function() { busy(false); }, function() { busy(false); });
+				};
+				btnW.addEventListener('click', function() {
+					var v = String(inp.value || '').trim();
+					if (!/^[A-Za-z0-9._-]+$/.test(v)) { st.className = 'tg-modem-zapn-st bad'; st.textContent = _('APN: Latin letters, digits, dots, hyphens'); return; }
+					write(v);
+				});
+				btnA.addEventListener('click', function() { write(''); });
+				window.setTimeout(reload, 0);
+				return E('div', { 'class': 'tg-modem-zapn' }, [
+					cur,
+					E('div', { 'class': 'tg-modem-zapn-row' }, [ inp, pdp, btnW, btnA ]),
+					st
+				]);
+			};
+		}
+
 		if (!activeIsHilink) {
-		o = s.option(ListDropdown, '_pdpauth', _('Authentication'),
+		o = s.taboption('apn', ListDropdown, '_pdpauth', _('Authentication'),
 			_('Needed by some virtual operators (MVNO): APN together with a login and password. Leave NONE if the operator did not give you credentials.'));
 		o.value('none', 'NONE');
 		o.value('pap', 'PAP');
@@ -976,7 +1150,7 @@ return view.extend({
 			return (v === 'pap' || v === 'chap') ? v : 'none';
 		};
 
-		o = s.option(form.Value, '_pdpuser', _('PAP/CHAP username'));
+		o = s.taboption('apn', form.Value, '_pdpuser', _('PAP/CHAP username'));
 		o.depends('_pdpauth', 'pap');
 		o.depends('_pdpauth', 'chap');
 		o.write = function(section_id, value) {
@@ -988,7 +1162,7 @@ return view.extend({
 		o.remove = function() { if (mIfExists) { uci.unset('network', mIfName, 'username'); } };
 		o.load = function() { return uci.get('network', mIfName, 'username') || ''; };
 
-		o = s.option(form.Value, '_pdppass', _('PAP/CHAP password'));
+		o = s.taboption('apn', form.Value, '_pdppass', _('PAP/CHAP password'));
 		o.password = true;
 		o.depends('_pdpauth', 'pap');
 		o.depends('_pdpauth', 'chap');
@@ -1016,7 +1190,7 @@ return view.extend({
 			return uci.get('5gmodem', sc, 'kind') === 'hilink';
 		})();
 		if (webPassHl) {
-		o = s.option(form.Value, '_web_pass', _('Modem web password'),
+		o = s.taboption('ports', form.Value, '_web_pass', _('Modem web password'),
 			_('The password of the modem\'s own web interface (user admin). With it the router reads signal, battery, SMS and can reboot the modem. Empty means admin, the factory password of most such modems.'));
 		o.password = true;
 		o.placeholder = 'admin';
@@ -1036,7 +1210,7 @@ return view.extend({
 		o.remove = function(section_id) { return this.write(section_id, ''); };
 		}
 		if (atDebugHl) {
-		o = s.option(form.Flag, '_at_debug', _('AT ports (debug mode)'),
+		o = s.taboption('expert', form.Flag, '_at_debug', _('AT ports (debug mode)'),
 			_('Such a modem normally exposes only its web interface: no TAC, no band, no EARFCN, no USSD. In this mode it also shows serial ports and is driven like any other modem, keeping its network card and internet. The mode is reset when the modem reboots, so it is applied again every time the modem appears.'));
 		o.default = '1';
 		o.rmempty = false;
@@ -1062,7 +1236,7 @@ return view.extend({
 		o.remove = function() {};
 		}
 
-		o = s.option(ListDropdown, '_esim_show', _('eSIM tab'),
+		o = s.taboption('expert', ListDropdown, '_esim_show', _('eSIM tab'),
 			_('Detected automatically by probing the modem for an eUICC. If the probe is wrong, force the tab on or off here.'));
 		o.value('auto', _('Automatically'));
 		o.value('1', _('Always show'));
@@ -1099,7 +1273,7 @@ return view.extend({
 			return uci.get('5gmodem', sc, 'kind') === 'hilink';
 		})();
 		if (roamHilink || mutil.isMMProto(roamProto) || roamProto === 'mbim' || roamProto === 'fibocom') {
-		o = s.option(form.Flag, '_roaming', _('Allow data roaming'),
+		o = s.taboption('net', form.Flag, '_roaming', _('Allow data roaming'),
 			_('When off, the modem registers on the network but the data connection is not established while roaming - so no traffic is billed at roaming rates. SMS and calls are not affected.'));
 		o.default = '0';
 		o.rmempty = false;
@@ -1150,7 +1324,7 @@ return view.extend({
 			       || uci.get('5gmodem', '@5gmodem[0]', 'network') || '';
 		})();
 		if (ipwIf && roamProto === 'fibocom') {
-		o = s.option(form.Flag, '_ipwatch', _('Follow network address changes'),
+		o = s.taboption('net', form.Flag, '_ipwatch', _('Follow network address changes'),
 			_('Checks the data session every few seconds. When the operator drops the session or assigns a new address (for example, a forced reconnect every few hours), the interface reconnects and takes the new address.'));
 		o.default = '0';
 		o.rmempty = false;
@@ -1171,7 +1345,7 @@ return view.extend({
 
 		if (!activeIsHilink) {
 		var nsView = this;
-		o = s.option(form.DummyValue, '_netsel', _('Network selection'),
+		o = s.taboption('net', form.DummyValue, '_netsel', _('Network selection'),
 			_('Pick the operator network by hand instead of letting the modem choose. The search takes 1-3 minutes.'));
 		o.cfgvalue = function() { return ''; };
 		o.write = function() {};
@@ -1179,7 +1353,7 @@ return view.extend({
 		o.renderWidget = function() { return nsView.renderNetsel(); };
 		}
 
-		o = s.option(form.Flag, '_mm_exclude', _('Hide from ModemManager'),
+		o = s.taboption('expert', form.Flag, '_mm_exclude', _('Hide from ModemManager'),
 			_('ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it.'));
 		o.default = '1';
 		o.rmempty = false;
@@ -1198,7 +1372,7 @@ return view.extend({
 		};
 
 		if (mutil.isMMProto(uci.get('network', mIfName, 'proto'))) {
-		o = s.option(form.Flag, '_mm_at', _('AT polling under ModemManager'),
+		o = s.taboption('expert', form.Flag, '_mm_at', _('AT polling under ModemManager'),
 			_('Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. A DW5821e with two AT ports does not need this switch: after a reboot its second port is kept away from ModemManager and polled automatically. Enable only if the link stays stable with the page open.'));
 		o.default = '0';
 		o.rmempty = false;
@@ -1216,7 +1390,7 @@ return view.extend({
 		}
 
 		if (!activeIsHilink) {
-		o = s.option(form.Flag, '_no_at', _('No background AT polling'),
+		o = s.taboption('expert', form.Flag, '_no_at', _('No background AT polling'),
 			_('Stop all automatic AT exchange with this modem: metrics polling, the periodic SMS check, Telegram forwarding, SMS commands and archiving. Temperature, carrier aggregation and automatic SMS reception are lost; reading and sending SMS, USSD and the AT console still work when you use them. For firmware whose data session freezes more often while it is polled over AT (e.g. Quectel RM551E-GL).'));
 		o.default = '0';
 		o.rmempty = false;
@@ -1234,7 +1408,7 @@ return view.extend({
 		}
 
 		if (!activeIsHilink) {
-		o = s.option(ListDropdown, '_pdptype', _('IP type'),
+		o = s.taboption('apn', ListDropdown, '_pdptype', _('IP type'),
 			_('IP type for the modem interface. IPv4 is the default: on most networks/modems a dual-stack (IPv4/IPv6) context registers but never gets an address, while IPv4 gets one immediately. Switch to "IPv4 and IPv6" only if you need IPv6 and the modem supports it.'));
 		o.value('ipv4', _('IPv4 only (recommended)'));
 		o.value('ipv4v6', _('IPv4 and IPv6'));
@@ -1265,7 +1439,7 @@ return view.extend({
 		}
 
 		if (!activeIsHilink) {
-		o = s.option(form.Flag, '_dns_fallback', _('Fallback DNS'),
+		o = s.taboption('apn', form.Flag, '_dns_fallback', _('Fallback DNS'),
 			_('Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default. When the carrier restricts traffic to a whitelist, foreign DNS servers (8.8.8.8, 1.1.1.1) are blocked and nothing resolves - use 77.88.8.8 77.88.8.1.'));
 		o.default = '0';
 		o.rmempty = false;
@@ -1297,7 +1471,7 @@ return view.extend({
 		};
 		o.remove = function() {};
 
-		o = s.option(form.Value, '_dns_servers', _('DNS servers'),
+		o = s.taboption('apn', form.Value, '_dns_servers', _('DNS servers'),
 			_('Space-separated, e.g. "77.88.8.8 77.88.8.1".'));
 		o.depends('_dns_fallback', '1');
 		o.placeholder = '77.88.8.8 77.88.8.1';
@@ -1316,19 +1490,21 @@ return view.extend({
 		o.remove = function() {};
 		}
 
-		if (activeIsHilink) {
-		o = s.option(form.Button, '_mkhilink');
-		o.title = _('Modem interface');
-		o.description = (activeKind === 'tether')
-			? _('This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read.')
-			: _('This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose.');
-		o.inputtitle = (activeKind === 'tether')
-			? (mIfExists ? _('Recreate interface (USB tethering)') : _('Create interface (USB tethering)'))
-			: (mIfExists ? _('Recreate interface (HiLink DHCP)') : _('Create interface (HiLink DHCP)'));
-		o.inputstyle = 'apply';
-		o.onclick = function() {
+		/* The interface button is not a form option: a TypedSection with tabs renders only options
+		   that sit in a tab, and the action belongs under the tabs and in the header card. */
+		var mkLabel = activeIsHilink
+			? ((activeKind === 'tether')
+				? (mIfExists ? _('Recreate interface (USB tethering)') : _('Create interface (USB tethering)'))
+				: (mIfExists ? _('Recreate interface (HiLink DHCP)') : _('Create interface (HiLink DHCP)')))
+			: (mIfExists ? _('Recreate modem interface') : _('Create modem interface'));
+		var mkDesc = activeIsHilink
+			? ((activeKind === 'tether')
+				? _('This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read.')
+				: _('This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose.'))
+			: _('Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem).');
+		var mkHilink = function() {
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return savePending(this.map).then(function() {
+			return savePending(m).then(function() {
 				return fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'mkhilink' ]);
 			}).then(function(res) {
 				ui.hideModal();
@@ -1345,40 +1521,34 @@ return view.extend({
 				ui.addNotification(null, E('p', [ _('Failed to create the modem interface') + ': ' + (err.message || err) ]), 'error');
 			});
 		};
-		} else {
-		o = s.option(form.Button, '_mkiface');
-		o.title = _('Modem interface');
-		o.description = _('Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem).');
-		o.inputtitle = mIfExists ? _('Recreate modem interface') : _('Create modem interface');
-		o.inputstyle = 'apply';
-		o.onclick = function() {
+		var mkIface = function() {
 			var sid = null;
 			var ss = uci.sections('5gmodem', '5gmodem');
 			if (ss && ss[0]) { sid = ss[0]['.name']; }
 			var proto = 'auto';
 			try {
-				var opt = this.map.lookupOption('iface_proto', sid);
+				var opt = m.lookupOption('iface_proto', sid);
 				if (opt && opt[0]) { var el = opt[0].getUIElement(sid); if (el) { proto = el.getValue() || 'auto'; } }
 			} catch (e) {}
 			var apn = '';
 			try {
-				var aopt = this.map.lookupOption('_apn', sid);
+				var aopt = m.lookupOption('_apn', sid);
 				if (aopt && aopt[0]) { var ael = aopt[0].getUIElement(sid); if (ael) { apn = (ael.getValue() || '').trim(); } }
 			} catch (e) {}
 			var apnArg = apn || '-';
 			var pdp = 'ipv4';
 			try {
-				var popt = this.map.lookupOption('_pdptype', sid);
+				var popt = m.lookupOption('_pdptype', sid);
 				if (popt && popt[0]) { var pel = popt[0].getUIElement(sid); if (pel) { pdp = pel.getValue() || 'ipv4'; } }
 			} catch (e) {}
 			var mmArg = '-';
 			try {
-				var mopt = this.map.lookupOption('_mm_exclude', sid);
+				var mopt = m.lookupOption('_mm_exclude', sid);
 				if (mopt && mopt[0]) { var mel = mopt[0].getUIElement(sid);
 					if (mel) { var mv = String(mel.getValue()); if (mv === '0' || mv === '1') { mmArg = mv; } } }
 			} catch (e) {}
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return savePending(this.map).then(function() {
+			return savePending(m).then(function() {
 				return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp, mmArg, 'user' ]);
 			}).then(function(res) {
 				ui.hideModal();
@@ -1386,8 +1556,8 @@ return view.extend({
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 				if (out.result == 'created') {
 					ui.addNotification(null, E('p', [ _('Interface "%s" created (%s), bringing it up…').format(out.iface, mutil.protoLabel(out.proto)) ]), 'info');
-					var pb = document.querySelector('.tg-proto-badge');
-					if (pb && out.proto) { pb.textContent = mutil.protoLabel(out.proto); }
+					if (_hd && out.proto) { _hd.proto.textContent = mutil.protoLabel(out.proto); _hd.proto.style.display = ''; }
+					if (_hd && out.iface) { _hd.ifName = out.iface; setHeadTech(); }
 					if (profilesView) { profilesView.loadProfiles(); }
 				} else {
 					var _mkWhy = (out.result && out.result !== 'created')
@@ -1401,9 +1571,15 @@ return view.extend({
 				ui.addNotification(null, E('p', [ _('Failed to create the modem interface') + ': ' + (err.message || err) ]), 'error');
 			});
 		};
-		}
+		var doMkIface = function() { return activeIsHilink ? mkHilink() : mkIface(); };
+		var mkBtn = function() {
+			return E('button', {
+				'class': 'cbi-button cbi-button-action',
+				'click': ui.createHandlerFn(this, doMkIface)
+			}, [ icon('refresh', 15), mkLabel ]);
+		};
 
-		o = s.option(form.Button, '_forget');
+		o = s.taboption('expert', form.Button, '_forget');
 		o.title = _('Disconnected modems');
 		o.description = _('Remove settings and interfaces remembered for modems that are no longer connected, including modems replaced in the same slot. The next modem then gets the lowest free interface name.');
 		o.inputtitle = _('Forget disconnected modems');
@@ -1446,9 +1622,16 @@ return view.extend({
 			return '(' + m[1] + '/' + m[2] + ') ' + name;
 		};
 
+		// "Anonymous": collect.sh masks the identifiers in the finished report; the choice is remembered
+		var anonBox = E('input', { 'type': 'checkbox', 'id': 'diag-anon', 'change': function() {
+			try { window.localStorage.setItem('5gmodem.diag.anon', anonBox.checked ? '1' : '0'); } catch (e) {}
+		} });
+		try { anonBox.checked = window.localStorage.getItem('5gmodem.diag.anon') === '1'; } catch (e) {}
 		var runCollect = function() {
 			var msg = E('p', { 'class': 'spinning' }, _('Collecting logs…'));
-			ui.showModal(_('Diagnostic report'), [ msg ]);
+			var barFill = E('div', { 'class': 'tg-mbar-fill', 'style': 'width:3%;background:var(--tg-accent)' });
+			ui.showModal(_('Diagnostic report'), [ msg,
+				E('div', { 'class': 'tg-mbar tg-modem-progress' }, E('div', { 'class': 'tg-mbar-t' }, barFill)) ]);
 
 			var poll = function(tries) {
 				return fs.exec('/usr/share/5gmodem/collect.sh', [ 'status' ]).then(function(res) {
@@ -1456,6 +1639,8 @@ return view.extend({
 					if (st.state === 'running') {
 						if (tries > 180) { throw new Error(_('Timed out')); }
 						msg.textContent = _('Collecting logs…') + ' ' + collectStepText(st.progress);
+						var pm = String(st.progress || '').match(/^(\d+)\/(\d+)/);
+						if (pm && +pm[2] > 0) { barFill.style.width = Math.max(3, Math.round(100 * pm[1] / pm[2])) + '%'; }
 						return new Promise(function(resolve) {
 							window.setTimeout(function() { resolve(poll(tries + 1)); }, 2000);
 						});
@@ -1465,7 +1650,7 @@ return view.extend({
 				});
 			};
 
-			return fs.exec('/usr/share/5gmodem/collect.sh', [ 'start' ]).then(function() {
+			return fs.exec('/usr/share/5gmodem/collect.sh', anonBox.checked ? [ 'start', 'anon' ] : [ 'start' ]).then(function() {
 				return poll(0);
 			}).then(function(blob) {
 				var d = new Date();
@@ -1475,7 +1660,7 @@ return view.extend({
 					+ '-' + ('0' + d.getHours()).slice(-2)
 					+ ('0' + d.getMinutes()).slice(-2);
 				var url = window.URL.createObjectURL(blob);
-				var a = E('a', { 'href': url, 'download': '5gmodem-diag-' + stamp + '.txt' });
+				var a = E('a', { 'href': url, 'download': '5gmodem-diag-' + stamp + (anonBox.checked ? '-anon' : '') + '.txt' });
 				document.body.appendChild(a);
 				a.click();
 				document.body.removeChild(a);
@@ -1488,131 +1673,117 @@ return view.extend({
 			});
 		};
 
-
-		function infoVal(v) {
-			return (v != null && String(v).length > 0 && String(v) != '-') ? String(v) : '-';
-		}
-		function inforow(label, value) {
-			return E('tr', { 'class': 'tr' }, [
-				E('td', { 'class': 'td left', 'width': '33%' }, [ label ]),
-				E('td', { 'class': 'td left tg-info-val' }, [ value ]),
-			]);
-		}
-		var infoCell = function(id, inner) {
-			return E('span', { 'id': id }, inner !== undefined ? inner : '-');
+		/* ---------- header card (filled by fillModemInfo and fillProfiles) ---------- */
+		var view = this;
+		var activeModel = (function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return ''; }
+			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			return uci.get('5gmodem', sc, 'model') || '';
+		})();
+		_hd = {
+			name: E('span', {}, activeModel || _('Modem')),
+			vidpid: E('span', { 'class': 'tginfo-vidpid', 'title': _('USB vendor and product ID'), 'style': 'display:none' }, ''),
+			proto: E('span', { 'class': 'tg-proto-badge', 'title': _('Protocol'), 'style': 'display:none' }, ''),
+			ico: E('div', { 'class': 'tginfo-signal tg-modem-ico off' }),
+			temp: E('medium', {}, ''),
+			reg: E('div', { 'class': 'tginfo-reg' }, _('Firmware')),
+			main: E('div', { 'class': 'tginfo-op tg-modem-main none' }, _('Loading…')),
+			usb: E('div', { 'class': 'tginfo-loc' }, ''),
+			tech: E('div', { 'class': 'tginfo-tech' }, ''),
+			port: E('span', { 'class': 'tg-modem-mono' }, '-'),
+			at: E('span', { 'class': 'tg-modem-mono' }, ''),
+			apn: E('span', { 'class': 'tg-modem-mono' }, ''),
+			apnMode: E('span', { 'class': 'tg-modem-sub' }, ''),
+			hilink: activeIsHilink,
+			ifName: mIfExists ? mIfName : '',
+			atPort: uci.get('5gmodem', '@5gmodem[0]', 'at_port') || '',
+			haveName: false
 		};
-		var infoRows = [
-			inforow(_('Modem type'), infoCell('dbg-modem')),
-			inforow(_('Revision / Firmware'), infoCell('dbg-firmware')),
-			inforow(_('IP adress / Communication Port'), infoCell('dbg-cport')),
-			inforow(_('Protocol'), E('span', { 'class': 'tg-proto-badge' }, infoCell('dbg-protocol'))),
-		];
-		var tempRow = inforow(_('Chip Temperature'), infoCell('dbg-mtemp'));
-		tempRow.style.display = 'none';
-		tempRow.id = 'dbg-temp-row';
-		infoRows.push(tempRow);
-
-		var modemInfo = E('div', { 'class': 'cbi-section tg5g' }, [
-			E('h3', {}, [ _('Modem Information') ]),
-			E('table', { 'class': 'table tg-info-table', 'id': 'dbg-info-table' }, infoRows),
-			E('p', { 'id': 'dbg-no-modem', 'class': 'tg-no-modem', 'style': 'display:none' },
-				_('No modem detected. Insert a modem, then reload the page.'))
-		]);
-
-		var termBlock = function(cmd) {
-			var parts = cmd.split(' ');
-			var spans = [ E('span', { 'style': 'color:#34d399;user-select:none;' }, '$ ') ];
-			parts.forEach(function(tok, i) {
-				var color = (i == 0) ? '#7db2ff' : (tok.charAt(0) == '-' ? '#e6b84c' : '#d6e0ea');
-				spans.push(E('span', { 'style': 'color:' + color }, tok + (i < parts.length - 1 ? ' ' : '')));
-			});
-			return E('div', { 'class': 'tg-code' }, [
-				E('div', { 'class': 'tg-code-lang' }, 'bash'),
-				E('div', { 'class': 'tg-code-body' }, spans)
-			]);
-		};
-
-		var table = E('table', { 'class': 'table tg-diag-table' }, [
-				E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td left', 'style': 'overflow:initial' }, [
-						E('label', { 'class': 'cbi-value-title' },
-							_("USB debug information")
-						),
-						termBlock('cat /sys/kernel/debug/usb/devices'),
-						E('span', { 'class': 'diag-action' }, [
-							E('button', {
-								'class': 'cbi-button cbi-button-action',
-								'click': ui.createHandlerFn(this, 'handleUSB')
-							}, [ _('Show devices') ])
-						])
-					]),
-
-					E('td', { 'class': 'td left', 'style': 'overflow:initial' }, [
-						E('label', { 'class': 'cbi-value-title' },
-							_("Check availability of ttyX ports")
-						),
-						termBlock('ls /dev'),
-						E('span', { 'class': 'diag-action' }, [
-							E('button', {
-								'class': 'cbi-button cbi-button-action',
-								'click': ui.createHandlerFn(this, 'handleTTY')
-							}, [ _('Show devices') ])
-						])
-					]),
-
-					E('td', { 'class': 'td left' }, [
-						E('label', { 'class': 'cbi-value-title' },
-							_("Check data read by the 5gmodem scripts")
-						),
-						termBlock('sh -x /usr/share/5gmodem/5gmodem.sh'),
-						E('span', { 'class': 'diag-action' }, [
-							E('button', {
-								'class': 'cbi-button cbi-button-action',
-								'click': ui.createHandlerFn(this, 'handleDBG')
-							}, [ _('Debug') ])
-						])
-					]),
-				])
-			]);
-
-
-		var diag = E('div', { 'class': 'cbi-section tg5g' }, [
-			E('h3', {}, [ _('Diagnostics') ]),
-			E('div', { 'style': 'margin-bottom:1em' }, [
-				E('label', { 'class': 'cbi-value-title', 'style': 'display:block; margin-bottom:.3em' },
-					_('Diagnostic report')),
-				E('div', { 'class': 'cbi-value-description', 'style': 'margin:0 0 .5em' }, collectDesc),
-				E('button', {
-					'class': 'cbi-button cbi-button-action',
-					'click': ui.createHandlerFn(this, runCollect)
-				}, [ _('Collect logs') ])
-			]),
-			table,
-			E('div', {}, [
-				E('p'),
-				E('div', { 'id': 'pre', 'class': 'tg-code', 'style': 'display:none; max-width:none; margin:0;' }, [
-					E('div', { 'class': 'tg-code-lang' }, 'bash'),
-					E('pre', { 'id': 'preout', 'class': 'tg-code-body', 'style': 'max-height:460px; overflow:auto; margin:0;' }, [])
-				]),
-				E('p'),
-				E('div', { 'class': 'right' }, [
-					E('button', {
-						'class': 'cbi-button cbi-button-remove',
-						'id': 'clear',
-						'style': 'display:none',
-						'click': ui.createHandlerFn(this, 'handleClear')
-					}, [ _('Clear') ]),
-					'\xa0\xa0\xa0',
-					E('button', {
-						'class': 'cbi-button cbi-button-apply important',
-						'id': 'download',
-						'style': 'display:none',
-						'click': ui.createHandlerFn(this, 'handleDownload')
-					}, [ _('Download') ]),
-				]),
+		_hd.ico.innerHTML = svg('chip', 36);
+		_hd.ico.appendChild(_hd.temp);
+		_hd.portRow = E('div', { 'class': 'tginfo-ip' }, [ E('span', { 'class': 'tginfo-iplabel' }, _('Port') + ':'), _hd.port ]);
+		_hd.atRow = E('div', { 'class': 'tginfo-ip', 'title': _('Port for AT / SMS / USSD'), 'style': 'display:none' },
+			[ E('span', { 'class': 'tginfo-iplabel' }, 'AT:'), _hd.at ]);
+		_hd.apnRow = E('div', { 'class': 'tginfo-ip' }, [ E('span', { 'class': 'tginfo-iplabel' }, 'APN:'), _hd.apn, ' ', _hd.apnMode ]);
+		_hd.portRow.style.display = activeIsHilink ? 'none' : '';
+		if (mIfExists) {
+			var apnSet = uci.get('network', mIfName, 'apn') || '';
+			_hd.apn.textContent = apnSet || _('default');
+			_hd.apn.className = apnSet ? 'tg-modem-mono' : '';
+			_hd.apnMode.textContent = '· ' + (apnIsManual() ? _('Manual') : _('Automatic (by operator)')).toLowerCase();
+		}
+		_hd.apnRow.style.display = (mIfExists && !activeIsHilink) ? '' : 'none';
+		setHeadTech();
+		_hd.title = _hd.name;
+		var head = E('div', { 'class': 'cbi-section tg5g tg-pg-head tg-modem-head' }, [
+			E('h3', { 'class': 'tg-pg-title tg-modem-title' }, [ _hd.name, _hd.vidpid, _hd.proto ]),
+			E('div', { 'class': 'tginfo-general' }, [
+				_hd.ico,
+				E('div', { 'class': 'tginfo-status' }, [ _hd.reg, _hd.main, _hd.usb ]),
+				E('div', { 'class': 'tginfo-info' }, [ _hd.tech, _hd.portRow, _hd.atRow, _hd.apnRow ])
 			])
 		]);
+		_hd.root = head;
 
+		var alertBox = function(parts) {
+			return E('div', { 'class': 'alert-message warning tg-modem-alert' }, [
+				icon('warn', 17),
+				E('div', {}, parts),
+				E('div', { 'class': 'tg-modem-alertact' }, [ mkBtn() ])
+			]);
+		};
+		var alerts = pageAlerts.map(alertBox);
+
+		/* ---------- diagnostics ---------- */
+		var tool = function(label, cmd, btnLabel, handler) {
+			return E('div', { 'class': 'tg-hist-card' }, [
+				E('div', { 'class': 'tg-hist-h' }, E('span', { 'class': 'tg-hist-name' }, E('b', {}, label))),
+				E('code', { 'class': 'tg-modem-cmd' }, '$ ' + cmd),
+				E('span', { 'class': 'diag-action' }, [
+					E('button', { 'class': 'cbi-button', 'click': ui.createHandlerFn(view, handler) }, [ btnLabel ])
+				])
+			]);
+		};
+		var diagBlk = collapsible('mdiag', _('Diagnostics'), [
+			E('div', { 'class': 'tg-modem-report' }, [
+				icon('file', 22),
+				E('div', {}, [ E('b', {}, _('Diagnostic report')), E('span', {}, collectDesc) ]),
+				E('div', { 'class': 'tg-modem-reportact' }, [
+					E('label', { 'for': 'diag-anon', 'title': _('Masks IMEI, IMSI, ICCID, EID, serial and phone numbers, the public IP and MAC addresses of the router and coordinates. The first digits stay: they name the modem model and the operator.') },
+						[ anonBox, E('span', {}, [ _('Anonymous') ]) ]),
+					E('button', {
+						'class': 'cbi-button cbi-button-action',
+						'click': ui.createHandlerFn(this, runCollect)
+					}, [ icon('down', 15), _('Collect logs') ])
+				])
+			]),
+			E('div', { 'class': 'tg-modem-tools' }, [
+				tool(_('USB debug information'), 'cat /sys/kernel/debug/usb/devices', _('Show devices'), 'handleUSB'),
+				tool(_('Check availability of ttyX ports'), 'ls /dev', _('Show devices'), 'handleTTY'),
+				tool(_('Check data read by the 5gmodem scripts'), 'sh -x /usr/share/5gmodem/5gmodem.sh', _('Debug'), 'handleDBG')
+			]),
+			E('div', { 'id': 'pre', 'class': 'tg-code tg-modem-out', 'style': 'display:none' }, [
+				E('div', { 'class': 'tg-code-lang' }, [
+					E('span', {}, 'bash'),
+					E('span', { 'class': 'tg-modem-outact' }, [
+						E('button', {
+							'class': 'cbi-button',
+							'id': 'clear',
+							'style': 'display:none',
+							'click': ui.createHandlerFn(this, 'handleClear')
+						}, [ _('Clear') ]),
+						E('button', {
+							'class': 'cbi-button',
+							'id': 'download',
+							'style': 'display:none',
+							'click': ui.createHandlerFn(this, 'handleDownload')
+						}, [ icon('down', 14), _('Download') ])
+					])
+				]),
+				E('pre', { 'id': 'preout', 'class': 'tg-code-body' }, [])
+			])
+		], !(window.matchMedia && window.matchMedia(PHONE_MQ).matches));
 		var _instant = { '_web_pass': 1, '_roaming': 1, '_ipwatch': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
 		var _instLast = {};
 		(s.children || []).forEach(function(o) {
@@ -1645,15 +1816,33 @@ return view.extend({
 		var ledsBlock = this.renderLeds(ledsAvail);
 		var antennaBlock = E('div', { 'id': 'antenna-slot' });
 		var self = this;
+
+		// The action row sits inside the form card, under the tabs. Map.save() re-renders the map
+		// (renderContents), so the row is put back after every render.
+		var formAct = E('div', { 'class': 'tg-modem-formact' }, [ mkBtn(), E('span', { 'class': 'cbi-section-descr' }, mkDesc) ]);
+		var placeFormAct = function(node) {
+			var sec = node && node.querySelector ? node.querySelector('.cbi-section') : null;
+			if (sec && formAct.parentNode !== sec) { sec.appendChild(formAct); }
+			return node;
+		};
+		var rawRC = m.renderContents;
+		if (typeof rawRC === 'function') {
+			m.renderContents = function() {
+				return Promise.resolve(rawRC.apply(this, arguments)).then(placeFormAct);
+			};
+		}
+
 		return Promise.resolve(m.render()).then(function(formNode) {
-			return E('div', {}, [
-				modemInfo,
+			placeFormAct(formNode);
+			if (!formAct.parentNode) { formNode.appendChild(formAct); }
+			return E('div', { 'class': 'tg-modem' }, [
+				head
+			].concat(alerts).concat([
 				self.renderProfiles(),
 				E('div', { 'class': 'tg-modem-form' }, [ formNode ]),
-				ledsBlock,
-				antennaBlock,
-				diag
-			]);
+				E('div', { 'class': 'tg-modem-pair' }, [ ledsBlock, antennaBlock ]),
+				diagBlk.node
+			]));
 		}).then(function(node) {
 			window.setTimeout(function() {
 				self.fillModemInfo();

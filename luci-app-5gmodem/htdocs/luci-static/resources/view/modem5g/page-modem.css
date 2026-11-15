@@ -1,0 +1,187 @@
+/* Modem page (5gdebug.js); loaded once by the view. Shared tokens and tiles are in modem.css. */
+.tg-modem {
+  --tg-modem-ok: #22a559;
+  --tg-modem-warn: #e0a100;
+  --tg-modem-bad: #e5484d;
+}
+
+/* header card in the Network-page layout (tginfo-general), as on the GPS page */
+.tg-modem-ico { color: var(--tg-accent); }
+.tg-modem-ico.ok { color: var(--tg-modem-ok); }
+.tg-modem-ico.warn { color: var(--tg-modem-warn); }
+.tg-modem-ico.bad { color: var(--tg-modem-bad); }
+.tg-modem-ico.off { color: var(--tg-muted); }
+
+.tg-modem-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; line-height: 1.3; }
+.tg-modem-pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.tg-modem-pill.ok { color: var(--tg-modem-ok); }
+.tg-modem-pill.warn { color: var(--tg-modem-warn); }
+.tg-modem-pill.bad { color: var(--tg-modem-bad); }
+.tg-modem-pill.off { color: var(--tg-muted); }
+.tg-modem-pill.acc { color: var(--tg-accent); }
+
+/* reading cards (antennas): tg-hist-card from the Network page */
+.tg-modem .tg-hist-name b { font-size: 12px; font-weight: 600; color: var(--tg-muted); }
+.tg-modem .tg-hist-now.dash { color: var(--tg-muted); font-weight: 500; }
+.tg-modem .tg-hist-card .tg-mbar { min-height: 0; }
+.tg-modem .tg-hist-card .tg-mbar-t { flex: 1 1 60px; min-width: 40px; height: 6px; }
+.tg-modem .tg-hist-f > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* collapsible blocks (collapsibleSection of 5gdetail.js, with a summary) */
+.tg-modem h3.tg-modem-coll { display: flex; align-items: center; gap: .35em; cursor: pointer; user-select: none; margin-bottom: 0; }
+.tg-modem h3.tg-modem-coll.open { margin-bottom: .6em; }
+.tg-modem-chev { display: inline-flex; transition: transform .15s ease; }
+.tg-modem-chev.open { transform: rotate(180deg); }
+.tg-modem-chev svg { display: block; }
+.tg-modem-sum { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--tg-muted); text-align: right; }
+.tg-modem-sum:empty { display: none; }
+
+.tg-modem-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tg-modem-actions .grow { flex: 1 1 auto; }
+.tg-modem-actions .cbi-button { margin: 0 !important; }
+.tg-modem .cbi-button .tg-modem-i { display: inline-flex; vertical-align: -3px; margin-right: 5px; }
+.tg-modem .cbi-button .tg-modem-i svg { display: block; }
+.tg-modem-empty { display: grid; place-items: center; text-align: center; padding: 30px 16px; font-size: 13px; }
+.tg-modem-empty > div { display: grid; gap: 8px; justify-items: center; max-width: 40ch; }
+.tg-modem-empty > div > span { color: var(--tg-muted); }
+.tg-modem-empty b { font-size: 14px; font-weight: 600; }
+.tg-modem-empty .tg-modem-i { color: var(--tg-muted); }
+.tg-modem-empty .tg-modem-i svg { display: block; }
+
+@media (max-width: 700px) {
+  .tg-modem-head .tginfo-general { gap: .9em; }
+  .tg-modem .tg-hist-card { padding: 6px 8px; }
+  .tg-modem .tg-hist-now { font-size: 15px; }
+  .tg-modem h3.tg-modem-coll { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .35em; }
+  .tg-modem h3.tg-modem-coll .tg-modem-sum { grid-column: 2; margin-left: 0; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-modem-chev { transition: none; }
+}
+
+/* ===== Modem page (5gdebug.js) ===== */
+.tg-modem-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tg-modem-muted { color: var(--tg-muted); font-size: 13px; }
+.tg-modem-sub { font-size: .85em; opacity: .7; font-weight: 400; }
+
+/* header card: the Network-page modem card (5gdetail.js #modem-info-block). Icon with the
+   temperature, status column (label / firmware / USB path), info column (interface line in bold,
+   "Label:" rows). */
+.tg-modem-head .tginfo-general { align-items: center; }
+.tg-modem-head .tginfo-signal { align-self: flex-start; }
+.tg-modem-head .tginfo-signal > medium.warn { color: var(--tg-modem-warn); }
+.tg-modem-head .tginfo-signal > medium.bad { color: var(--tg-modem-bad); }
+.tg-modem-head .tginfo-status { flex: 0 1 auto; min-width: 10em; max-width: 22em; }
+.tg-modem-head .tginfo-info { flex: 1 1 16em; }
+.tg-modem-head .tginfo-info > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-modem-head .tginfo-info .tginfo-ip { opacity: .9; }
+.tg-modem-head.none .tginfo-info { display: none; }
+.tg-modem-title .tginfo-vidpid { font-size: .54em; }
+
+.tg-modem .alert-message.tg-modem-alert { display: flex; gap: 9px; align-items: flex-start; flex-wrap: wrap; }
+.tg-modem-alert > .tg-modem-i { flex: none; margin-top: 1px; display: inline-flex; }
+.tg-modem-alert > .tg-modem-i svg { display: block; }
+.tg-modem-alert > div:nth-child(2) { flex: 1 1 260px; min-width: 0; }
+.tg-modem-alertact { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.tg-modem-alertact .cbi-button { margin: 0 !important; }
+
+/* saved profiles: one card per modem, the pre-redesign layout on tg-hist-card */
+.tg-modem-prof { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; margin-bottom: 4px; }
+.tg-modem-pcard { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; }
+.tg-modem-pcard.cur { border-left: 3px solid var(--tg-accent); }
+.tg-modem-pcard.gone { opacity: .65; }
+.tg-modem-phead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding-bottom: 6px; margin-bottom: 2px; border-bottom: 1px solid rgba(128,128,128,.25); }
+.tg-modem-pid { display: flex; flex-direction: column; min-width: 0; }
+.tg-modem-pcard .tg-modem-pname { font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.tg-modem-pvid { font-size: 11px; color: var(--tg-muted); }
+.tg-modem-pst { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
+.tg-modem-pst a { font-size: 11.5px; color: var(--tg-muted); }
+.tg-modem-pline { display: flex; justify-content: space-between; align-items: center; gap: 4px 10px; flex-wrap: wrap; font-size: 12.5px; min-width: 0; }
+.tg-modem-pline > * { min-width: 0; overflow-wrap: anywhere; }
+.tg-modem-pline > :last-child { color: var(--tg-muted); text-align: right; margin-left: auto; }
+.tg-modem-pif { font-weight: 600; }
+.tg-modem-pproto { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tg-modem-pproto .tg-proto-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; line-height: 1.5; padding: 0 7px; }
+.tg-modem-pproto .tg-proto-badge img { opacity: .75; flex: none; }
+.tg-modem-pproto > span + span { color: var(--tg-muted); }
+.tg-modem-pcard .pf { font-size: 12px; color: var(--tg-muted); overflow-wrap: anywhere; }
+.tg-modem-pcard .pf a { color: inherit; }
+.tg-modem-psb { display: grid; gap: 3px; margin-top: 4px; }
+.tg-modem-pcard .bands { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.tg-modem-pcard .bands b { font-size: 11px; font-weight: 600; color: var(--tg-muted); margin-right: 2px; min-width: 4.2em; }
+.tg-modem-pcard .bands span { font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: rgba(127,127,127,.14); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tg-modem-pfoot { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin-top: auto; padding-top: 8px; }
+.tg-modem-pfoot .pf { line-height: 1.45; min-width: 0; }
+.tg-modem-pfoot .cbi-button { margin: 0 !important; flex: none; }
+.tg-modem-mark + .tg-modem-mark::before { content: " · "; color: var(--tg-muted); }
+.tg-modem-mark.warn { color: var(--tg-modem-warn); }
+.tg-modem-mark.bad { color: var(--tg-modem-bad); }
+.tg-modem-warncard { border-left: 3px solid var(--tg-modem-warn) !important; background: rgba(224,161,0,.07); }
+.tg-modem-pcard .pf.tg-modem-lowtxt { color: var(--tg-modem-warn); }
+.tg-modem-mm { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--tg-muted); margin-top: 10px; }
+.tg-modem-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tg-modem-bad); box-shadow: 0 0 4px var(--tg-modem-bad); flex: none; }
+.tg-modem-dot.on { background: var(--tg-modem-ok); box-shadow: 0 0 4px var(--tg-modem-ok); }
+
+/* connection form: native section tabs, action row under them */
+.tg-modem-formact { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; padding-top: 12px; border-top: 1px solid rgba(128,128,128,.2); margin-top: 6px; }
+.tg-modem-formact .cbi-button { margin: 0 !important; flex: none; }
+.tg-modem-formact .cbi-section-descr { flex: 1 1 260px; margin: 0; padding: 0; font-size: 12.5px; color: var(--tg-muted); }
+
+/* LED indicator and antennas side by side */
+.tg-modem-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin: 0 0 14px; align-items: stretch; }
+.tg-modem-pair > .cbi-section, #antenna-slot > .cbi-section { margin: 0 !important; min-width: 0; }
+.tg-modem-pair > #antenna-slot { display: contents; }
+.tg-modem-ant { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.tg-modem-ant .tg-hist-card.tg-modem-on { border-color: var(--tg-modem-ok); }
+
+/* diagnostics */
+.tg-modem-report { display: flex; gap: 12px 14px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border: 1px solid rgba(128,128,128,.25); border-radius: 8px; background: rgba(0,149,255,.06); }
+.tg-modem-report > .tg-modem-i { color: var(--tg-accent); display: inline-flex; flex: none; }
+.tg-modem-report > .tg-modem-i svg { display: block; }
+.tg-modem-report > div { flex: 1 1 260px; font-size: 12.5px; min-width: 0; }
+.tg-modem-report > div > span { color: var(--tg-muted); }
+.tg-modem-report b { font-size: 13.5px; display: block; margin-bottom: 2px; }
+.tg-modem-report .cbi-button { margin: 0 !important; flex: none; }
+/* the "Anonymous" tick and the button on a line of their own under the description */
+.tg-modem-reportact { flex: 1 1 100% !important; display: flex; align-items: center; justify-content: flex-end; gap: 10px 14px; flex-wrap: wrap; }
+.tg-modem-reportact label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; cursor: pointer; }
+.tg-modem-reportact label input { margin: 0; }
+.tg-modem-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
+.tg-modem-tools .tg-hist-card { align-content: space-between; }
+.tg-modem-tools .diag-action .cbi-button { margin: 0 !important; }
+.tg-modem-cmd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; color: var(--tg-muted); background: none; padding: 0; overflow-wrap: anywhere; white-space: normal; }
+.tg-modem .tg-code.tg-modem-out { max-width: none; margin: 0; }
+.tg-modem-out .tg-code-lang { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tg-modem-outact { display: inline-flex; gap: 6px; }
+.tg-modem-outact .cbi-button { margin: 0 !important; padding: 2px 8px !important; font-size: 11.5px !important; min-height: 0 !important; height: auto !important; line-height: 1.4 !important; }
+.tg-modem-out .tg-code-body { max-height: 460px; overflow: auto; margin: 0; }
+.tg-modem-progress { margin-top: 8px; }
+.tg-modem-progress .tg-mbar-t { height: 6px; min-width: 0; flex: 1 1 auto; }
+
+@media (max-width: 700px) {
+  .tg-modem-head .tginfo-general { flex-wrap: wrap; align-items: flex-start; }
+  .tg-modem-head .tginfo-status { flex: 1 1 0; max-width: none; }
+  .tg-modem-head .tginfo-info { flex: 1 1 100%; padding-left: calc(44px + .9em); }
+  .tg-modem-head .tginfo-info > * { white-space: normal; overflow-wrap: anywhere; }
+  .tg-modem-tools { grid-template-columns: minmax(0, 1fr); }
+  .tg-modem-ant { grid-template-columns: minmax(0, 1fr); }
+  .tg-modem-pair { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .tg-modem-alertact { margin-left: 26px; }
+  /* connection form flags: title above the switch. modem.css makes the flag field a flex row, which
+     breaks themes that grid the flag row on phones (the field keeps its 200px minimum and pushes
+     the title past the right edge) */
+  .tg-modem-form .cbi-value[data-widget="CBI.FlagValue"] { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+  .tg-modem-form .cbi-value[data-widget="CBI.FlagValue"] > .cbi-value-title { align-self: stretch; width: auto; max-width: 100%; margin: 0; overflow-wrap: anywhere; }
+  .tg-modem-form .cbi-value[data-widget="CBI.FlagValue"] > .cbi-value-field { min-width: 0; width: 100%; }
+}
+
+/* APN of a ZTE web-API stick (APN tab): what the stick uses now, then one row to write it */
+.tg-modem-zapn { display: flex; flex-direction: column; gap: 8px; }
+.tg-modem-zapn-cur { font-size: 13px; }
+.tg-modem-zapn-hint { color: var(--tg-accent); }
+.tg-modem-zapn-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tg-modem-zapn-row > input { width: 16em; max-width: 100%; }
+.tg-modem-zapn-row > select { width: auto; }
+.tg-modem-zapn-st { font-size: 12.5px; color: var(--tg-muted); min-height: 1.4em; }
+.tg-modem-zapn-st.ok { color: #22a559; }
+.tg-modem-zapn-st.bad { color: #e5484d; }

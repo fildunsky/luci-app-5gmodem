@@ -1,0 +1,61 @@
+/* Buttons page (buttons.js): header card in the Network-page layout, one card per button.
+   Loaded by buttons.js; colours come from the --tg-* variables of modem.css. */
+.tg-btn {
+  --tg-btn-ok: #22a559;
+  --tg-btn-bad: #e5484d;
+  --tg-btn-line: rgba(128,128,128,.28);
+}
+.tg-btn-ico { color: var(--tg-accent); }
+.tg-btn-ico.off { color: var(--tg-muted); }
+.tg-btn-add { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.tg-btn .cbi-button { display: inline-flex; align-items: center; gap: 6px; }
+.tg-btn-i { display: inline-flex; }
+.tg-btn-i svg { display: block; }
+.tg-btn .cbi-button.tg-btn-ico { padding: 6px 8px; line-height: 0; }
+.tg-btn-muted { color: var(--tg-muted); }
+
+.tg-btn-card { display: grid; gap: 12px; }
+.tg-btn-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tg-btn-top .tg-btn-title { margin: 0 !important; }
+.tg-btn-grow { flex: 1 1 auto; }
+.tg-btn-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.tg-btn-col { min-width: 0; }
+.tg-btn-lbl { font-size: 12px; color: var(--tg-muted); margin-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tg-btn-lbl2 { margin-top: 10px; }
+.tg-btn-lbl a, .tg-btn-test { color: var(--tg-accent); text-decoration: none; white-space: nowrap; }
+.tg-btn-lbl a:hover { text-decoration: underline; }
+.tg-btn-ledblk + .tg-btn-ledblk { margin-top: 10px; }
+
+.tg-btn-seg { display: inline-flex; border: 1px solid var(--tg-btn-line); border-radius: 7px; overflow: hidden; max-width: 100%; }
+.tg-btn-seg button { font: inherit; font-size: 13px; padding: 5px 11px; border: 0; margin: 0; background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
+.tg-btn-seg button + button { border-left: 1px solid var(--tg-btn-line); }
+.tg-btn-seg button.on { background: var(--tg-accent); color: #fff; font-weight: 600; }
+.tg-btn-seg button:focus-visible { outline: 2px solid var(--tg-accent); outline-offset: -2px; }
+
+.tg-btn-leds { display: flex; flex-wrap: wrap; gap: 6px; }
+.tg-btn-ledsempty { font-size: 12.5px; color: var(--tg-muted); }
+.tg-btn-led { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; margin: 0; border-radius: 999px; border: 1px solid var(--tg-btn-line); font: inherit; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: transparent; color: inherit; cursor: pointer; }
+.tg-btn-led:hover { border-color: rgba(128,128,128,.6); }
+.tg-btn-led:focus-visible { outline: 2px solid var(--tg-accent); outline-offset: 1px; }
+.tg-btn-led i { width: 9px; height: 9px; border-radius: 50%; background: var(--tg-track); flex: 0 0 auto; box-sizing: border-box; }
+.tg-btn-led[data-st="none"] { opacity: .7; }
+.tg-btn-led[data-st="none"] i { background: transparent; border: 1px dashed rgba(128,128,128,.6); }
+.tg-btn-led[data-st="1"] { border-color: rgba(128,128,128,.55); background: rgba(128,128,128,.08); }
+.tg-btn-led[data-st="1"] i { background: var(--ledc, #c9c982); box-shadow: 0 0 5px var(--ledc, #c9c982); }
+.tg-btn-led[data-st="0"] i { background: rgba(128,128,128,.45); }
+.tg-btn-ledst { font-size: .9em; opacity: .6; min-width: 2.2em; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+.tg-btn-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--tg-btn-line); font-size: 12.5px; }
+.tg-btn-foot .tg-btn-dbc { width: 5em !important; min-width: 0; }
+.tg-btn-status { display: inline-flex; align-items: center; gap: 4px; }
+.tg-btn-status.ok { color: var(--tg-btn-ok); }
+.tg-btn-status.bad { color: var(--tg-btn-bad); }
+.tg-btn .btninfo { margin: 0 0 10px; }
+
+@media (max-width: 700px) {
+  .tg-btn-head .tginfo-right { margin-left: 0; flex: 1 1 100%; align-items: stretch; }
+  .tg-btn-add { justify-content: flex-start; }
+  .tg-btn-grid { grid-template-columns: minmax(0, 1fr); }
+  .tg-btn-top .tg-btn-seg { order: 3; flex: 1 1 100%; }
+  .tg-btn-top .tg-btn-seg button { flex: 1 1 0; }
+}

@@ -20,7 +20,7 @@ Usage: STAND_PASS=... $0 [options]
   -o dir             output dir (default ./out-<date>)
   --no-func          skip functional checks on the stand
   --no-pages         skip headless page checks
-  --pages list       only these pages (detail,readsms,...)
+  --pages list       only these pages (detail,sms,...)
   --widths list      page widths (default $WIDTHS)
   --no-limited       skip the restricted rpcd user (ACL check)
   --soak MIN         keep the Network page open MIN minutes and sample the stand

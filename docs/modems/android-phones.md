@@ -522,3 +522,12 @@ summary, VoLTE row and the confirmation before LTE-only on a SIM without VoLTE).
 The NR and IMS columns of the cell parser, carrier aggregation widths, timing
 advance, firmware, battery, APN and the 5G NSA merge in `5gmodem.sh` are covered
 in `test_android_cells.py` and `test_android_metrics.py`.
+
+## GNSS
+
+`CellProbe gnss <seconds> [last]` turns the GPS provider on for up to `<seconds>` (1-120) as the
+shell user and prints `{"enabled","gps_enabled","last":{...},"fix":{...},"ttff_ms","inview","used","sats":[...]}`
+with latitude, longitude, altitude, MSL altitude, speed (m/s), bearing, accuracy, time and age.
+The GPS page uses it through `gps.sh` (see [gps.md](../subsystems/gps.md#android-phone)), including the
+location throttle whitelist needed while the screen is off. The `android.location` stubs in
+`tools/android-cells/stubs` are compile-time declarations only, like the telephony stub.

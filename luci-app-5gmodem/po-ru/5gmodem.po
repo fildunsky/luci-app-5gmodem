@@ -1899,8 +1899,8 @@ msgstr "Настройки USSD"
 msgid "AT settings"
 msgstr "Настройки AT"
 
-msgid "This option deletes all SMS messages, including ones not visible on the Inbox tab"
-msgstr "Удаляет все SMS, в том числе не отображаемые на вкладке «Входящие»"
+msgid "This option deletes all SMS messages, including ones not visible on the SMS tab"
+msgstr "Удаляет все SMS, в том числе не отображаемые на вкладке «СМС»"
 
 msgid "Select 'No' if the router has a single LED or the LED serves several purposes. This option needs an LED defined in the system to work reliably when the LED is shared."
 msgstr "Выберите «Нет», если у роутера один светодиод или светодиод выполняет несколько задач. Для надёжной работы при совмещённом светодиоде он должен быть определён в системе."
@@ -1992,14 +1992,8 @@ msgstr "Установить обновление"
 msgid "Release page"
 msgstr "Страница релиза"
 
-msgid "Current version"
-msgstr "Текущая версия"
-
 msgid "It also installs the translation if available"
 msgstr "Русификация ставится вместе с программой, если доступна"
-
-msgid "Checking the latest release…"
-msgstr "Проверка последнего релиза…"
 
 msgid "Could not check for updates"
 msgstr "Не удалось проверить обновления. Проверьте доступ роутера в интернет"
@@ -2237,12 +2231,6 @@ msgstr "Читаем eUICC: обновление списка профилей �
 
 msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
 msgstr "Профиль eSIM загружен. Перезагружаю модем, чтобы он применился..."
-
-msgid "Update installed. Refreshing resources…"
-msgstr "Обновление установлено. Обновляю ресурсы…"
-
-msgid "Update installed. Signing out to apply it…"
-msgstr "Обновление установлено. Выхожу из сессии, чтобы оно применилось…"
 
 msgid "IP type"
 msgstr "Тип IP"
@@ -4076,14 +4064,9 @@ msgstr "Собирать статистику"
 msgid "Series live in RAM and are lost on reboot."
 msgstr "Ряды живут в оперативной памяти и теряются при перезагрузке."
 
-msgid "Keep monthly traffic across reboots"
-msgstr "Хранить месячный трафик между перезагрузками"
-
 msgid "Monthly totals are written to flash about once an hour. Ping series are never written there."
 msgstr "Месячные итоги пишутся во флеш-память примерно раз в час. Ряды пингов туда не пишутся никогда."
 
-msgid "Reset statistics"
-msgstr "Сбросить статистику"
 
 msgid "Uplink latency"
 msgstr "Задержка аплинков"
@@ -4241,14 +4224,6 @@ msgstr "номер"
 msgid "text"
 msgstr "текст"
 
-msgid "APN database"
-msgstr "База APN"
-
-msgid "Check the APN database"
-msgstr "Проверить базу APN"
-
-msgid "Update the APN database"
-msgstr "Обновить базу APN"
 
 msgid "Checking the APN database…"
 msgstr "Проверяю базу APN…"
@@ -4313,8 +4288,6 @@ msgstr "Номер приоритета"
 msgid "Icons"
 msgstr "Иконки"
 
-msgid "Large translucent mark on each uplink card"
-msgstr "Крупный полупрозрачный знак на карточках аплинков"
 
 msgid "Free the modem and read eSIM"
 msgstr "Освободить модем и прочитать eSIM"
@@ -4962,8 +4935,11 @@ msgstr "Звук: вкл"
 msgid "Sound: off"
 msgstr "Звук: выкл"
 
-msgid "Interval, s"
-msgstr "Интервал, с"
+msgid "Refresh every"
+msgstr "Обновлять каждые"
+
+msgid "%s s"
+msgstr "%s с"
 
 msgid "excellent"
 msgstr "отлично"
@@ -5411,8 +5387,8 @@ msgstr "Общий с «Внешним IP» - задаётся в «Для эк�
 msgid "Show the external address"
 msgstr "Показывать внешний адрес"
 
-msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
-msgstr "Показывать его рядом с выданным оператором - в карточке модема строкой «IPv4: 10.x.x.x | 1.2.3.4». За CGNAT и за туннелем они разные, и по этой разнице видно, идёт ли собственный трафик роутера через VPN. По умолчанию выключено: это запрос к постороннему сервису."
+msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. It is a request to a third-party service."
+msgstr "Показывать его рядом с выданным оператором - в карточке модема строкой «IPv4: 10.x.x.x | 1.2.3.4». За CGNAT и за туннелем они разные, и по этой разнице видно, идёт ли собственный трафик роутера через VPN. Это запрос к постороннему сервису."
 
 msgid "Used only when the service above returns an address but no country: the flag is then resolved by a second request, for the country alone. Use {ip} as the address placeholder."
 msgstr "Нужен, только если сервис выше отдаёт адрес, но не страну: тогда флаг узнаётся вторым запросом - за одной лишь страной. {ip} - место для адреса."
@@ -5636,9 +5612,6 @@ msgstr "макс."
 msgid "min"
 msgstr "мин."
 
-msgid "RSRP / SINR"
-msgstr "RSRP / SINR"
-
 msgid "Show signal history"
 msgstr "Показывать историю сигнала"
 
@@ -5674,9 +5647,6 @@ msgstr "не поддерживается этим модемом"
 
 msgid "the modem did not accept it"
 msgstr "модем не принял"
-
-msgid "Collect signal in the background"
-msgstr "Собирать сигнал в фоне"
 
 msgid "Off"
 msgstr "Выключено"
@@ -6256,8 +6226,8 @@ msgstr "Синий: LTE и подключение установлено. Зел
 msgid "Delete from the modem after forwarding"
 msgstr "Удалять из модема после пересылки"
 
-msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
-msgstr "Сообщение удаляется из модема, когда все включённые каналы (Telegram, ntfy, вебхук) его доставили, а команды по SMS, если включены, его проверили. Без «Хранить сообщения в памяти роутера» оно пропадает и из «Входящих»."
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the SMS tab too."
+msgstr "Сообщение удаляется из модема, когда все включённые каналы (Telegram, ntfy, вебхук) его доставили, а команды по SMS, если включены, его проверили. Без «Хранить сообщения в памяти роутера» оно пропадает и со вкладки «СМС»."
 
 msgid "Follow network address changes"
 msgstr "Следить за сменой адреса сетью"
@@ -6454,3 +6424,1329 @@ msgstr "Без неё отдача часто держится на 1-2 Мбит
 
 msgid "Upload is aggregated too: %s"
 msgstr "Отдача тоже идёт по нескольким несущим: %s"
+
+msgid "%s km/h"
+msgstr "%s км/ч"
+
+msgid "%s m"
+msgstr "%s м"
+
+msgid "2D"
+msgstr "2D"
+
+msgid "3D"
+msgstr "3D"
+
+msgid "2GIS"
+msgstr "2ГИС"
+
+msgid "AT commands"
+msgstr "AT-команды"
+
+msgid "Add the GNSS position, speed and satellites of the modem to the published file and to MQTT. Off by default: a stream of coordinates is a log of where the router has been. Each update asks the modem for the position."
+msgstr "Добавлять координаты, скорость и спутники GNSS модема в публикуемый файл и в MQTT. По умолчанию выключено: поток координат — это журнал того, где был роутер. При каждом обновлении у модема запрашивается позиция."
+
+msgid "Address template of the map tiles with {z}, {x} and {y}. Empty - OpenStreetMap. Use your own server if OpenStreetMap does not open from your network."
+msgstr "Шаблон адреса тайлов карты с {z}, {x} и {y}. Пусто — OpenStreetMap. Укажите свой сервер, если OpenStreetMap не открывается из вашей сети."
+
+msgid "Altitude"
+msgstr "Высота"
+
+msgid "An https:// address with {z}, {x} and {y}"
+msgstr "Адрес https:// с {z}, {x} и {y}"
+
+msgid "Asking the modem…"
+msgstr "Опрашиваем модем…"
+
+msgid "Clear track"
+msgstr "Очистить трек"
+
+msgid "Cold start"
+msgstr "Холодный старт"
+
+msgid "Coordinates"
+msgstr "Координаты"
+
+msgid "Copied: %s"
+msgstr "Скопировано: %s"
+
+msgid "Copy coordinates"
+msgstr "Скопировать координаты"
+
+msgid "Could not load the map component."
+msgstr "Не удалось загрузить компонент карты."
+
+msgid "Course"
+msgstr "Курс"
+
+msgid "Field reports: on some firmware the modem kept restarting in a loop after GNSS was turned off while it sat in a router. Turn it off only if you can reach the modem from a computer."
+msgstr "По отзывам: на некоторых прошивках после выключения GNSS модем в роутере уходил в бесконечные перезагрузки. Выключайте, только если сможете подключить модем к компьютеру."
+
+msgid "Fix"
+msgstr "Фиксация"
+
+msgid "GPS"
+msgstr "GPS"
+
+msgid "Google Maps"
+msgstr "Google Карты"
+
+msgid "HDOP (lower is more accurate)"
+msgstr "HDOP (меньше — точнее)"
+
+msgid "Hide the map"
+msgstr "Скрыть карту"
+
+msgid "Hot start"
+msgstr "Горячий старт"
+
+msgid "Include the position"
+msgstr "Добавлять координаты"
+
+msgid "Keep the position in the center"
+msgstr "Держать позицию в центре"
+
+msgid "Load the map as soon as the position is known instead of waiting for the \"Show on map\" button. The map service then learns the area every time the tab is opened."
+msgstr "Загружать карту сразу, как только известна позиция, не дожидаясь кнопки «Показать на карте». Тогда картографический сервис узнаёт район при каждом открытии вкладки."
+
+msgid "Map"
+msgstr "Карта"
+
+msgid "Map tiles"
+msgstr "Тайлы карты"
+
+msgid "NMEA port %s"
+msgstr "NMEA-порт %s"
+
+msgid "No GNSS receiver was found on this modem. Supported: Qualcomm modems with the QMI location service (also in MBIM mode), Quectel, SIMCom, Telit, MeiG, Fibocom (FM350 and Qualcomm-based), Foxconn/Dell (T77W968, T99W175, T99W373) and Sierra modems with a GNSS port. A receiver handled by ugps is shown too."
+msgstr "У этого модема приёмник GNSS не найден. Поддерживаются модемы Qualcomm со службой определения местоположения QMI (в том числе в режиме MBIM), Quectel, SIMCom, Telit, MeiG, Fibocom (FM350 и на Qualcomm), Foxconn/Dell (T77W968, T99W175, T99W373) и Sierra с GNSS-портом. Приёмник, которым управляет ugps, тоже показывается."
+
+msgid "On this modem the GNSS setting is stored in the modem and applied by its restart: the connection drops for about a minute."
+msgstr "На этом модеме настройка GNSS хранится в самом модеме и применяется его перезапуском: связь пропадёт примерно на минуту."
+
+msgid "Open the map at once"
+msgstr "Открывать карту сразу"
+
+msgid "OpenStreetMap"
+msgstr "OpenStreetMap"
+
+msgid "Position from the GNSS receiver built into the modem. The page asks the modem every few seconds while it is open; nothing runs in the background."
+msgstr "Позиция от приёмника GNSS, встроенного в модем. Пока страница открыта, она опрашивает модем каждые несколько секунд; в фоне ничего не работает."
+
+msgid "Receiver"
+msgstr "Приёмник"
+
+msgid "Restart the modem"
+msgstr "Перезапустить модем"
+
+msgid "Restart the search"
+msgstr "Начать поиск заново"
+
+msgid "Satellites (used / in view)"
+msgstr "Спутники (используются / видно)"
+
+msgid "Show on map"
+msgstr "Показать на карте"
+
+msgid "Source"
+msgstr "Источник"
+
+msgid "Speed"
+msgstr "Скорость"
+
+msgid "The \"GPS\" tab: position from the GNSS receiver of the modem and a map. It appears only for a modem with a receiver the app knows how to read."
+msgstr "Вкладка «GPS»: позиция от приёмника GNSS модема и карта. Появляется только у модема с приёмником, который приложение умеет читать."
+
+msgid "The map tiles are loaded by your browser from the map service, which learns the approximate area shown. The track is kept only while this page is open."
+msgstr "Тайлы карты загружает ваш браузер с картографического сервиса, и тот узнаёт примерный район. Трек хранится, только пока открыта эта страница."
+
+msgid "The modem did not accept the command."
+msgstr "Модем не принял команду."
+
+msgid "The modem restarts to apply the setting."
+msgstr "Модем перезапускается, чтобы применить настройку."
+
+msgid "The receiver is searching for satellites again. A cold start can take several minutes under open sky."
+msgstr "Приёмник заново ищет спутники. Холодный старт под открытым небом может занять несколько минут."
+
+msgid "Time (UTC)"
+msgstr "Время (UTC)"
+
+msgid "Turn GNSS off"
+msgstr "Выключить GNSS"
+
+msgid "Turn GNSS on"
+msgstr "Включить GNSS"
+
+msgid "Warm start"
+msgstr "Тёплый старт"
+
+msgid "Yandex Maps"
+msgstr "Яндекс Карты"
+
+msgid "blocked in the modem (GTGPSSWITCH=0)"
+msgstr "заблокирован в модеме (GTGPSSWITCH=0)"
+
+msgid "searching for satellites"
+msgstr "поиск спутников"
+
+msgid "ugps service"
+msgstr "служба ugps"
+
+msgid "QMI location service"
+msgstr "служба местоположения QMI"
+
+msgid "A cold start takes several minutes under open sky."
+msgstr "Холодный старт под открытым небом занимает несколько минут."
+
+msgid "An http:// or https:// address without a query"
+msgstr "Адрес http:// или https:// без параметров запроса"
+
+msgid "Clock from GNSS"
+msgstr "Время по GNSS"
+
+msgid "Cold"
+msgstr "Холодный"
+
+msgid "Coordinates are not determined yet"
+msgstr "Координаты пока не определены"
+
+msgid "E"
+msgstr "В"
+
+msgid "Fix %s"
+msgstr "Фиксация %s"
+
+msgid "GNSS receiver"
+msgstr "Приёмник GNSS"
+
+msgid "Latitude, longitude"
+msgstr "Широта, долгота"
+
+msgid "Letters, digits, dot, dash and underscore, up to 64"
+msgstr "Буквы, цифры, точка, дефис и подчёркивание, до 64 символов"
+
+msgid "Load the map"
+msgstr "Загрузить карту"
+
+msgid "Load the map tiles as soon as the position is known. Off: the map waits for the \"Load the map\" button. The map service learns the area shown."
+msgstr "Загружать тайлы карты, как только известна позиция. Если выключено, карта ждёт кнопки «Загрузить карту». Картографический сервис узнаёт показанный район."
+
+msgid "Loading the map…"
+msgstr "Загружаем карту…"
+
+msgid "N"
+msgstr "С"
+
+msgid "NE"
+msgstr "СВ"
+
+msgid "NMEA over the network"
+msgstr "NMEA по сети"
+
+msgid "NW"
+msgstr "СЗ"
+
+msgid "No coordinates"
+msgstr "Координат нет"
+
+msgid "Open in"
+msgstr "Открыть в"
+
+msgid "Phone location service (Android)"
+msgstr "Служба геолокации телефона (Android)"
+
+msgid "Readings"
+msgstr "Показатели"
+
+msgid "Receiver is off"
+msgstr "Приёмник выключен"
+
+msgid "S"
+msgstr "Ю"
+
+msgid "SE"
+msgstr "ЮВ"
+
+msgid "SW"
+msgstr "ЮЗ"
+
+msgid "Satellites"
+msgstr "Спутники"
+
+msgid "Satellites in view: %s, used: %s"
+msgstr "Видно спутников: %s, в решении: %s"
+
+msgid "Searching for satellites"
+msgstr "Поиск спутников"
+
+msgid "Seconds between positions. The shortest is 30."
+msgstr "Секунд между отправками позиции. Минимум 30."
+
+msgid "Send the position to a Traccar server over the OsmAnd protocol, for example http://192.168.1.10:5055. Empty - off. The position leaves the router: everyone with access to that server sees where the router is. Nothing is sent without a fix."
+msgstr "Отправлять позицию на сервер Traccar по протоколу OsmAnd, например http://192.168.1.10:5055. Пусто — выключено. Позиция уходит с роутера: все, у кого есть доступ к этому серверу, видят, где роутер. Без фиксации ничего не отправляется."
+
+msgid "Set the router clock from the GNSS receiver when there is no NTP sync, for example with no internet after a boot. Never changes a clock that NTP has synced."
+msgstr "Ставить время роутера по приёмнику GNSS, когда нет синхронизации NTP, например без интернета после загрузки. Время, синхронизированное по NTP, не меняется никогда."
+
+msgid "Start mode"
+msgstr "Режим старта"
+
+msgid "TCP port that streams the position as NMEA (GGA and RMC once a second) to gpsd, navigation apps or a car head unit, for example 10110. Empty - off. It listens on the LAN address only, without a password. Needs the socat or ncat package."
+msgstr "TCP-порт, на который раз в секунду идёт позиция в формате NMEA (GGA и RMC) для gpsd, навигаторов или головного устройства в машине, например 10110. Пусто — выключено. Слушает только адрес LAN, без пароля. Нужен пакет socat или ncat."
+
+msgid "The external USB receiver on %s needs no control; this page only shows its data."
+msgstr "Внешнему USB-приёмнику на %s управление не нужно, страница только показывает его данные."
+
+msgid "The identifier of this device on the Traccar server."
+msgstr "Идентификатор этого устройства на сервере Traccar."
+
+msgid "The map appears after the receiver is turned on and gets a fix."
+msgstr "Карта появится после включения приёмника и первой фиксации."
+
+msgid "The map is not loaded"
+msgstr "Карта не загружена"
+
+msgid "The map opens at the modem position as soon as coordinates appear."
+msgstr "Карта откроется на месте модема, как только появятся координаты."
+
+msgid "The map service learns the area where the router is."
+msgstr "Картографический сервис узнает район, где стоит роутер."
+
+msgid "The receiver is managed by the ugps service; this page only shows its data."
+msgstr "Приёмником управляет служба ugps, страница только показывает её данные."
+
+msgid "This modem has no GNSS receiver that the app can read"
+msgstr "У этого модема нет приёмника GNSS, который умеет читать приложение"
+
+msgid "Tiles are loaded by your browser from %s, which learns the area shown. The track is kept only while this page is open."
+msgstr "Тайлы загружает ваш браузер с %s, и тот узнаёт показанный район. Трек хранится, только пока открыта эта страница."
+
+msgid "Traccar device ID"
+msgstr "ID устройства в Traccar"
+
+msgid "Traccar interval"
+msgstr "Интервал Traccar"
+
+msgid "Traccar server"
+msgstr "Сервер Traccar"
+
+msgid "Turn the receiver on to get coordinates."
+msgstr "Включите приёмник, чтобы получить координаты."
+
+msgid "Under open sky the first fix takes from 30 s to several minutes."
+msgstr "Под открытым небом первая фиксация занимает от 30 с до нескольких минут."
+
+msgid "W"
+msgstr "З"
+
+msgid "Waiting for the first fix"
+msgstr "Ждём первую фиксацию"
+
+msgid "above sea level"
+msgstr "над уровнем моря"
+
+msgid "lower is more accurate"
+msgstr "меньше — точнее"
+
+msgid "updated %s s ago"
+msgstr "обновлено %s с назад"
+
+msgid "used / in view"
+msgstr "в решении / видно"
+
+msgid "%d of %d buttons configured"
+msgstr "Настроено кнопок: %d из %d"
+
+msgid "%d of %d on"
+msgstr "Включено %d из %d"
+
+msgid "%d parts"
+msgstr "Частей: %d"
+
+msgid "%s (by modem)"
+msgstr "%s (по модему)"
+
+msgid "AT command console"
+msgstr "Консоль AT-команд"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Base station"
+msgstr "Базовая станция"
+
+msgid "Collected every 10 s while this page is open"
+msgstr "Собирается раз в 10 с, пока открыта эта страница"
+
+msgid "Collecting"
+msgstr "Идёт сбор"
+
+
+msgid "Commands go through atcmd.sh: the port and the command form are checked on the router. The reply is awaited up to %d seconds."
+msgstr "Команды идут через atcmd.sh: порт и вид команды проверяются на роутере. Ответ ждём до %d секунд."
+
+msgid "Connection"
+msgstr "Подключение"
+
+msgid "Conversations"
+msgstr "Диалоги"
+
+msgid "Delete the conversation"
+msgstr "Удалить диалог"
+
+msgid "Delete the conversation (%d messages)?"
+msgstr "Удалить диалог (сообщений: %d)?"
+
+msgid "Drive not mounted"
+msgstr "Накопитель не подключён"
+
+msgid "Active profile: %s"
+msgstr "Активный профиль: %s"
+
+msgid "Feed"
+msgstr "Лента"
+
+msgid "Forwarding"
+msgstr "Пересылка"
+
+msgid "GPS tab"
+msgstr "Вкладка GPS"
+
+msgid "GSM-7: 160 characters per SMS, 153 per part"
+msgstr "GSM-7: 160 символов в SMS, 153 в части"
+
+msgid "History is kept until the page is closed · ↑ recalls the previous command"
+msgstr "История хранится, пока открыта страница · ↑ возвращает предыдущую команду"
+
+msgid "How the app talks to the modem"
+msgstr "Как приложение общается с модемом"
+
+msgid "How to use it"
+msgstr "Как пользоваться"
+
+msgid "In queue: %d"
+msgstr "В очереди: %d"
+
+msgid "Installing"
+msgstr "Установка"
+
+msgid "It is sent in the background when the modem is free; you can close the page."
+msgstr "Оно уйдёт в фоне, когда модем освободится; страницу можно закрыть."
+
+msgid "My codes"
+msgstr "Мои коды"
+
+msgid "New SMS appear here on their own: the page checks the modem every 15 seconds."
+msgstr "Новые SMS появятся здесь сами: страница проверяет модем каждые 15 секунд."
+
+msgid "No new messages"
+msgstr "Новых сообщений нет"
+
+msgid "No profile is enabled"
+msgstr "Ни один профиль не включён"
+
+msgid "Not sent"
+msgstr "Не отправлено"
+
+msgid "Nothing found"
+msgstr "Ничего не найдено"
+
+msgid "Notifications"
+msgstr "Уведомления"
+
+msgid "Phone storage: %s messages"
+msgstr "Память телефона: сообщений %s"
+
+msgid "Physical SIM is active"
+msgstr "Активна физическая SIM"
+
+msgid "Pick a code from the list or type one below."
+msgstr "Выберите код из списка или введите его ниже."
+
+msgid "Pick a template or type a command below."
+msgstr "Выберите шаблон или введите команду ниже."
+
+msgid "Port"
+msgstr "Порт"
+
+msgid "Ports and interface"
+msgstr "Порты и интерфейс"
+
+msgid "Profiles"
+msgstr "Профили"
+
+msgid "Profiles: %d"
+msgstr "Профилей: %d"
+
+msgid "Ready to send USSD codes"
+msgstr "Готов отправлять USSD-коды"
+
+msgid "Retry"
+msgstr "Повторить"
+
+msgid "SMS can also be sent from a Telegram chat - set the bot up on the Forwarding tab."
+msgstr "SMS можно отправлять и из чата Telegram — настройте бота на вкладке «Пересылка»."
+
+msgid "SMS only"
+msgstr "Только SMS"
+
+msgid "Search by sender and text"
+msgstr "Поиск по отправителю и тексту"
+
+msgid "Select a conversation on the left"
+msgstr "Выберите диалог слева"
+
+msgid "Select several"
+msgstr "Выбрать несколько"
+
+msgid "Sending"
+msgstr "Отправка"
+
+msgid "Sending to contacts: %d, delay %s s"
+msgstr "Отправка контактам: %d, пауза %s с"
+
+msgid "Session open"
+msgstr "Сессия открыта"
+
+msgid "Shared with \"External IP\" - set it in the \"External IP\" section"
+msgstr "Общая с «Внешним IP» — задаётся в разделе «Внешний IP»"
+
+msgid "Storage"
+msgstr "Хранение"
+
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Forwarding tab."
+msgstr "Бот подключён для входящих. Чтобы отправлять SMS из чата, отметьте «Разрешить отправку SMS из чата» на вкладке «Пересылка»."
+
+msgid "The first points appear within 10-20 seconds. With the page closed, the signal is collected only when background collection is on."
+msgstr "Первые точки появятся через 10–20 секунд. Когда страница закрыта, сигнал собирается, только если включён фоновый сбор."
+
+msgid "The message is queued."
+msgstr "Сообщение поставлено в очередь."
+
+msgid "The modem does not answer USSD"
+msgstr "Модем не отвечает на USSD"
+
+msgid "The modem is in %s: USSD needs the voice channel"
+msgstr "Модем в %s: для USSD нужен голосовой канал"
+
+msgid "The modem is managed by ModemManager"
+msgstr "Модемом управляет ModemManager"
+
+msgid "The network registered this SIM for SMS only"
+msgstr "Сеть зарегистрировала эту SIM только для SMS"
+
+msgid "The request can be sent, but most likely there will be no reply."
+msgstr "Запрос можно отправить, но ответа, скорее всего, не будет."
+
+msgid "The request goes through 3G and returns to %s"
+msgstr "Запрос пойдёт через 3G, потом модем вернётся в %s"
+
+msgid "The sender is alphanumeric, you cannot reply to it. To write to a number, use \"New SMS\"."
+msgstr "Отправитель буквенный, ему нельзя ответить. Чтобы написать на номер, нажмите «Новое SMS»."
+
+msgid "To e-mail"
+msgstr "На e-mail"
+
+msgid "Traffic for %s"
+msgstr "Трафик за %s"
+
+msgid "USSD codes"
+msgstr "USSD-коды"
+
+msgid "USSD unavailable"
+msgstr "USSD недоступен"
+
+msgid "USSD works"
+msgstr "USSD работает"
+
+msgid "Unicode: 70 characters per SMS, 67 per part"
+msgstr "Unicode: 70 символов в SMS, 67 в части"
+
+msgid "Up to date"
+msgstr "Актуальная версия"
+
+msgid "Waiting for the active modem. If the selected modem is not the active one, switch to it in the modem bar."
+msgstr "Ждём активный модем. Если выбранный модем не активный, переключитесь на него в полосе модемов."
+
+msgid "all automatic"
+msgstr "всё автоматически"
+
+msgid "alphanumeric sender"
+msgstr "буквенный отправитель"
+
+msgid "consent needed"
+msgstr "нужно согласие"
+
+msgid "eSIM active"
+msgstr "eSIM активна"
+
+msgid "eSIM management is unavailable"
+msgstr "Управление eSIM недоступно"
+
+msgid "from modem %s"
+msgstr "с модема %s"
+
+msgid "messages: %d"
+msgstr "сообщений: %d"
+
+
+msgid "sent from this page"
+msgstr "отправлено с этой страницы"
+
+msgid "short number"
+msgstr "короткий номер"
+
+msgid "today"
+msgstr "сегодня"
+
+msgid "via 3G"
+msgstr "через 3G"
+
+msgid "waiting for a reply"
+msgstr "ждём ответа"
+
+msgid "yesterday"
+msgstr "вчера"
+
+msgid "Paused"
+msgstr "На паузе"
+
+msgid "Collection"
+msgstr "Сбор"
+
+msgid "Keep after reboot"
+msgstr "Хранить после перезагрузки"
+
+
+msgid "Collect in background"
+msgstr "Собирать в фоне"
+
+msgid "Collect in background:"
+msgstr "Собирать в фоне:"
+
+msgid "Deletes all collected charts and monthly traffic"
+msgstr "Удаляет все собранные графики и трафик по месяцам"
+
+msgid "Store in:"
+msgstr "Хранить в:"
+
+msgid "every 5 minutes"
+msgstr "раз в 5 минут"
+
+msgid "every minute"
+msgstr "раз в минуту"
+
+msgid "Asking GitHub for the latest release"
+msgstr "Запрашиваю последний выпуск на GitHub"
+
+msgid "Check again"
+msgstr "Проверить снова"
+
+msgid "Check the internet connection or pick another interface in \"Download through\" below."
+msgstr "Проверьте подключение к интернету или выберите другой интерфейс в поле «Скачивать через» ниже."
+
+msgid "Checking for updates…"
+msgstr "Проверяю обновления…"
+
+msgid "GitHub is not reachable"
+msgstr "GitHub недоступен"
+
+msgid "Install %s"
+msgstr "Установить %s"
+
+msgid "Installed: %s"
+msgstr "Установлена: %s"
+
+msgid "Installing %s…"
+msgstr "Устанавливаю %s…"
+
+msgid "Installing…"
+msgstr "Устанавливаю…"
+
+msgid "Not checked"
+msgstr "Не проверено"
+
+msgid "Offline"
+msgstr "Нет связи"
+
+msgid "Refreshing resources…"
+msgstr "Обновляю ресурсы страницы…"
+
+msgid "Signing out to apply it…"
+msgstr "Выхожу из системы, чтобы применить обновление…"
+
+msgid "Try again"
+msgstr "Повторить"
+
+msgid "Update failed"
+msgstr "Обновление не удалось"
+
+msgid "Update now"
+msgstr "Обновить"
+
+msgid "Updates have not been checked yet"
+msgstr "Обновления ещё не проверялись"
+
+msgid "Updating…"
+msgstr "Обновляю…"
+
+msgid "Version %s"
+msgstr "Версия %s"
+
+msgid "Version %s installed"
+msgstr "Установлена версия %s"
+
+msgid "Version %s is available"
+msgstr "Доступна версия %s"
+
+msgid "What's new in %s"
+msgstr "Что нового в %s"
+
+msgid "checked at %s"
+msgstr "проверено в %s"
+
+msgid "released %s"
+msgstr "вышла %s"
+
+msgid "not registered, not searching"
+msgstr "не зарегистрирован, сеть не ищет"
+
+msgid "registered, home network"
+msgstr "зарегистрирован, домашняя сеть"
+
+msgid "not registered, searching for a network"
+msgstr "не зарегистрирован, ищет сеть"
+
+msgid "registration denied by the network"
+msgstr "сеть отказала в регистрации"
+
+msgid "unknown"
+msgstr "неизвестно"
+
+msgid "registered, roaming"
+msgstr "зарегистрирован, роуминг"
+
+msgid "registered for SMS only, home network"
+msgstr "зарегистрирован только для SMS, домашняя сеть"
+
+msgid "registered for SMS only, roaming"
+msgstr "зарегистрирован только для SMS, роуминг"
+
+msgid "emergency calls only"
+msgstr "только экстренные вызовы"
+
+msgid "Signal level: CSQ %s ≈ %s dBm%s"
+msgstr "Уровень сигнала: CSQ %s ≈ %s dBm%s"
+
+msgid "Signal level: CSQ %s ≈ %s dBm (extended scale)"
+msgstr "Уровень сигнала: CSQ %s ≈ %s dBm (расширенная шкала)"
+
+msgid "Signal level: unknown (99), the modem has not measured it"
+msgstr "Уровень сигнала: неизвестен (99), модем его не измерил"
+
+msgid "Bit error rate: not reported (normal for LTE and 5G)"
+msgstr "Доля ошибок (BER): не сообщается (для LTE и 5G это нормально)"
+
+msgid "Bit error rate: class %s of 7 (0 is best)"
+msgstr "Доля ошибок (BER): класс %s из 7 (0 — лучший)"
+
+msgid "No measurements: 99 and 255 mean no data for that network type"
+msgstr "Измерений нет: 99 и 255 означают отсутствие данных для этого типа сети"
+
+msgid "automatic"
+msgstr "автоматически"
+
+msgid "deregistered from the network"
+msgstr "снят с регистрации в сети"
+
+msgid "manual, automatic if that fails"
+msgstr "вручную, при неудаче автоматически"
+
+msgid "Operator selection: %s"
+msgstr "Выбор оператора: %s"
+
+msgid "No operator: the modem is not registered"
+msgstr "Оператора нет: модем не зарегистрирован"
+
+msgid "Network code (MCC MNC): %s %s"
+msgstr "Код сети (MCC MNC): %s %s"
+
+msgid "Operator: %s"
+msgstr "Оператор: %s"
+
+msgid "Network type: %s"
+msgstr "Тип сети: %s"
+
+msgid "State: %s"
+msgstr "Состояние: %s"
+
+msgid "Area code (LAC/TAC): %s, cell ID: %s"
+msgstr "Код зоны (LAC/TAC): %s, ID соты: %s"
+
+msgid "Cell ID: %s"
+msgstr "ID соты: %s"
+
+msgid "Base station (eNB) %s, sector %s"
+msgstr "Базовая станция (eNB) %s, сектор %s"
+
+msgid "Profile %s: APN \"%s\", %s"
+msgstr "Профиль %s: APN «%s», %s"
+
+msgid "Profiles without an APN: %s (the network picks the default one)"
+msgstr "Профилей без APN: %s (сеть выберет APN по умолчанию)"
+
+msgid "Profile %s has an address: %s"
+msgstr "Профиль %s получил адрес: %s"
+
+msgid "No profile has an address yet"
+msgstr "Ни один профиль пока не получил адрес"
+
+msgid "Attached to the packet service: mobile data is available"
+msgstr "Подключён к пакетной службе: мобильные данные доступны"
+
+msgid "Not attached to the packet service: no mobile data"
+msgstr "Не подключён к пакетной службе: мобильных данных нет"
+
+msgid "Active profiles: %s"
+msgstr "Активные профили: %s"
+
+msgid "No profile is active"
+msgstr "Ни один профиль не активен"
+
+msgid "The SIM is ready, no code is needed"
+msgstr "SIM готова, код не нужен"
+
+msgid "The SIM waits for the PIN code"
+msgstr "SIM ждёт PIN-код"
+
+msgid "The SIM is blocked: the PUK code is needed"
+msgstr "SIM заблокирована: нужен PUK-код"
+
+msgid "The SIM waits for the PIN2 code"
+msgstr "SIM ждёт код PIN2"
+
+msgid "The SIM waits for the PUK2 code"
+msgstr "SIM ждёт код PUK2"
+
+msgid "The modem is locked to another operator (network lock code needed)"
+msgstr "Модем привязан к другому оператору (нужен код разблокировки сети)"
+
+msgid "The SIM is not ready yet"
+msgstr "SIM ещё не готова"
+
+msgid "SIM state: %s"
+msgstr "Состояние SIM: %s"
+
+msgid "Modem date and time: %s"
+msgstr "Дата и время модема: %s"
+
+msgid "Time zone: UTC%s"
+msgstr "Часовой пояс: UTC%s"
+
+msgid "Minimum functionality: the radio is off"
+msgstr "Минимальный режим: радио выключено"
+
+msgid "Full functionality: the radio is on"
+msgstr "Полный режим: радио включено"
+
+msgid "Flight mode: the transmitter and receiver are off"
+msgstr "Режим полёта: передатчик и приёмник выключены"
+
+msgid "Factory test mode"
+msgstr "Заводской тестовый режим"
+
+msgid "Offline mode: the radio is off"
+msgstr "Автономный режим: радио выключено"
+
+msgid "Mode %s"
+msgstr "Режим %s"
+
+msgid "Connected to the cell (RRC connected): data is being exchanged"
+msgstr "Соединение с сотой установлено (RRC connected): идёт обмен данными"
+
+msgid "Idle (RRC idle): no traffic right now, the connection itself is kept"
+msgstr "Ожидание (RRC idle): сейчас трафика нет, само подключение сохраняется"
+
+msgid "%s: %s digits"
+msgstr "%s: %s цифр"
+
+msgid "A number is stored on the SIM"
+msgstr "На SIM записан номер"
+
+msgid "No own number is stored on the SIM"
+msgstr "Собственный номер на SIM не записан"
+
+msgid "The reply also shows the IMEI"
+msgstr "В ответе также есть IMEI"
+
+msgid "registered, idle"
+msgstr "зарегистрирован, ожидание"
+
+msgid "connected, data is flowing"
+msgstr "подключён, идёт передача данных"
+
+msgid "searching for a cell"
+msgstr "ищет соту"
+
+msgid "limited service (emergency calls only)"
+msgstr "ограниченное обслуживание (только экстренные вызовы)"
+
+msgid "Cell state: %s"
+msgstr "Состояние соты: %s"
+
+msgid "5G NSA anchor:"
+msgstr "Якорь 5G NSA:"
+
+msgid "5G NSA carrier:"
+msgstr "Несущая 5G NSA:"
+
+msgid "No service"
+msgstr "Нет обслуживания"
+
+msgid "Network: %s, band %s, channel %s"
+msgstr "Сеть: %s, диапазон %s, канал %s"
+
+msgid "Primary carrier: %s"
+msgstr "Основная несущая: %s"
+
+msgid "Added carriers: %s"
+msgstr "Дополнительные несущие: %s"
+
+msgid "No added carriers: aggregation is not in use"
+msgstr "Дополнительных несущих нет: агрегация не используется"
+
+msgid "Antenna branches: %s dBm; the signal is heard on %s of %s"
+msgstr "Антенные ветви: %s dBm; сигнал слышен на %s из %s"
+
+msgid "Data interface: %s"
+msgstr "Интерфейс данных: %s"
+
+msgid "Cell lock is off"
+msgstr "Привязка к соте выключена"
+
+msgid "Cell lock is on"
+msgstr "Привязка к соте включена"
+
+msgid "Active SIM slot: %s"
+msgstr "Активный слот SIM: %s"
+
+msgid "A SIM card is inserted"
+msgstr "SIM-карта вставлена"
+
+msgid "no service"
+msgstr "нет обслуживания"
+
+msgid "limited service"
+msgstr "ограниченное обслуживание"
+
+msgid "normal service"
+msgstr "обычное обслуживание"
+
+msgid "limited regional service"
+msgstr "ограниченное региональное обслуживание"
+
+msgid "power saving"
+msgstr "энергосбережение"
+
+msgid "Service: %s"
+msgstr "Обслуживание: %s"
+
+msgid "calls only"
+msgstr "только звонки"
+
+msgid "data only"
+msgstr "только данные"
+
+msgid "calls and data"
+msgstr "звонки и данные"
+
+msgid "camped on a cell"
+msgstr "закреплён на соте"
+
+msgid "Network: %s"
+msgstr "Сеть: %s"
+
+msgid "Cell %s, PCI %s, band %s, channel %s"
+msgstr "Сота %s, PCI %s, диапазон %s, канал %s"
+
+msgid "Cells heard: %s; the strongest is PCI %s on channel %s, RSRP %s dBm"
+msgstr "Слышно сот: %s; сильнейшая — PCI %s на канале %s, RSRP %s dBm"
+
+msgid "Network mode: %s"
+msgstr "Режим сети: %s"
+
+msgid "online"
+msgstr "в сети"
+
+msgid "offline"
+msgstr "не в сети"
+
+msgid "band %s"
+msgstr "диапазон %s"
+
+msgid "Temperature: %s °C"
+msgstr "Температура: %s °C"
+
+msgid "The SIM is inserted and unlocked"
+msgstr "SIM вставлена и разблокирована"
+
+msgid "The SIM is ready"
+msgstr "SIM готова"
+
+msgid "LTE bands: %s"
+msgstr "Диапазоны LTE: %s"
+
+msgid "5G bands: %s"
+msgstr "Диапазоны 5G: %s"
+
+msgid "Modem identification: manufacturer, model and firmware version."
+msgstr "Сведения о модеме: производитель, модель и версия прошивки."
+
+msgid "Modem manufacturer."
+msgstr "Производитель модема."
+
+msgid "Modem model."
+msgstr "Модель модема."
+
+msgid "Firmware version."
+msgstr "Версия прошивки."
+
+msgid "Modem IMEI: the device number in the mobile network."
+msgstr "IMEI модема: номер устройства в мобильной сети."
+
+msgid "SIM subscriber identity (IMSI): it identifies the subscription in the operator network."
+msgstr "Идентификатор абонента SIM (IMSI): по нему сеть оператора узнаёт подписку."
+
+msgid "Serial number of the SIM card (ICCID), the one printed on the card."
+msgstr "Серийный номер SIM-карты (ICCID), тот, что напечатан на карте."
+
+msgid "Own phone number stored on the SIM. Many operators do not store it, then the reply has no number."
+msgstr "Собственный номер, записанный на SIM. Многие операторы его не записывают, тогда номера в ответе нет."
+
+msgid "Selects the phone book for the next commands (\"ON\" holds the own numbers of the SIM)."
+msgstr "Выбирает телефонную книгу для следующих команд («ON» хранит собственные номера SIM)."
+
+msgid "Sets the character set for text in commands and replies."
+msgstr "Задаёт кодировку текста в командах и ответах."
+
+msgid "Writes an entry to the selected phone book."
+msgstr "Записывает запись в выбранную телефонную книгу."
+
+msgid "Model, firmware and hardware versions"
+msgstr "Модель, версии прошивки и железа"
+
+msgid "Received signal strength (RSSI) and bit error rate: the oldest and roughest signal measure, 0-31."
+msgstr "Сила принимаемого сигнала (RSSI) и доля ошибок: самая старая и грубая мера сигнала, 0–31."
+
+msgid "Extended signal quality: 2G, 3G and LTE levels in one reply."
+msgstr "Расширенное качество сигнала: уровни 2G, 3G и LTE в одном ответе."
+
+msgid "Current operator and how it was chosen."
+msgstr "Текущий оператор и способ его выбора."
+
+msgid "Registration for calls and SMS (circuit-switched network)."
+msgstr "Регистрация для звонков и SMS (сеть с коммутацией каналов)."
+
+msgid "Registration in the 2G/3G packet (data) network."
+msgstr "Регистрация в пакетной сети 2G/3G (данные)."
+
+msgid "Registration in the LTE network."
+msgstr "Регистрация в сети LTE."
+
+msgid "Registration in the 5G network (5G core; NSA mode shows up in +CEREG)."
+msgstr "Регистрация в сети 5G (ядро 5G; режим NSA виден в +CEREG)."
+
+msgid "Radio connection state: connected or idle."
+msgstr "Состояние радиосоединения: активно или в ожидании."
+
+msgid "Data connection profiles (PDP contexts): number, IP type and APN."
+msgstr "Профили подключения для данных (PDP-контексты): номер, тип IP и APN."
+
+msgid "Addresses the network gave to each data profile."
+msgstr "Адреса, которые сеть выдала каждому профилю данных."
+
+msgid "Attach to the packet service (mobile data)."
+msgstr "Подключение к пакетной службе (мобильные данные)."
+
+msgid "Which data profiles are active."
+msgstr "Какие профили данных активны."
+
+msgid "Connection parameters the network gave to the profile: address, gateway, DNS, MTU."
+msgstr "Параметры подключения, выданные сетью профилю: адрес, шлюз, DNS, MTU."
+
+msgid "DNS servers of the profile."
+msgstr "DNS-серверы профиля."
+
+msgid "SIM state: ready, or waiting for the PIN or PUK code."
+msgstr "Состояние SIM: готова или ждёт PIN- или PUK-код."
+
+msgid "Modem clock. Most modems take the time from the network."
+msgstr "Часы модема. Большинство модемов берут время из сети."
+
+msgid "Radio function mode."
+msgstr "Режим работы радиочасти."
+
+msgid "Reboots the modem. The connection drops for about a minute."
+msgstr "Перезагружает модем. Связь пропадёт примерно на минуту."
+
+msgid "Turns the radio off (flight mode). There is no connection until AT+CFUN=1."
+msgstr "Выключает радио (режим полёта). Связи не будет до AT+CFUN=1."
+
+msgid "Minimum functionality: the radio and the SIM are off."
+msgstr "Минимальный режим: радио и SIM выключены."
+
+msgid "Turns the radio on (full functionality)."
+msgstr "Включает радио (полный режим)."
+
+msgid "Serving cell: network type, band, channel and signal levels."
+msgstr "Обслуживающая сота: тип сети, диапазон, канал и уровни сигнала."
+
+msgid "Neighbour cells the modem hears; the modem picks among them when it changes cells."
+msgstr "Соседние соты, которые слышит модем; из них он выбирает при смене соты."
+
+msgid "Access technology, operator code, band and channel."
+msgstr "Технология доступа, код оператора, диапазон и канал."
+
+msgid "Carrier aggregation: the primary carrier (PCC) and the added ones (SCC)."
+msgstr "Агрегация несущих: основная несущая (PCC) и дополнительные (SCC)."
+
+msgid "RSRP on each antenna branch; -140 and lower means the branch hears nothing."
+msgstr "RSRP на каждой антенной ветви; −140 и ниже значит, что ветвь ничего не слышит."
+
+msgid "Temperatures of the modem sensors, °C."
+msgstr "Температуры датчиков модема, °C."
+
+msgid "USB data interface mode."
+msgstr "Режим USB-интерфейса для данных."
+
+msgid "Allowed bands as bit masks."
+msgstr "Разрешённые диапазоны в виде битовых масок."
+
+msgid "Lock to a specific cell: shows whether it is on."
+msgstr "Привязка к конкретной соте: показывает, включена ли она."
+
+msgid "Active SIM slot."
+msgstr "Активный слот SIM."
+
+msgid "SIM card detection: whether a card is inserted."
+msgstr "Обнаружение SIM: вставлена ли карта."
+
+msgid "Operator configuration profiles (MBN) in the modem; the active one is marked with 1."
+msgstr "Профили настроек операторов (MBN) в модеме; активный отмечен 1."
+
+msgid "Signal levels of the network in use."
+msgstr "Уровни сигнала текущей сети."
+
+msgid "System information: service, roaming, SIM and network type."
+msgstr "Системная информация: обслуживание, роуминг, SIM и тип сети."
+
+msgid "Signal quality: RSRP, RSRQ, RSSI and SINR."
+msgstr "Качество сигнала: RSRP, RSRQ, RSSI и SINR."
+
+msgid "Serving cell: cell ID, PCI, band and channel."
+msgstr "Обслуживающая сота: ID соты, PCI, диапазон и канал."
+
+msgid "Carrier aggregation: the primary carrier and the added ones."
+msgstr "Агрегация несущих: основная несущая и дополнительные."
+
+msgid "Cells the modem hears: PCI, channel and RSRP of each."
+msgstr "Соты, которые слышит модем: PCI, канал и RSRP каждой."
+
+msgid "Network type and service domain (calls, data)."
+msgstr "Тип сети и домен обслуживания (звонки, данные)."
+
+msgid "Network mode preference."
+msgstr "Предпочтительный режим сети."
+
+msgid "Uplink carrier aggregation (sending over several carriers)."
+msgstr "Агрегация несущих на отдачу (передача по нескольким несущим)."
+
+msgid "Switches to the physical SIM. The modem re-registers on the network."
+msgstr "Переключает на физическую SIM. Модем заново регистрируется в сети."
+
+msgid "Switches to the eSIM. The modem re-registers on the network."
+msgstr "Переключает на eSIM. Модем заново регистрируется в сети."
+
+msgid "Engineering information: cell, band and signal levels."
+msgstr "Инженерная информация: сота, диапазон и уровни сигнала."
+
+msgid "Serving cell: network type, state, band and signal."
+msgstr "Обслуживающая сота: тип сети, состояние, диапазон и сигнал."
+
+msgid "Modem temperature, °C."
+msgstr "Температура модема, °C."
+
+msgid "Radio status: cell, channel, signal levels and operator."
+msgstr "Состояние радиочасти: сота, канал, уровни сигнала и оператор."
+
+msgid "Channel quality indicator (CQI) reported to the cell: 0-15, higher is better."
+msgstr "Индикатор качества канала (CQI), который модем сообщает соте: 0–15, чем больше, тем лучше."
+
+msgid "Whether receiving on four antennas is turned off."
+msgstr "Выключен ли приём на четыре антенны."
+
+msgid "Thermal mitigation level: how much the modem slows down to cool off."
+msgstr "Уровень теплового ограничения: насколько модем замедляется, чтобы остыть."
+
+msgid "Last GNSS position fix. The position itself is not repeated here."
+msgstr "Последнее определение местоположения GNSS. Сами координаты здесь не повторяются."
+
+msgid "Network mode and allowed bands."
+msgstr "Режим сети и разрешённые диапазоны."
+
+msgid "Carrier aggregation: carriers, bandwidth, MIMO and modulation."
+msgstr "Агрегация несущих: несущие, ширина полосы, MIMO и модуляция."
+
+msgid "Receive paths in use (main, AUX, MIMO)."
+msgstr "Задействованные тракты приёма (основной, AUX, MIMO)."
+
+msgid "5G cell and signal levels (the reply takes about 3 seconds)."
+msgstr "Сота 5G и уровни сигнала (ответ приходит примерно за 3 секунды)."
+
+msgid "Changes the USB composition: the modem reconnects with other ports and the connection drops."
+msgstr "Меняет USB-композицию: модем переподключится с другим набором портов, связь пропадёт."
+
+msgid "The reply has no data in the expected form: this modem may not support the command."
+msgstr "В ответе нет данных в ожидаемом виде: возможно, этот модем не поддерживает команду."
+
+msgid "Explanation"
+msgstr "Пояснение"
+
+msgid "Install updates"
+msgstr "Установить обновления"
+
+msgid "Update the APN database"
+msgstr "Обновить базу APN"
+
+msgid "Updates of the app and the APN database"
+msgstr "Обновления приложения и базы APN"
+
+msgid "Available: 5gmodem %s and APN database %s"
+msgstr "Доступно: 5gmodem %s и база APN %s"
+
+msgid "APN database: could not check"
+msgstr "база APN: не удалось проверить"
+
+msgid "Version %s is up to date"
+msgstr "Версия %s актуальна"
+
+msgid "Could not check the app: %s"
+msgstr "Не удалось проверить приложение: %s"
+
+msgid "APN database %s is available"
+msgstr "Доступна база APN %s"
+
+msgid "Everything is up to date"
+msgstr "Всё актуально"
+
+msgid "APN database %s"
+msgstr "база APN %s"
+
+msgid "APN database %s installed"
+msgstr "База APN %s установлена"
+
+msgid "The APN database was not updated: %s"
+msgstr "База APN не обновлена: %s"
+
+msgid "APN in the modem"
+msgstr "APN в модеме"
+
+msgid "APN: Latin letters, digits, dots, hyphens"
+msgstr "APN: латинские буквы, цифры, точки, дефисы"
+
+msgid "Now:"
+msgstr "Сейчас:"
+
+msgid "Reading…"
+msgstr "Читаю…"
+
+msgid "Saved. The stick is reconnecting."
+msgstr "Сохранено. Стик переподключается."
+
+msgid "Stick's own choice"
+msgstr "Выбор стика"
+
+msgid "The stick did not return its APN settings."
+msgstr "Стик не отдал настройки APN."
+
+msgid "The stick keeps the APN in its own memory. \"Write\" saves it as the \"5gmodem\" profile, makes it the default and reconnects the stick; the connection drops for a few seconds."
+msgstr "Стик хранит APN в своей памяти. Запись сохраняет его профилем «5gmodem», делает основным и переподключает стик — связь пропадёт на несколько секунд."
+
+msgid "The stick refused the APN (%s)"
+msgstr "Стик не принял APN (%s)"
+
+msgid "Write to the modem"
+msgstr "Записать в модем"
+
+msgid "Writing and reconnecting the stick…"
+msgstr "Записываю и переподключаю стик…"
+
+msgid "empty"
+msgstr "пусто"
+
+msgid "for this operator: %s"
+msgstr "для этого оператора: %s"
+
+msgid "profile %s"
+msgstr "профиль %s"
+
+msgid "the stick's own choice"
+msgstr "выбор стика"
+
+msgid "Add host"
+msgstr "Добавить хост"
+
+msgid "Add service"
+msgstr "Добавить сервис"
+
+msgid "Host or IP address"
+msgstr "Хост или IP-адрес"
+
+msgid "Web server: parallel requests"
+msgstr "Веб-сервер: параллельные запросы"
+
+msgid "How many requests the router web server (uhttpd) handles at once. OpenWrt ships 3. If pages load slowly, buttons or data appear late or freeze, set 10: it is safe on routers with 128 MB of RAM or more. This router has %d MB. The web server restarts after saving."
+msgstr "Сколько запросов веб-сервер роутера (uhttpd) обрабатывает одновременно. В OpenWrt по умолчанию 3. Если страницы грузятся медленно, кнопки или данные появляются с задержкой или зависают, поставьте 10: это безопасно для роутеров со 128 МБ памяти и больше. У этого роутера %d МБ. После сохранения веб-сервер перезапустится."
+
+msgid "no reply"
+msgstr "нет ответа"
+
+msgid "Could not change the web server setting."
+msgstr "Не удалось изменить настройку веб-сервера."
+
+msgid "GNSS antenna"
+msgstr "Антенна GNSS"
+
+msgid "GNSS connector, passive antenna"
+msgstr "Разъём GNSS, пассивная антенна"
+
+msgid "GNSS connector, active antenna (power on the connector)"
+msgstr "Разъём GNSS, активная антенна (питание на разъёме)"
+
+msgid "GNSS connector, active antenna, high gain"
+msgstr "Разъём GNSS, активная антенна, высокое усиление"
+
+msgid "AUX (diversity) connector, passive antenna"
+msgstr "Разъём AUX (diversity), пассивная антенна"
+
+msgid "GNSS antenna connector changed. The search starts over."
+msgstr "Разъём антенны GNSS изменён. Поиск спутников начат заново."
+
+msgid "The connector the receiver listens on, stored in the modem. No satellites at all usually means the antenna sits on the other connector."
+msgstr "Разъём, с которого приёмник принимает сигнал; настройка хранится в модеме. Если спутников нет совсем, антенна, скорее всего, подключена к другому разъёму."
+
+msgid "Anonymous"
+msgstr "Анонимно"
+
+msgid "Masks IMEI, IMSI, ICCID, EID, serial and phone numbers, the public IP and MAC addresses of the router and coordinates. The first digits stay: they name the modem model and the operator."
+msgstr "Скрывает IMEI, IMSI, ICCID, EID, серийные и телефонные номера, публичные IP- и MAC-адреса роутера и координаты. Первые цифры остаются: по ним видна модель модема и оператор."
+
+msgid "Map style"
+msgstr "Стиль карты"
+
+msgid "The map shown on the GPS tab: pick a ready style or type an https:// address template of your own tile server with {z}, {x} and {y}. Empty - OpenStreetMap. The style can also be switched right under the map; that choice is kept in the browser."
+msgstr "Карта на вкладке GPS: выберите готовый стиль или введите шаблон адреса своего сервера тайлов (https://) с {z}, {x} и {y}. Пусто - OpenStreetMap. Стиль можно менять и прямо под картой; этот выбор хранится в браузере."
+
+msgid "Could not save the settings."
+msgstr "Не удалось сохранить настройки."

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const text = fs.readFileSync(path.join(__dirname, '../../htdocs/luci-static/resources/view/modem5g/readsms.js'), 'utf8');
+const text = fs.readFileSync(path.join(__dirname, '../../htdocs/luci-static/resources/view/modem5g/sms.js'), 'utf8');
 const cut = (from, to) => text.slice(text.indexOf(from), text.indexOf(to));
 const context = { smsSeen: new Set(), smsSeenFirst: false };
 vm.createContext(context);

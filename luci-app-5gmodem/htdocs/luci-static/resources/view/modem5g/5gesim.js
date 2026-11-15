@@ -9,6 +9,99 @@
 
 var ESIM = '/usr/share/5gmodem/esim.sh';
 var SLOT = '/usr/share/5gmodem/simslot.sh';
+var PHONE_MQ = '(max-width: 700px)';
+// lpac download steps in their usual order (the progress bar of the download dialog)
+var DL_STEPS = [ 'es10b_get_euicc_challenge_and_info', 'es9p_initiate_authentication', 'es10b_authenticate_server',
+	'es9p_authenticate_client', 'es8p_meatadata_parse', 'es10b_prepare_download', 'es9p_get_bound_profile_package',
+	'es10b_load_bound_profile_package' ];
+
+// Page styles (tg-esim-*): header card in the Network-page layout, profile cards, collapsible blocks.
+(function() {
+	if (document.getElementById('tg-page-esim-css')) { return; }
+	document.head.appendChild(E('link', { 'id': 'tg-page-esim-css', 'rel': 'stylesheet', 'type': 'text/css',
+		'href': L.resource('view/modem5g/page-esim.css') }));
+})();
+
+var ICONS = {
+	sim: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><rect x="8.5" y="11" width="7" height="6.5" rx="1"/><path d="M12 11v6.5M8.5 14.2h7"/></g>',
+	refresh: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13a8.5 8.5 0 1 1-2.6-7.2L20.5 8"/><path d="M20.5 3v5h-5"/></g>',
+	plus: '<path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+	qr: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 18h3v3M14 20.5h1.5"/></g>',
+	trash: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></g>',
+	send: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></g>',
+	check: '<path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+	clock: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g>',
+	down: '<path d="M12 3v12M7 10l5 5 5-5M4 20.5h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+	chev: '<path d="M7 10l5 5 5-5z" fill="currentColor"/>'
+};
+function svg(name, size) {
+	return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+function icon(name, size, cls) {
+	var s = E('span', { 'class': cls || 'tg-esim-i' });
+	s.innerHTML = svg(name, size);
+	return s;
+}
+function icoBtn(name, cls, title, onclick) {
+	var b = E('button', { 'class': 'btn cbi-button tg-esim-icobtn ' + (cls || ''), 'type': 'button',
+		'title': title, 'aria-label': title, 'click': onclick });
+	b.innerHTML = svg(name, 15);
+	return b;
+}
+
+// EID and ICCID are shown in full, in monospace so they are easy to read and copy.
+function ident(v) {
+	return E('span', { 'class': 'tg-esim-id' }, [ String(v || '') || '-' ]);
+}
+
+// collapsibleSection() of 5gdetail.js (same classes and storage key scheme) with a summary in
+// the header and a per-block default state.
+function collapsibleSection(key, titleText, content, defOpen) {
+	var expanded = defOpen;
+	try { var v = localStorage.getItem('5gm-blk-' + key); if (v === '0' || v === '1') { expanded = v === '1'; } } catch (e) {}
+	var chev = E('span', { 'class': 'tg-esim-chev' + (expanded ? ' open' : '') });
+	chev.innerHTML = svg('chev', 16);
+	var sum = E('span', { 'class': 'tg-esim-sum' }, '');
+	var body = E('div', { 'class': 'tg-collapse' + (expanded ? ' open' : '') }, [ E('div', { 'class': 'tg-collapse-inner' }, content) ]);
+	var toggle = function() {
+		var exp = !body.classList.contains('open');
+		body.classList.toggle('open', exp);
+		title.classList.toggle('open', exp);
+		title.setAttribute('aria-expanded', String(exp));
+		chev.classList.toggle('open', exp);
+		try { localStorage.setItem('5gm-blk-' + key, exp ? '1' : '0'); } catch (e) {}
+	};
+	var title = E('h3', {
+		'class': 'tg-esim-coll' + (expanded ? ' open' : ''),
+		'role': 'button', 'tabindex': '0', 'aria-expanded': String(expanded),
+		'click': toggle,
+		'keydown': function(ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } }
+	}, [ chev, E('span', {}, titleText), sum ]);
+	var node = E('div', { 'class': 'cbi-section tginfo', 'data-blk': key }, [ title, body ]);
+	return { node: node, setSummary: function(t) { sum.textContent = t || ''; } };
+}
+
+// Header card: state of the chip in one place (icon, main line, status pill). The elements are
+// kept from _shell(): the first states are painted before the page is attached to the document.
+var HD = {};
+function setHead(o) {
+	if (!HD.ico) { return; }
+	if (o.icls !== undefined) { HD.ico.className = 'tginfo-signal tg-esim-ico ' + (o.icls || ''); }
+	if (o.op !== undefined) {
+		var src = mutil.icon('icons/5gmodem/' + (o.op || 'op-sim') + '.svg');
+		if (HD.img.getAttribute('src') !== src) { HD.img.setAttribute('src', src); }
+	}
+	if (o.main !== undefined) { HD.main.textContent = o.main; }
+	if (o.loc !== undefined) { HD.meta.textContent = o.loc || ''; }
+	if (o.pillText !== undefined) {
+		[ HD.pill, HD.pillm ].forEach(function(p) {
+			p.className = 'tg-esim-pill ' + (o.pill || 'off') + (p === HD.pillm ? ' tg-esim-pillm' : '');
+			p.lastChild.textContent = o.pillText || '';
+			p.style.visibility = o.pillText ? '' : 'hidden';
+		});
+	}
+	if (o.refresh !== undefined) { HD.refresh.style.display = o.refresh ? '' : 'none'; }
+}
 
 function esimExec(args) {
 	return L.resolveDefault(fs.exec_direct(ESIM, args), '').then(function(out) {
@@ -161,7 +254,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30946, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40000, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -173,10 +266,12 @@ return view.extend({
 		modemtabs.attach();
 		var st = res[0] || {}, slot = res[1] || {};
 
-		var body = E('div', { 'id': 'esim-body' });
+		var body = E('div', { 'id': 'esim-body', 'class': 'tg-esim-col' });
 		var self = this;
+		var root = this._shell(body);
 
 		if (st.available == null) {
+			setHead({ icls: 'off', op: '', main: _('Checking eSIM support…'), loc: '', pillText: '', refresh: false });
 			body.appendChild(E('p', { 'class': 'spinning', 'id': 'esim-probing' },
 				_('Checking eSIM support…')));
 			esimExec([ 'status-probe' ]).then(function(st2) {
@@ -194,12 +289,32 @@ return view.extend({
 			}
 		}
 
-		return this._shell(body);
+		return root;
+	},
+
+	_slotButton: function(id, label) {
+		return E('button', {
+			'class': 'btn cbi-button cbi-button-action',
+			'click': function(ev) {
+				ev.preventDefault();
+				ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching to the eSIM slot...')));
+				fs.exec(SLOT, [ 'set', String(id) ]).then(function(res) {
+					// simslot.sh reports a refusal as JSON with exit 0 ("switch failed", "port busy"...)
+					if (!(res && res.stdout && res.stdout.indexOf('"ok"') >= 0)) {
+						ui.hideModal();
+						ui.addNotification(null, E('p', {}, [ _('SIM slot switch failed') ]), 'error');
+						return;
+					}
+					window.setTimeout(function() { location.reload(); }, 45000);
+				}).catch(function() { ui.hideModal(); });
+			}
+		}, [ icon('sim', 15), E('span', {}, label) ]);
 	},
 
 	_fillBody: function(body, st, slot) {
 		var self = this;
 		while (body.firstChild) { body.removeChild(body.firstChild); }
+		this._setBadge(st);
 
 		if (st.takeover) {
 			var act = null;
@@ -207,7 +322,14 @@ return view.extend({
 			if (act && act.label !== 'eSIM') {
 				st = { available: 1, active: 0 };
 			} else if (!self._tkAgreed) {
-				body.appendChild(E('div', { 'class': 'tgesim-actionrow' }, [
+				// consent: reading eSIM takes the control channel from ModemManager for a while
+				setHead({ icls: 'warn', op: '', main: _('The modem is managed by ModemManager'), loc: '',
+					pill: 'warn', pillText: _('consent needed'), refresh: false });
+				body.appendChild(E('div', { 'class': 'alert-message warning tg-esim-alert' }, [
+					E('p', { 'class': 'cbi-section-descr' },
+						_('This modem is managed by ModemManager. Reading and changing eSIM profiles temporarily takes the control channel from it: the modem internet connection drops for about 1-2 minutes and then recovers automatically. Several operations in a row share one takeover window.'))
+				]));
+				body.appendChild(E('div', { 'class': 'cbi-section tg-esim-msg' }, [
 					E('button', {
 						'class': 'btn cbi-button cbi-button-action',
 						'click': function(ev) {
@@ -215,9 +337,7 @@ return view.extend({
 							self._tkAgreed = true;
 							self._fillBody(body, st, slot);
 						}
-					}, _('Read eSIM (drops the connection briefly)')),
-					E('p', { 'class': 'cbi-section-descr' },
-						_('This modem is managed by ModemManager. Reading and changing eSIM profiles temporarily takes the control channel from it: the modem internet connection drops for about 1-2 minutes and then recovers automatically. Several operations in a row share one takeover window.'))
+					}, _('Read eSIM (drops the connection briefly)'))
 				]));
 				return;
 			}
@@ -240,21 +360,14 @@ return view.extend({
 			} else {
 				msg = _('eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem');
 			}
+			setHead({ icls: 'off', op: '', main: _('eSIM management is unavailable'), loc: '',
+				pill: 'off', pillText: _('unavailable'), refresh: false });
 			var _btn = null;
 			if (st.reason === 'slot') {
 				var esimId2 = null;
 				(slot.slots || []).forEach(function(s) { if (s.label == 'eSIM') { esimId2 = s.id; } });
 				if (esimId2 != null) {
-					_btn = E('button', {
-						'class': 'btn cbi-button cbi-button-action',
-						'click': function(ev) {
-							ev.preventDefault();
-							ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching to the eSIM slot...')));
-							fs.exec(SLOT, [ 'set', String(esimId2) ]).then(function() {
-								window.setTimeout(function() { location.reload(); }, 45000);
-							}).catch(function() { ui.hideModal(); });
-						}
-					}, _('Switch to the eSIM slot'));
+					_btn = self._slotButton(esimId2, _('Switch to the eSIM slot'));
 				}
 			}
 			else if (st.reason === 'uplink') {
@@ -272,175 +385,203 @@ return view.extend({
 					}
 				}, _('Free the modem and read eSIM'));
 			}
-			var _descr = E('p', { 'class': 'cbi-section-descr' }, msg);
-			if (_btn) {
-				body.appendChild(E('div', { 'class': 'tgesim-actionrow' }, [ _btn, _descr ]));
-			} else {
-				body.appendChild(_descr);
-			}
+			body.appendChild(E('div', { 'class': 'cbi-section tg-esim-msg' }, [
+				E('p', { 'class': 'cbi-section-descr' }, msg),
+				_btn ? E('div', { 'class': 'tg-esim-acts' }, [ _btn ]) : ''
+			]));
 		}
 		else if (!st.active) {
 			var esimId = null;
 			(slot.slots || []).forEach(function(s) { if (s.label == 'eSIM') { esimId = s.id; } });
-			body.appendChild(E('p', { 'class': 'cbi-section-descr' },
-				_('The physical SIM is active now. Switch to the eSIM slot to manage eSIM profiles.')));
-			if (esimId != null) {
-				body.appendChild(E('button', {
-					'class': 'btn cbi-button cbi-button-action',
-					'click': function(ev) {
-						ev.preventDefault();
-						ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching to the eSIM slot...')));
-						fs.exec(SLOT, [ 'set', String(esimId) ]).then(function() {
-							window.setTimeout(function() { location.reload(); }, 45000);
-						}).catch(function() { ui.hideModal(); });
-					}
-				}, [ _('Switch to eSIM slot') ]));
-			}
+			setHead({ icls: 'off', op: '', main: _('Physical SIM is active'), loc: '',
+				pill: 'off', pillText: _('Physical SIM is active'), refresh: false });
+			body.appendChild(E('div', { 'class': 'cbi-section tg-esim-msg' }, [
+				E('p', { 'class': 'cbi-section-descr' },
+					_('The physical SIM is active now. Switch to the eSIM slot to manage eSIM profiles.')),
+				esimId != null ? E('div', { 'class': 'tg-esim-acts' }, [ self._slotButton(esimId, _('Switch to eSIM slot')) ]) : ''
+			]));
 		}
 		else {
-			body.appendChild(E('div', { 'class': 'esim-metarow' }, [
-				E('div', { 'class': 'esim-meta', 'id': 'esim-meta' }, [ E('em', _('Reading eUICC...')) ]),
-				E('button', {
-					'class': 'btn cbi-button esim-refresh',
-					'click': function(ev) { ev.preventDefault(); self._reloadOnce(); }
-				}, [ _('Refresh') ]),
-			]));
-			body.appendChild(E('table', { 'class': 'table', 'id': 'esim-profiles' }, [
-				E('tr', { 'class': 'tr table-titles' }, [
-					E('th', { 'class': 'th left' }, [ _('Operator') ]),
-					E('th', { 'class': 'th left' }, [ _('Profile') ]),
-					E('th', { 'class': 'th left' }, [ 'ICCID' ]),
-					E('th', { 'class': 'th' }, [ _('Status') ]),
-					E('th', { 'class': 'th' }, [ '' ]),
-				]),
-			]));
-			body.appendChild(E('div', { 'id': 'esim-notif', 'style': 'display:none' }));
-			body.appendChild(E('div', { 'class': 'esim-dl' }, [
-				E('button', {
-					'class': 'btn cbi-button esim-qr-btn',
-					'title': _('Load a QR code image and read the activation code from it'),
-					'click': function(ev) {
-						ev.preventDefault();
-						var f = document.getElementById('esim-qr-file');
-						if (f) { f.click(); }
-					}
-				}, [ E('img', { 'src': mutil.icon('icons/5gmodem/cqr.svg'), 'alt': _('QR') }) ]),
-				E('input', {
-					'type': 'file', 'id': 'esim-qr-file', 'accept': 'image/*',
-					'style': 'display:none',
-					'change': function(ev) { self._decodeQR(ev.target.files && ev.target.files[0]); }
-				}),
-				E('input', {
-					'type': 'text', 'class': 'cbi-input-text', 'id': 'esim-code',
-					'placeholder': 'LPA:1$rsp.example.com$XXXX-XXXX'
-				}),
-				E('button', {
-					'class': 'btn cbi-button cbi-button-action',
-					'click': function(ev) { ev.preventDefault(); self.download(); }
-				}, [ _('Add eSIM profile') ]),
+			setHead({ icls: '', main: _('Reading eUICC...'), loc: '',
+				pill: 'ok', pillText: _('eSIM active'), refresh: true });
+			var qr = icoBtn('qr', 'esim-qr-btn', _('Load a QR code image and read the activation code from it'), function(ev) {
+				ev.preventDefault();
+				var f = document.getElementById('esim-qr-file');
+				if (f) { f.click(); }
+			});
+			body.appendChild(E('div', { 'class': 'cbi-section tg-esim-profsec' }, [
+				E('h3', {}, _('Profiles')),
+				E('div', { 'class': 'tg-esim-list', 'id': 'esim-profiles' }),
+				E('div', { 'class': 'esim-dl tg-esim-add' }, [
+					qr,
+					E('input', {
+						'type': 'file', 'id': 'esim-qr-file', 'accept': 'image/*',
+						'style': 'display:none',
+						'change': function(ev) { self._decodeQR(ev.target.files && ev.target.files[0]); }
+					}),
+					E('input', {
+						'type': 'text', 'class': 'cbi-input-text', 'id': 'esim-code',
+						'spellcheck': 'false', 'autocomplete': 'off',
+						'aria-label': _('Add eSIM profile'),
+						'placeholder': 'LPA:1$rsp.example.com$XXXX-XXXX',
+						'keydown': function(ev) { if (ev.key === 'Enter') { ev.preventDefault(); self.download(); } }
+					}),
+					E('button', {
+						'class': 'btn cbi-button cbi-button-action',
+						'click': function(ev) { ev.preventDefault(); self.download(); }
+					}, [ icon('plus', 15), E('span', {}, _('Add eSIM profile')) ]),
+				])
 			]));
 			esimExec([ 'dump-cached' ]).then(function(d) { applyDump(d); });
 			window.setTimeout(function() { self._reloadOnce(); }, 300);
 		}
 	},
 
+	// The access transport as a badge: the APDU setting when it is not "auto", ModemManager on a
+	// takeover modem. The effective driver of "auto" is not reported by esim.sh.
+	_setBadge: function(st) {
+		var b = HD.badge;
+		if (!b) { return; }
+		var apdu = String(uci.get('5gmodem', '@5gmodem[0]', 'esim_apdu') || 'auto');
+		var t = st && st.takeover ? 'ModemManager'
+			: ({ at: 'AT', qmi: 'QMI', uqmi: 'uqmi', mbim: 'MBIM', bridge: 'sms_tool' })[apdu] || '';
+		b.textContent = t;
+		b.style.display = t ? '' : 'none';
+	},
+
 	_shell: function(body) {
-		return E('div', { 'class': 'cbi-map' }, [
-			E('div', { 'class': 'cbi-section tgesim', 'id': 'esim-section' }, [
-				E('h3', [ 'eSIM' ]),
-				body,
-				this.renderSettings(),
-			]),
+		var self = this;
+		var isPhone = !!(window.matchMedia && window.matchMedia(PHONE_MQ).matches);
+		var ico = E('div', { 'class': 'tginfo-signal tg-esim-ico off', 'id': 'esim-hico' });
+		// logo of the enabled profile's operator, the app's default SIM picture otherwise (setHead op)
+		var hImg = E('img', { 'class': 'tg-esim-himg', 'src': mutil.icon('icons/5gmodem/op-sim.svg'), 'alt': '', 'width': 36, 'height': 36 });
+		ico.appendChild(hImg);
+		var pill = function(id) {
+			return E('span', { 'id': id, 'class': 'tg-esim-pill off' + (id === 'esim-pillm' ? ' tg-esim-pillm' : ''),
+				'style': 'visibility:hidden' }, [ E('i'), E('span', {}, '') ]);
+		};
+		var refresh = E('button', {
+			'class': 'btn cbi-button esim-refresh', 'id': 'esim-refresh', 'style': 'display:none',
+			'click': function(ev) { ev.preventDefault(); self._reloadOnce(); }
+		}, [ icon('refresh', 15), E('span', {}, _('Refresh')) ]);
+		HD = {
+			ico: ico, img: hImg, refresh: refresh,
+			badge: E('span', { 'class': 'tg-proto-badge', 'id': 'esim-badge', 'title': _('eUICC access (APDU)'), 'style': 'display:none' }, ''),
+			pill: pill('esim-pill'), pillm: pill('esim-pillm'),
+			reg: E('div', { 'class': 'tginfo-reg', 'id': 'esim-hreg' }, _('eSIM chip')),
+			main: E('div', { 'class': 'tginfo-op tg-esim-main', 'id': 'esim-hmain' }, ''),
+			meta: E('div', { 'class': 'tginfo-loc tg-esim-loc', 'id': 'esim-meta' }, '')
+		};
+		var head = E('div', { 'class': 'cbi-section tg-pg-head tg-esim-head' }, [
+			E('h3', { 'class': 'tg-pg-title tg-esim-title' }, [ E('span', {}, 'eSIM'), HD.badge, HD.pillm ]),
+			E('div', { 'class': 'tginfo-general' }, [
+				ico,
+				E('div', { 'class': 'tginfo-status' }, [ HD.reg, HD.main, HD.meta ]),
+				E('div', { 'class': 'tginfo-right' }, [ HD.pill, refresh ])
+			])
+		]);
+
+		var notifBox = E('div', { 'id': 'esim-notif' });
+		var notif = collapsibleSection('esimnotif', _('Pending operator notifications'), [ notifBox ], !isPhone);
+		notif.node.style.display = 'none';
+		notif.node.id = 'esim-notif-sec';
+		this._notifSec = notif;
+		var side = E('div', { 'class': 'tg-esim-side' }, [ notif.node, this.renderSettings() ]);
+
+		return E('div', { 'class': 'cbi-map tg-esim', 'id': 'esim-section' }, [
+			head,
+			E('div', { 'class': 'tg-esim-grid' }, [ body, side ])
 		]);
 	},
 
 	renderSettings: function() {
+		var vw = this;
 		var cur = String(uci.get('5gmodem', '@5gmodem[0]', 'esim_http') || 'auto');
-		var selW = new ui.Dropdown(cur, {
+		var httpLabels = {
 			'auto':   _('Auto (recommended)'),
 			'bridge': _('wget / OpenSSL bridge'),
 			'curl':   _('lpac built-in curl')
-		}, { id: 'esim-http-sel', sort: [ 'auto', 'bridge', 'curl' ] });
+		};
+		var selW = new ui.Dropdown(cur, httpLabels, { id: 'esim-http-sel', sort: [ 'auto', 'bridge', 'curl' ] });
 		var sel = selW.render();
 
 		var apduCur = String(uci.get('5gmodem', '@5gmodem[0]', 'esim_apdu') || 'auto');
-		var apduW = new ui.Dropdown(apduCur, {
+		var apduLabels = {
 			'auto':   _('Auto (recommended)'),
 			'at':     _('AT (serial - FM350 etc.)'),
 			'qmi':    _('QMI / libqmi (Qualcomm)'),
 			'uqmi':   _('QMI / uqmi CLI'),
 			'mbim':   _('MBIM'),
 			'bridge': _('AT bridge (sms_tool)')
-		}, { id: 'esim-apdu-sel', sort: [ 'auto', 'at', 'qmi', 'uqmi', 'mbim', 'bridge' ] });
+		};
+		var apduW = new ui.Dropdown(apduCur, apduLabels, { id: 'esim-apdu-sel', sort: [ 'auto', 'at', 'qmi', 'uqmi', 'mbim', 'bridge' ] });
 		var apduSel = apduW.render();
 
-		var slotW = new ui.Dropdown('auto', {
+		var slotLabels = {
 			'auto': _('Auto (active slot)'),
 			'1':    _('Slot 1'),
 			'2':    _('Slot 2')
-		}, { id: 'esim-slot-sel', sort: [ 'auto', '1', '2' ] });
+		};
+		var slotW = new ui.Dropdown('auto', slotLabels, { id: 'esim-slot-sel', sort: [ 'auto', '1', '2' ] });
 		var slotSel = slotW.render();
+
+		// summary in the collapsed header: the saved values that differ from "auto"
+		var saved = { http: cur, apdu: apduCur, slot: 'auto' };
+		var sec;
+		var paintSum = function() {
+			var parts = [];
+			if (saved.http !== 'auto') { parts.push(httpLabels[saved.http] || saved.http); }
+			if (saved.apdu !== 'auto') { parts.push(apduLabels[saved.apdu] || saved.apdu); }
+			if (saved.slot !== 'auto') { parts.push(slotLabels[saved.slot] || saved.slot); }
+			sec.setSummary(parts.length ? parts.join(' · ') : _('all automatic'));
+		};
 		L.resolveDefault(fs.exec_direct(ESIM, [ 'getslot' ]), '').then(function(out) {
-			try { slotW.setValue(String(JSON.parse(out).slot || 'auto')); } catch (e) {}
+			try { saved.slot = String(JSON.parse(out).slot || 'auto'); slotW.setValue(saved.slot); } catch (e) {}
+			paintSum();
 		});
 
-		return E('details', { 'class': 'esim-set' }, [
-			E('summary', {}, [ _('Settings') ]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, [ _('Download transport (ES9+)') ]),
+		var row = function(title, widget, onSave, descr) {
+			return E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, [ title ]),
 				E('div', { 'class': 'cbi-value-field' }, [
-					sel,
-					E('button', {
-						'class': 'btn cbi-button cbi-button-save',
-						'style': 'margin-left:8px',
-						'click': ui.createHandlerFn(this, function() {
-							return fs.exec_direct(ESIM, [ 'sethttp', selW.getValue() ]).then(function() {
-								ui.addNotification(null,
-									E('p', _('Download transport saved')), 'info');
-							});
-						})
-					}, [ _('Save') ]),
-					E('div', { 'class': 'cbi-value-description' },
-						_('How lpac talks to the operator server (SM-DP+). "Auto" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate.')),
+					E('div', { 'class': 'tg-esim-setrow' }, [
+						widget,
+						E('button', {
+							'class': 'btn cbi-button cbi-button-save',
+							'click': ui.createHandlerFn(vw, onSave)
+						}, [ _('Save') ])
+					]),
+					E('div', { 'class': 'cbi-value-description' }, descr),
 				]),
-			]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, [ _('eUICC access (APDU)') ]),
-				E('div', { 'class': 'cbi-value-field' }, [
-					apduSel,
-					E('button', {
-						'class': 'btn cbi-button cbi-button-save',
-						'style': 'margin-left:8px',
-						'click': ui.createHandlerFn(this, function() {
-							return fs.exec_direct(ESIM, [ 'setapdu', apduW.getValue() ]).then(function() {
-								ui.addNotification(null,
-									E('p', _('eUICC access saved')), 'info');
-							});
-						})
-					}, [ _('Save') ]),
-					E('div', { 'class': 'cbi-value-description' },
-						_('How lpac reaches the eSIM chip. "Auto" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT.')),
-				]),
-			]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, [ _('eUICC slot') ]),
-				E('div', { 'class': 'cbi-value-field' }, [
-					slotSel,
-					E('button', {
-						'class': 'btn cbi-button cbi-button-save',
-						'style': 'margin-left:8px',
-						'click': ui.createHandlerFn(this, function() {
-							return fs.exec_direct(ESIM, [ 'setslot', slotW.getValue() ]).then(function() {
-								ui.addNotification(null,
-									E('p', _('eUICC slot saved — refresh the profile list')), 'info');
-							});
-						})
-					}, [ _('Save') ]),
-					E('div', { 'class': 'cbi-value-description' },
-						_('Which SIM slot holds the eSIM chip. "Auto" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1.')),
-				]),
-			]),
-		]);
+			]);
+		};
+
+		sec = collapsibleSection('esimset', _('Settings'), [
+			row(_('Download transport (ES9+)'), sel, function() {
+				return fs.exec_direct(ESIM, [ 'sethttp', selW.getValue() ]).then(function() {
+					saved.http = selW.getValue(); paintSum();
+					ui.addNotification(null,
+						E('p', _('Download transport saved')), 'info');
+				});
+			}, _('How lpac talks to the operator server (SM-DP+). "Auto" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate.')),
+			row(_('eUICC access (APDU)'), apduSel, function() {
+				return fs.exec_direct(ESIM, [ 'setapdu', apduW.getValue() ]).then(function() {
+					saved.apdu = apduW.getValue(); paintSum();
+					ui.addNotification(null,
+						E('p', _('eUICC access saved')), 'info');
+				});
+			}, _('How lpac reaches the eSIM chip. "Auto" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT.')),
+			row(_('eUICC slot'), slotSel, function() {
+				return fs.exec_direct(ESIM, [ 'setslot', slotW.getValue() ]).then(function() {
+					saved.slot = slotW.getValue(); paintSum();
+					ui.addNotification(null,
+						E('p', _('eUICC slot saved — refresh the profile list')), 'info');
+				});
+			}, _('Which SIM slot holds the eSIM chip. "Auto" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1.'))
+		], false);
+		sec.node.classList.add('esim-set');
+		paintSum();
+		return sec.node;
 	},
 
 	_etaKey: function() {
@@ -533,6 +674,7 @@ return view.extend({
 				var _up = document.getElementById('esim-updating');
 				if (_up) { _up.parentNode.removeChild(_up); }
 				if (meta && !warm) {
+					setHead({ icls: 'warn', op: '', main: '—' });
 					meta.innerHTML = '';
 					var _m = lpaMsg(chip) || lpaMsg(profs);
 					if (_m === 'uplink busy') {
@@ -622,6 +764,7 @@ return view.extend({
 					return l.indexOf('"message":"retry"') > 0;
 				});
 				var att = rt.length ? rt[rt.length - 1].match(/"data":"(\d+)\/(\d+)"/) : null;
+				self._paintSteps(lines);
 				if (last) {
 					var m = last.match(/"message":"([^"]+)"/);
 					var d = last.match(/"serviceProviderName":"([^"]+)"/);
@@ -635,6 +778,31 @@ return view.extend({
 			}
 			if (self._dlActive) { window.setTimeout(function() { self._pollProgress(box); }, 1200); }
 		});
+	},
+
+	// lpac steps seen so far as a checklist with a bar; a retry starts the list again.
+	_paintSteps: function(lines) {
+		var list = this._dlSteps, fill = this._dlFill;
+		if (!list || !fill) { return; }
+		var seen = [];
+		lines.forEach(function(l) {
+			var m = l.match(/"message":"([^"]+)"/);
+			if (!m) { return; }
+			if (m[1] === 'retry') { seen = []; return; }
+			if (DL_STEPS.indexOf(m[1]) < 0) { return; }
+			if (seen[seen.length - 1] !== m[1]) { seen.push(m[1]); }
+		});
+		while (list.firstChild) { list.removeChild(list.firstChild); }
+		var self = this;
+		seen.forEach(function(k, i) {
+			var cur = i === seen.length - 1;
+			list.appendChild(E('div', { 'class': cur ? 'cur' : 'done' }, [
+				cur ? E('span', { 'class': 'tg-esim-spin' }) : icon('check', 15),
+				E('span', {}, [ self._stepName(k) ])
+			]));
+		});
+		var idx = seen.length ? DL_STEPS.indexOf(seen[seen.length - 1]) : -1;
+		fill.style.width = Math.max(4, Math.round(100 * (idx + 1) / DL_STEPS.length)) + '%';
 	},
 
 	_saveLog: function() {
@@ -708,6 +876,8 @@ return view.extend({
 	_doDownload: function(code, inp) {
 		var self = this;
 		var box = E('div', { 'class': 'esim-d' }, _('Starting…'));
+		self._dlSteps = E('div', { 'class': 'tg-esim-steps' });
+		self._dlFill = E('div', { 'class': 'tg-esim-barfill', 'style': 'width:4%' });
 		ui.showModal(_('Add eSIM profile'), [
 			E('div', { 'class': 'esim-modal' }, [
 				E('div', { 'class': 'esim-dlrow' }, [
@@ -716,6 +886,8 @@ return view.extend({
 					E('div', { 'class': 'esim-h' }, _('Downloading eSIM profile…')),
 				]),
 				box,
+				self._dlSteps,
+				E('div', { 'class': 'tg-esim-bar' }, self._dlFill),
 				E('p', { 'class': 'esim-note' }, _('This can take up to a minute — please stay on this page.')),
 			]),
 		]);
@@ -853,8 +1025,12 @@ function applyDump(d) {
 		var dd = chip.payload.data || {};
 		var mem = (dd.EUICCInfo2 && dd.EUICCInfo2.extCardResource)
 			? dd.EUICCInfo2.extCardResource.freeNonVolatileMemory : null;
-		meta.textContent = 'EID: ' + (dd.eidValue || '-') +
-			(mem != null ? '   ·   ' + _('Free memory') + ': ' + Math.round(mem / 1024) + ' KiB' : '');
+		var reg = HD.reg;
+		if (reg) {
+			reg.textContent = _('eSIM chip') + ' · EID ';
+			reg.appendChild(ident(dd.eidValue || '-'));
+		}
+		meta.textContent = mem != null ? (_('Free memory') + ': ' + Math.round(mem / 1024) + ' KiB') : '';
 	}
 	if (lpaOk(profs)) { renderProfiles(profs.payload.data || []); }
 	return lpaOk(profs);
@@ -877,54 +1053,65 @@ function _viewReloadFor(budgetMs) {
 	return step();
 };
 
+// Profile cards. Names and operators come from the SM-DP+ and the card: text nodes only.
 function renderProfiles(list) {
-	var tbl = document.getElementById('esim-profiles');
-	if (!tbl) { return; }
-	tbl.querySelectorAll('tr.esim-row').forEach(function(r) { r.parentNode.removeChild(r); });
+	var box = document.getElementById('esim-profiles');
+	if (!box) { return; }
+	box.querySelectorAll('.esim-row').forEach(function(r) { r.parentNode.removeChild(r); });
 	if (!list.length) {
-		tbl.appendChild(E('tr', { 'class': 'tr esim-row' }, [
-			E('td', { 'class': 'td', 'colspan': '5' }, [
-				E('em', _('No profiles installed')),
-				E('div', { 'style': 'font-size:90%; opacity:.75; margin-top:.4em' }, [
-					_('An empty chip is a special case: some modems cannot work with a profile-less eSIM (the modem keeps resetting or the slot stays unusable). Loading any public test profile usually settles it - see the list of known test profiles:'),
-					' ',
-					E('a', {
-						'href': 'https://euicc-manual.osmocom.org/docs/rsp/known-test-profile/',
-						'target': '_blank', 'rel': 'noreferrer'
-					}, 'euicc-manual: known test profiles')
-				])
-			]),
+		setHead({ icls: '', op: '', main: _('No profiles installed') });
+		box.appendChild(E('div', { 'class': 'esim-row tg-esim-empty' }, [
+			E('b', {}, _('No profiles installed')),
+			E('div', {}, [
+				_('An empty chip is a special case: some modems cannot work with a profile-less eSIM (the modem keeps resetting or the slot stays unusable). Loading any public test profile usually settles it - see the list of known test profiles:'),
+				' ',
+				E('a', {
+					'href': 'https://euicc-manual.osmocom.org/docs/rsp/known-test-profile/',
+					'target': '_blank', 'rel': 'noreferrer'
+				}, 'euicc-manual: known test profiles')
+			])
 		]));
 		return;
 	}
+	var enabledOp = null, enabledIc = '';
 	list.forEach(function(p) {
 		var on = (p.profileState == 'enabled');
 		var name = p.profileNickname || p.profileName || '-';
 		if (p.profileClass == 'test') { name += ' (test)'; }
+		if (on) { enabledOp = p.serviceProviderName || name; }
 		var pid = /^[0-9A-Fa-f]{32}$/.test(p.isdpAid || '') ? p.isdpAid : p.iccid;
-		var btns = [];
+		var btns = [
+			E('span', { 'class': 'tg-esim-pill ' + (on ? 'ok' : 'off') }, [ E('i'), E('span', {}, on ? _('Enabled') : _('Disabled')) ])
+		];
 		if (on) {
 			btns.push(E('button', { 'class': 'btn cbi-button',
 				'click': function(ev) { ev.preventDefault(); esimOp('disable', pid, name); } }, [ _('Disable') ]));
 		} else {
 			btns.push(E('button', { 'class': 'btn cbi-button cbi-button-action',
 				'click': function(ev) { ev.preventDefault(); esimOp('enable', pid, name); } }, [ _('Enable') ]));
-			btns.push(E('button', { 'class': 'btn cbi-button cbi-button-remove',
-				'click': function(ev) { ev.preventDefault(); esimDeleteConfirm(pid, name, p.iccid); } }, [ _('Delete') ]));
+			btns.push(icoBtn('trash', 'cbi-button-remove', _('Delete'),
+				function(ev) { ev.preventDefault(); esimDeleteConfirm(pid, name, p.iccid); }));
 		}
-		tbl.appendChild(E('tr', { 'class': 'tr esim-row' }, [
-			E('td', { 'class': 'td left' }, [
-				E('span', { 'class': 'esim-op' }, [
-					E('img', { 'src': mutil.icon(on ? 'icons/5gmodem/csim_active.svg' : 'icons/5gmodem/csim_iface.svg'), 'alt': '' }),
-					p.serviceProviderName || '-'
-				])
+		// operator logo by the provider or profile name, the app's default SIM picture otherwise
+		var opIc = mutil.operatorIcon(p.serviceProviderName || '') || mutil.operatorIcon(p.profileName || '') || 'op-sim';
+		if (on) { enabledIc = opIc; }
+		var pic = E('span', { 'class': 'tg-esim-pic' }, [
+			E('img', { 'src': mutil.icon('icons/5gmodem/' + opIc + '.svg'), 'alt': '', 'width': 32, 'height': 32 })
+		]);
+		box.appendChild(E('div', { 'class': 'esim-row tg-esim-prof' + (on ? ' on' : '') }, [
+			pic,
+			E('div', { 'class': 'tg-esim-pinfo' }, [
+				E('b', {}, [
+					p.serviceProviderName || '-',
+					E('span', { 'class': 'tg-esim-pname' }, [ ' · ', name ])
+				]),
+				E('div', { 'class': 'tg-esim-sub' }, [ 'ICCID ', ident(p.iccid || '-') ])
 			]),
-			E('td', { 'class': 'td left' }, [ name ]),
-			E('td', { 'class': 'td left', 'style': 'font-family:monospace' }, [ p.iccid || '-' ]),
-			E('td', { 'class': 'td' }, [ on ? _('Enabled') : _('Disabled') ]),
-			E('td', { 'class': 'td right' }, btns),
+			E('div', { 'class': 'tg-esim-act' }, btns)
 		]));
 	});
+	setHead({ icls: enabledOp ? '' : 'warn', op: enabledIc,
+		main: enabledOp ? _('Active profile: %s').format(enabledOp) : _('No profile is enabled') });
 }
 
 function fetchNotifications() {
@@ -936,37 +1123,45 @@ function fetchNotifications() {
 function renderNotifications(list) {
 	var box = document.getElementById('esim-notif');
 	if (!box) { return; }
+	var sec = document.getElementById('esim-notif-sec');
 	while (box.firstChild) { box.removeChild(box.firstChild); }
-	if (!list || !list.length) { box.style.display = 'none'; return; }
-	box.style.display = '';
+	if (!list || !list.length) { if (sec) { sec.style.display = 'none'; } return; }
+	if (sec) {
+		sec.style.display = '';
+		var sum = sec.querySelector('.tg-esim-sum');
+		if (sum) { sum.textContent = String(list.length); }
+	}
 	var opName = { install: _('Added'), enable: _('Enabled'), disable: _('Disabled'), 'delete': _('Deleted') };
-	box.appendChild(E('div', { 'class': 'esim-notif-h' }, _('Pending operator notifications')));
-	box.appendChild(E('div', { 'class': 'esim-notif-sub' },
+	box.appendChild(E('div', { 'class': 'cbi-section-descr esim-notif-sub' },
 		_('These are status reports the modem sends to your operator (SM-DP+) after a profile is enabled, disabled or deleted. They normally go out on their own. If some are stuck here (e.g. there was no internet at the time), the safe choice is Send — it is harmless and just confirms the change. Remove only discards a report without sending it. If unsure, you can leave them or press Send all.')));
-	box.appendChild(E('div', { 'style': 'margin-bottom:8px' }, [
-		E('button', { 'class': 'btn cbi-button cbi-button-action',
-			'title': _('Send all pending notifications to the operator, then clear them'),
-			'click': function(ev) { ev.preventDefault(); esimNotifFlush(); } }, [ _('Send all') ])
-	]));
+	var rows = E('div', { 'class': 'tg-esim-list' });
 	list.forEach(function(n) {
 		var op = opName[n.profileManagementOperation] || n.profileManagementOperation || '?';
 		var host = String(n.notificationAddress || '').replace(/^https?:\/\//, '');
-		box.appendChild(E('div', { 'class': 'esim-notif-row' }, [
-			E('div', { 'class': 'esim-notif-info' }, [
-				E('span', { 'class': 'esim-notif-op' }, [ op ]), ' \u00b7 ',
-				E('span', { 'style': 'font-family:monospace' }, [ n.iccid || '-' ]),
-				host ? E('div', { 'class': 'esim-notif-host' }, [ host ]) : ''
+		var pic = E('span', { 'class': 'tg-esim-pic' });
+		pic.innerHTML = svg('send', 22);
+		rows.appendChild(E('div', { 'class': 'tg-esim-prof tg-esim-notif' }, [
+			pic,
+			E('div', { 'class': 'tg-esim-pinfo' }, [
+				E('b', {}, [ op ]),
+				E('div', { 'class': 'tg-esim-sub' }, [ 'ICCID ', ident(n.iccid || '-') ]),
+				host ? E('div', { 'class': 'tg-esim-sub' }, [ host ]) : ''
 			]),
-			E('div', { 'class': 'esim-notif-btns' }, [
-				E('button', { 'class': 'btn cbi-button cbi-button-action',
+			E('div', { 'class': 'tg-esim-act' }, [
+				E('button', { 'class': 'btn cbi-button',
 					'title': _('Send this notification to the operator, then remove it'),
 					'click': function(ev) { ev.preventDefault(); esimNotifAction('process', n.seqNumber); } }, [ _('Send') ]),
-				E('button', { 'class': 'btn cbi-button cbi-button-remove',
-					'title': _('Discard this notification locally without sending'),
-					'click': function(ev) { ev.preventDefault(); esimNotifAction('remove', n.seqNumber); } }, [ _('Remove') ]),
-			]),
+				icoBtn('trash', 'cbi-button-remove', _('Discard this notification locally without sending'),
+					function(ev) { ev.preventDefault(); esimNotifAction('remove', n.seqNumber); })
+			])
 		]));
 	});
+	box.appendChild(rows);
+	box.appendChild(E('div', { 'class': 'tg-esim-acts' }, [
+		E('button', { 'class': 'btn cbi-button cbi-button-action',
+			'title': _('Send all pending notifications to the operator, then clear them'),
+			'click': function(ev) { ev.preventDefault(); esimNotifFlush(); } }, [ icon('send', 15), E('span', {}, _('Send all')) ])
+	]));
 }
 function esimNotifFlush() {
 	modemtabs.setBusy('#esim-section', _('Sending notifications\u2026'), 90000, 15);

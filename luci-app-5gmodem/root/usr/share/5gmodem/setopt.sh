@@ -121,7 +121,13 @@ netblocks)
 	uci -q commit 5gmodem
 	;;
 reconnect)
-	_ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
+	# "reconnect for=<usb path>": that modem's interface; the global one only when it has none of its own
+	_ifn=""
+	case "$2" in
+		for=*[!0-9A-Za-z.:_-]*|for=) : ;;
+		for=*) _ifn=$(uci -q get "5gmodem.$(_sec_for_path "${2#for=}").network") ;;
+	esac
+	[ -n "$_ifn" ] || _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
 	[ -n "$_ifn" ] || exit 0
 	( ifdown "$_ifn"; sleep 2; ifup "$_ifn" ) >/dev/null 2>&1 </dev/null &
 	sleep 1
@@ -142,8 +148,29 @@ applyset)
 menuflush)
 	rm -f /tmp/luci-indexcache* 2>/dev/null
 	;;
+webreq)
+	# uhttpd max_requests: how many CGI/ubus requests the web server runs at once (OpenWrt ships 3).
+	# No value: print {"value":N,"mem_mb":M}. A value: set it and restart uhttpd detached, so the
+	# request that asked for it still gets its answer.
+	if [ -z "$2" ]; then
+		_wr=$(uci -q get uhttpd.main.max_requests); [ -n "$_wr" ] || _wr=3
+		_wm=$(awk '/^MemTotal:/ { printf "%d", $2 / 1024 }' /proc/meminfo 2>/dev/null)
+		printf '{"value":%s,"mem_mb":%s}\n' "$_wr" "${_wm:-0}"
+		exit 0
+	fi
+	case "$2" in ''|*[!0-9]*) exit 1 ;; esac
+	[ "$2" -ge 1 ] && [ "$2" -le 50 ] || exit 1
+	uci -q get uhttpd.main >/dev/null || exit 1
+	[ "$(uci -q get uhttpd.main.max_requests)" = "$2" ] && exit 0
+	note_foreign_uci uhttpd "setopt webreq"
+	uci -q set "uhttpd.main.max_requests=$2"
+	uci -q commit uhttpd
+	logger -t 5gmodem "uhttpd max_requests set to $2"
+	# late enough for the page to finish saving and applying its other settings first
+	( sleep 8; /etc/init.d/uhttpd restart ) >/dev/null 2>&1 </dev/null &
+	;;
 *)
-	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|mmat <path> <0|1>|noat <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|netblocks [key|-key]...|reconnect|applyset|menuflush}" >&2
+	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|mmat <path> <0|1>|noat <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|netblocks [key|-key]...|reconnect [for=<path>]|applyset|menuflush|webreq [1-50]}" >&2
 	exit 1
 	;;
 esac

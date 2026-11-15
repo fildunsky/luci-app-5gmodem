@@ -608,6 +608,13 @@ if [ "$_hl_kind" = "hilink" ] && [ -z "$_hl_at" ]; then
 			esac
 			printf '%s\n' "$_hl_out" > "$_hl_cache.tmp" && mv "$_hl_cache.tmp" "$_hl_cache"
 			cut -d. -f1 /proc/uptime > "$_hl_cache.t.tmp" && mv "$_hl_cache.t.tmp" "$_hl_cache.t"
+			# The snapshot that telemetry, sessionwatch and local screens read
+			# (metrics_<key>.json + .stamp) was never written for web-API sticks, so
+			# their band, levels, IP and APN never reached tele.json.
+			case "$_hl_out" in *'"iface":'*) _hl_sj="$_hl_out" ;;
+				*) _hl_sj="{\"iface\":\"$(uci -q get "5gmodem.$_hl_sec.network")\",${_hl_out#\{}" ;;
+			esac
+			printf '%s\n' "$_hl_sj" > "$CACHE.h$$" && mv "$CACHE.h$$" "$CACHE" && uptime_s > "$STAMP"
 			printf '%s\n' "$_hl_out"
 			_hl_on=$(printf '%s' "$_hl_out" | jsonfilter -e '@.operator_name' 2>/dev/null)
 			_hl_oi=$(uci -q get "5gmodem.$_hl_sec.network")
@@ -1265,7 +1272,12 @@ case "$REG" in
 						7)  REG=6 ;;
 						10) REG=9 ;;
 					esac
-					logger -t 5gmodem "network $COPS_NUM is in the same country as the SIM ($_sim_mcc) - not showing roaming"
+					# once per network, not on every poll: the line used to flood the system log
+					_nr_m="/tmp/5gmodem/natroam_$_STKEY"
+					if [ "$(cat "$_nr_m" 2>/dev/null)" != "$COPS_NUM" ]; then
+						printf '%s' "$COPS_NUM" > "$_nr_m" 2>/dev/null
+						logger -t 5gmodem "network $COPS_NUM is in the same country as the SIM ($_sim_mcc) - not showing roaming"
+					fi
 				fi
 				;;
 		esac

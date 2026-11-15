@@ -1,0 +1,121 @@
+/* Alignment page (align.js); loaded once by the view. Shared tokens and tiles are in modem.css. */
+.tg-align {
+  --tg-align-ok: #22a559;
+  --tg-align-warn: #e0a100;
+  --tg-align-bad: #e5484d;
+}
+
+/* header card in the Network-page layout (tginfo-general), as on the GPS page */
+.tg-align-title .tg-align-pillm { display: none; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.tg-align-ico { color: var(--tg-accent); }
+.tg-align-ico.ok { color: var(--tg-align-ok); }
+.tg-align-ico.warn { color: var(--tg-align-warn); }
+.tg-align-ico.bad { color: var(--tg-align-bad); }
+.tg-align-ico.off { color: var(--tg-muted); }
+
+.tg-align-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; line-height: 1.3; }
+.tg-align-pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.tg-align-pill.ok { color: var(--tg-align-ok); }
+.tg-align-pill.warn { color: var(--tg-align-warn); }
+.tg-align-pill.bad { color: var(--tg-align-bad); }
+.tg-align-pill.off { color: var(--tg-muted); }
+.tg-align-pill.acc { color: var(--tg-accent); }
+
+/* tiles: tg-hist-card from the Network page */
+.tg-align .tg-hist-name b { font-size: 12px; font-weight: 600; color: var(--tg-muted); }
+.tg-align .tg-hist-now.dash { color: var(--tg-muted); font-weight: 500; }
+.tg-align .tg-hist-card .tg-mbar { min-height: 0; }
+.tg-align .tg-hist-card .tg-mbar-t { flex: 1 1 60px; min-width: 40px; height: 6px; }
+.tg-align .tg-hist-f > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* collapsible blocks (collapsibleSection of 5gdetail.js, with a summary) */
+.tg-align h3.tg-align-coll { display: flex; align-items: center; gap: .35em; cursor: pointer; user-select: none; margin-bottom: 0; }
+.tg-align h3.tg-align-coll.open { margin-bottom: .6em; }
+.tg-align-chev { display: inline-flex; transition: transform .15s ease; }
+.tg-align-chev.open { transform: rotate(180deg); }
+.tg-align-chev svg { display: block; }
+.tg-align-sum { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--tg-muted); text-align: right; }
+.tg-align-sum:empty { display: none; }
+
+.tg-align-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tg-align-actions .grow { flex: 1 1 auto; }
+.tg-align-actions .cbi-button { margin: 0 !important; }
+.tg-align .cbi-button .tg-align-i { display: inline-flex; vertical-align: -3px; margin-right: 5px; }
+.tg-align .cbi-button .tg-align-i svg { display: block; }
+
+@media (max-width: 700px) {
+  .tg-align-head .tginfo-general { gap: .9em; flex-wrap: nowrap; }
+  .tg-align-title .tg-align-pillm { display: inline-flex; }
+  .tg-align .tg-hist-card { padding: 6px 8px; }
+  .tg-align .tg-hist-now { font-size: 15px; }
+  .tg-align h3.tg-align-coll { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .35em; }
+  .tg-align h3.tg-align-coll .tg-align-sum { grid-column: 2; margin-left: 0; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-align-chev { transition: none; }
+}
+
+/* ===== Alignment page (align.js); this replaces the inline <style> the view used to build ===== */
+.tg-align-head .tginfo-right { align-items: flex-end; }
+.tg-align-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; justify-content: flex-end; }
+.tg-align .cbi-button.tg-align-snd { font-weight: 600; margin: 0 !important; }
+.tg-align-ivl { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--tg-muted); white-space: nowrap; margin: 0; }
+.tg-align select.tg-align-ival { width: auto !important; min-width: 76px; margin: 0; font-variant-numeric: tabular-nums; }
+.tg-align-main.tgt::after { content: ""; display: inline-block; width: 13px; height: 13px; margin-left: 6px; vertical-align: -1px; border-radius: 50%; border: 3px double var(--tg-accent); box-sizing: border-box; }
+
+.tg-align-big { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; }
+/* four identical cards: same rows, the hint pinned to the bottom so a wrapped hint does not shift the bar */
+.tg-align-big .tg-hist-card { padding: 10px 12px; grid-template-rows: auto auto auto 1fr; }
+.tg-align-big .tg-hist-f { align-self: end; }
+.tg-align-big .tg-hist-now { font-size: 26px; }
+.tg-align-big .tg-hist-f { white-space: normal; }
+.tg-align-big .tg-hist-f > span { overflow: visible; }
+.tg-align-trend { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tg-align-trend.up { color: var(--tg-align-ok); }
+.tg-align-trend.down { color: var(--tg-align-bad); }
+
+.tg-align-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; align-items: stretch; margin: 0 0 14px; }
+.tg-align-grid > .cbi-section { margin: 0 !important; min-width: 0; }
+.tg-align-chart { width: 100%; height: 190px; display: block; }
+
+.tg-align-bal { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-bottom: 8px; font-size: 12.5px; color: var(--tg-muted); }
+.tg-align-rx { display: grid; grid-template-columns: 52px repeat(4, minmax(0, 1fr)); gap: 4px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tg-align-rx > div { padding: 5px 6px; border-radius: 5px; text-align: center; }
+.tg-align-rx .h { color: var(--tg-muted); font-weight: 600; }
+.tg-align-rx .l { text-align: left; color: var(--tg-muted); font-weight: 600; }
+.tg-align-rx .v { background: rgba(127,127,127,.08); font-weight: 600; }
+
+.tg-align-hint { font-size: 12.5px; color: var(--tg-muted); }
+.tg-align-tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.tg-align-tbl th { text-align: left; font-weight: 600; color: var(--tg-muted); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid rgba(128,128,128,.25); }
+.tg-align-tbl td { padding: 7px 8px; border-bottom: 1px solid rgba(128,128,128,.18); }
+.tg-align-tbl td.b, .tg-align-tbl td.v { font-weight: 600; }
+.tg-align-tbl td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tg-align-tbl tr.pick { cursor: pointer; }
+.tg-align-tbl tr.pick:hover td { background: rgba(127,127,127,.06); }
+.tg-align-tbl tr.tgt td { background: rgba(0,149,255,.08); font-weight: 700; }
+.tg-align-tbl tr.tgt td:first-child { box-shadow: inset 3px 0 0 var(--tg-accent); }
+.tg-align-tbl tr.tgt .tg-align-i { color: var(--tg-accent); display: inline-flex; vertical-align: -2px; margin-left: 5px; }
+.tg-align-tbl .tg-align-i svg { display: block; }
+
+.tg-align-sli { display: grid; grid-template-columns: 180px minmax(0, 260px) 44px; gap: 10px; align-items: center; font-size: 13px; padding: 4px 0; }
+.tg-align-sli label { font-weight: 600; margin: 0; }
+.tg-align-sli input[type=range] { width: 100%; min-width: 0; margin: 0; accent-color: var(--tg-accent); }
+
+.tg-align-step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px 10px; font-size: 13px; align-items: start; }
+.tg-align-step b { width: 22px; height: 22px; border-radius: 50%; background: rgba(0,149,255,.12); color: var(--tg-accent); display: grid; place-items: center; font-size: 12px; }
+.tg-align-step span { padding-top: 2px; }
+
+@media (max-width: 700px) {
+  .tg-align-head .tginfo-general { flex-wrap: wrap; }
+  .tg-align-head .tginfo-status { flex: 1 1 0; }
+  .tg-align-head .tginfo-right { flex: 1 1 100%; margin-left: 0; align-items: stretch; }
+  .tg-align-head .tginfo-right > .tg-align-pill { display: none; }
+  .tg-align-ctl { justify-content: space-between; }
+  .tg-align-big { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .tg-align-big .tg-hist-now { font-size: 22px; }
+  .tg-align-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .tg-align-chart { height: 160px; }
+  .tg-align-tbl .hm { display: none; }
+  .tg-align-sli { grid-template-columns: 38% minmax(0, 1fr) 40px; }
+}

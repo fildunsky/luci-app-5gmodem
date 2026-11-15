@@ -155,6 +155,20 @@ tele_write() {
 		_str ext_ip6 "$_te_xip6"
 	fi
 	[ -n "$_fresh" ] && [ "$(_g publish_phone)" = "1" ] && _str phone "$(_jf phone | tr -cd '+0-9')"
+	# the position costs one AT query or a 2 s NMEA read per tick, so it is opt-in (docs/subsystems/gps.md)
+	if [ "$(_g publish_gps)" = "1" ] && [ -x /usr/share/5gmodem/gps.sh ]; then
+		_tg=$(/usr/share/5gmodem/gps.sh status 2>/dev/null)
+		_tg_f=$(jsonfilter -s "$_tg" -e '@.fix' 2>/dev/null)
+		case "$_tg_f" in [0-9]) _num gps_fix "$_tg_f" ;; esac
+		if [ -n "$_tg_f" ] && [ "$_tg_f" != 0 ]; then
+			for _tg_k in lat lon alt speed course sats hdop; do
+				_tg_v=$(jsonfilter -s "$_tg" -e "@.$_tg_k" 2>/dev/null)
+				case "$_tg_v" in
+					-[0-9]*|[0-9]*) case "${_tg_v#-}" in *[!0-9.]*) ;; *) _num "gps_$_tg_k" "$_tg_v" ;; esac ;;
+				esac
+			done
+		fi
+	fi
 
 	if [ -n "$_fresh" ]; then
 		case "$_J" in
@@ -298,6 +312,16 @@ tele_discovery() {
 		_disc ext_ip6 "External IPv6"    "" ""
 	fi
 	[ "$(_g publish_phone)" = "1" ] && _disc phone "Phone number" "" ""
+	if [ "$(_g publish_gps)" = "1" ]; then
+		_disc gps_fix    "GNSS fix"   ""     ""
+		_disc gps_lat    "Latitude"   "°"    ""
+		_disc gps_lon    "Longitude"  "°"    ""
+		_disc gps_alt    "Altitude"   "m"    distance
+		_disc gps_speed  "Speed"      "km/h" speed
+		_disc gps_course "Course"     "°"    ""
+		_disc gps_sats   "Satellites" ""     ""
+		_disc gps_hdop   "HDOP"       ""     ""
+	fi
 	if [ -n "$_disc_fail" ]; then
 		echo '{"error":"broker rejected the publish"}'
 		return 1

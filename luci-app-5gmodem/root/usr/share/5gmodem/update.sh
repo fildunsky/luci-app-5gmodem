@@ -119,10 +119,15 @@ check)
 	;;
 
 install)
-	if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
-		echo '{"started":true,"already":true}'
-		exit 0
+	# mkdir is the atomic part: two calls at the same moment used to pass the pid test both and
+	# write the same package file. A directory left by a killed worker is taken over.
+	if ! mkdir "$LOCK.d" 2>/dev/null; then
+		if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
+			echo '{"started":true,"already":true}'
+			exit 0
+		fi
 	fi
+	echo "$$" > "$LOCK" 2>/dev/null
 	rm -f "$STATUS" "$STATUS.tmp" "$LOG"
 	echo '{"running":true,"stage":"prepare"}' > "$STATUS"
 	echo '{"started":true}'
@@ -170,6 +175,9 @@ install)
 				ACC=""
 			fi
 			TOTAL=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='$NAME'].size" 2>/dev/null)
+			# "sha256:<hex>" published by GitHub for the asset; older releases have none
+			SUM=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='$NAME'].digest" 2>/dev/null \
+				| sed -n 's/^sha256:\([0-9a-fA-F]\{64\}\)$/\1/p' | tr 'A-F' 'a-f')
 			case "$TOTAL" in ''|*[!0-9]*) TOTAL=0 ;; esac
 			[ -n "$URL" ] || { fail "asset_pending"; return; }
 
@@ -196,6 +204,13 @@ install)
 			_got=$(fsize "$F")
 			if [ "$TOTAL" -gt 0 ] && [ "$_got" != "$TOTAL" ]; then
 				rm -f "$F"; fail "download_incomplete"; return
+			fi
+			if [ -n "$SUM" ] && command -v sha256sum >/dev/null 2>&1; then
+				_sum=$(sha256sum "$F" 2>/dev/null | cut -c1-64)
+				if [ "$_sum" != "$SUM" ]; then
+					logger -t 5gmodem "update: checksum mismatch for $NAME - the file is not installed"
+					rm -f "$F"; fail "download_incomplete"; return
+				fi
 			fi
 
 			rm -f "$STEP" "$F.rc"
@@ -248,12 +263,11 @@ install)
 			fi
 			fail "version_mismatch"
 		}
-		read -r _upid _ < /proc/self/stat 2>/dev/null
-		echo "$_upid" > "$LOCK" 2>/dev/null
 		do_install > "$STATUS.res" 2>/dev/null
 		mv "$STATUS.res" "$STATUS"
-		rm -f "$LOCK"
+		rm -f "$LOCK"; rmdir "$LOCK.d" 2>/dev/null
 	) >/dev/null 2>&1 </dev/null &
+	echo "$!" > "$LOCK" 2>/dev/null
 	sleep 1
 	exit 0
 	;;
@@ -275,7 +289,17 @@ devs)
 	;;
 
 status)
-	if [ -s "$STATUS" ]; then
+	if [ -s "$STATUS" ] && grep -q '"running":true' "$STATUS" 2>/dev/null \
+	   && ! { [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; }; then
+		# the worker is gone (killed, out of memory) without writing a result
+		sleep 1
+		if grep -q '"running":true' "$STATUS" 2>/dev/null; then
+			echo '{"success":false,"error":"install_failed","detail":"the update worker stopped without a result"}'
+			rm -f "$LOCK"; rmdir "$LOCK.d" 2>/dev/null
+		else
+			cat "$STATUS"
+		fi
+	elif [ -s "$STATUS" ]; then
 		cat "$STATUS"
 	elif [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
 		echo '{"running":true}'

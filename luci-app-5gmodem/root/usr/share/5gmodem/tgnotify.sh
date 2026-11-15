@@ -102,11 +102,12 @@ _hook_send() {
 		"$(_js "$(printf '%s' "$1" | utf8_fix)")" "$(_js "$2")" "$(_js "$3")" "$(_js "$(printf '%s' "$4" | utf8_fix)")" \
 		"$(_js "$SFI_HOST")" "$(_js "$SFI_MODEL")" "$(_js "$SFI_OP")" "$(_js "$SFI_PHONE")" "$(_js "$5")")
 	if [ -n "$HOOK_HDR" ]; then
-		_hs_c=$(printf 'header = "%s"\n' "$(printf '%s' "$HOOK_HDR" | sed 's/\\/\\\\/g; s/"/\\"/g')" | curl -s -m 20 -o "$HOOKLOG" -w '%{http_code}' -K - \
-			-H 'Content-Type: application/json' --data-binary "$_hs_j" "$HOOK_URL" 2>/dev/null)
+		# the URL (it can carry a token) and the header go through stdin, not argv
+		_hs_c=$(printf 'url = "%s"\nheader = "%s"\n' "$(curl_kq "$HOOK_URL")" "$(curl_kq "$HOOK_HDR")" | curl -s -m 20 -o "$HOOKLOG" -w '%{http_code}' -K - \
+			-H 'Content-Type: application/json' --data-binary "$_hs_j" 2>/dev/null)
 	else
-		_hs_c=$(curl -s -m 20 -o "$HOOKLOG" -w '%{http_code}' \
-			-H 'Content-Type: application/json' --data-binary "$_hs_j" "$HOOK_URL" 2>/dev/null)
+		_hs_c=$(printf 'url = "%s"\n' "$(curl_kq "$HOOK_URL")" | curl -s -m 20 -o "$HOOKLOG" -w '%{http_code}' -K - \
+			-H 'Content-Type: application/json' --data-binary "$_hs_j" 2>/dev/null)
 	fi
 	[ "$_hs_c" = 000 ] && printf 'no reply from %s' "${HOOK_URL%%\?*}" > "$HOOKLOG" 2>/dev/null
 	case "$_hs_c" in 2??) printf 'ok' > "$HOOKLOG" 2>/dev/null ;; esac
@@ -115,30 +116,8 @@ _hook_send() {
 
 . "$RES/lib.sh" 2>/dev/null
 
-_TG_CAPI=http://127.0.0.1:9090
-_tg_capi() {
-	if [ -n "$_TG_CSEC" ]; then
-		curl -s -m 3 -H "Authorization: Bearer $_TG_CSEC" "$@" 2>/dev/null
-	else
-		curl -s -m 3 "$@" 2>/dev/null
-	fi
-}
-
-_tg_proxy_port() {
-	_tp_f=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
-		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
-	case "$_tp_f" in ''|0) ;; *) printf '%s' "$_tp_f"; return 0 ;; esac
-	_TG_CSEC=$(sed -n "s/^ *secret *: *[\"']*\([^\"' ]*\).*/\1/p" \
-		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
-	_tp_r=$(_tg_capi "$_TG_CAPI/configs" | jsonfilter -e '@["mixed-port"]' 2>/dev/null)
-	case "$_tp_r" in ''|*[!0-9]*) return 1 ;; esac
-	if [ "$_tp_r" = "0" ]; then
-		_tg_capi -X PATCH "$_TG_CAPI/configs" -d '{"mixed-port":7895}' -o /dev/null || return 1
-		_tp_r=7895
-		logger -t 5gmodem "telegram: direct path to api.telegram.org is blocked - opened clash mixed-port 7895 (API, 127.0.0.1 only)"
-	fi
-	printf '%s' "$_tp_r"
-}
+# the clash HTTP proxy port: from its config.yaml, see net_proxy_port in lib.sh
+_tg_proxy_port() { net_proxy_port; }
 
 _TG_DDEAD=/tmp/5gmodem/tg_direct_dead
 _tg_direct_dead() {
@@ -580,6 +559,10 @@ commands() {
 
 	_co_i=0
 	_co_max="$_co_off"
+	# Telegram keeps undelivered updates for about a day: after an outage every queued "reboot"
+	# or /sms would run at once. Messages older than 10 minutes are not executed.
+	_co_now=$(date +%s 2>/dev/null); case "$_co_now" in ''|*[!0-9]*) _co_now=0 ;; esac
+	_co_old=0
 	while [ "$_co_i" -lt 10 ]; do
 		_co_u=$(printf '%s' "$_co_j" | jsonfilter -e "@.result[$_co_i].update_id" 2>/dev/null)
 		[ -n "$_co_u" ] || break
@@ -597,6 +580,14 @@ commands() {
 			_log "command from foreign chat $_co_chat ignored"
 			continue
 		}
+		_co_date=$(printf '%s' "$_co_j" | jsonfilter -e "@.result[$((_co_i - 1))].message.date" 2>/dev/null)
+		case "$_co_date" in ''|*[!0-9]*) _co_date=0 ;; esac
+		# only with a sane router clock (after 2023): before NTP sync nothing looks old
+		if [ "$_co_date" -gt 0 ] && [ "$_co_now" -gt 1700000000 ] && [ $((_co_now - _co_date)) -gt 600 ]; then
+			_co_old=$((_co_old + 1))
+			_log "chat message skipped: sent $(( (_co_now - _co_date) / 60 )) min ago"
+			continue
+		fi
 		case "$_co_txt" in
 			/sms\ *)
 				_co_rest=${_co_txt#/sms }
@@ -693,6 +684,7 @@ $(_tg_list)" ;;
 				esac ;;
 		esac
 	done
+	[ "$_co_old" -gt 0 ] && _tg_reply "Пропущено старых сообщений: $_co_old (отправлены больше 10 минут назад, пока роутер был не на связи). Повторите команду, если она ещё нужна."
 	[ "$_co_max" != "$_co_off" ] && printf '%s' "$_co_max" > "$OFFSET" 2>/dev/null
 	return 0
 }

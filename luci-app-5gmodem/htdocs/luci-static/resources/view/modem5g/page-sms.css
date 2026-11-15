@@ -1,0 +1,252 @@
+/* SMS tab (sms.js): Inbox and Outbox on one page. Header card like the Network page, conversations
+   on the left, the open conversation or a new message on the right, the old card feed as a second
+   view. Loaded by sms.js as <link id="tg-sms-css">. See docs/subsystems/sms.md#sms-page-smsjs. */
+.tg-sms {
+  --tg-sms-ok: #22a559;
+  --tg-sms-warn: #e0a100;
+  --tg-sms-bad: #e5484d;
+  --tg-sms-line: rgba(128,128,128,.22);
+  --tg-sms-hover: rgba(127,127,127,.07);
+  --tg-sms-info-bg: rgba(0,149,255,.08);
+  --tg-sms-warn-bg: rgba(224,161,0,.12);
+  --tg-sms-bad-bg: rgba(229,72,77,.10);
+  --tg-sms-bub-in: rgba(127,127,127,.14);
+  --tg-sms-bub-out: var(--tg-accent, #0095ff);
+  --tg-sms-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --tg-sms-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.tg-sms svg { display: block; flex: none; }
+.tg-sms .cbi-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; margin: 0; }
+.tg-sms .cbi-button.tg-sms-ico { padding-left: 8px !important; padding-right: 8px !important; }
+.tg-sms .cbi-button[disabled] { opacity: .5; cursor: default; }
+
+/* header card */
+.tg-sms-head .tginfo-right { gap: 8px; }
+.tg-sms-ico { color: var(--tg-accent); position: relative; }
+.tg-sms-ico.off { color: var(--tg-muted); }
+.tg-sms-mem { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--tg-muted); margin-top: 4px; max-width: 360px; }
+.tg-sms-mem .tg-mbar { flex: 1 1 auto; width: auto; min-height: 0; }
+.tg-sms-mem .tg-mbar-t { height: 6px; min-width: 40px; flex: 1 1 60px; }
+.tg-sms-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; line-height: 1.3; font-family: var(--tg-sms-font); color: var(--tg-accent); }
+.tg-sms-pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.tg-sms-title .tg-sms-pill { display: none; }
+.tg-sms-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.tg-sms .tg-sms-actions .tg-sms-seg + .tg-sms-seg { margin-left: 4px; }
+.tg-sms-pager { display: inline-flex; align-items: center; gap: 4px; font-family: var(--tg-sms-mono); font-size: 12.5px; }
+.tg-sms-pager .cbi-button { padding: 2px 7px !important; min-height: 0 !important; height: auto !important; }
+.tg-sms-headm { display: none; margin-top: 10px; gap: 8px; flex-wrap: wrap; align-items: center; }
+.tg-sms-headm .grow { flex: 1 1 auto; }
+
+/* segmented switch */
+.tg-sms-seg { display: inline-flex; border: 1px solid rgba(128,128,128,.4); border-radius: 7px; overflow: hidden; flex-wrap: nowrap; max-width: 100%; vertical-align: middle; }
+.tg-sms-seg > button { font: inherit; font-size: 13px; line-height: 1.3; padding: 5px 11px; border: 0; margin: 0; background: transparent; color: inherit; cursor: pointer; white-space: nowrap; border-radius: 0; }
+.tg-sms-seg > button + button { border-left: 1px solid rgba(128,128,128,.4); }
+.tg-sms-seg > button.on { background: var(--tg-accent); color: #fff; font-weight: 600; }
+.tg-sms-seg > button:focus-visible { outline: 2px solid var(--tg-accent); outline-offset: -2px; }
+
+/* alerts above the panes */
+.tg-sms-alert { display: flex; gap: 9px; align-items: flex-start; border-radius: 8px; padding: 9px 12px; font-size: 13px; margin: 0 0 12px; border: 1px solid; }
+.tg-sms-alert.info { background: var(--tg-sms-info-bg); border-color: rgba(0,149,255,.35); }
+.tg-sms-alert.warn { background: var(--tg-sms-warn-bg); border-color: rgba(224,161,0,.45); }
+.tg-sms-alert > div { flex: 1 1 auto; min-width: 0; }
+
+/* two panes */
+.tg-sms-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 14px; align-items: stretch; margin-bottom: 14px; }
+.tg-sms .cbi-section.tg-sms-pane { margin: 0 !important; padding: 0 !important; overflow: hidden; display: flex; flex-direction: column; height: clamp(460px, 72vh, 720px); min-width: 0; }
+.tg-sms[data-view="feed"] .tg-sms-grid { grid-template-columns: minmax(0, 1fr); }
+.tg-sms[data-view="feed"] .tg-sms-thsec { display: none !important; }
+.tg-sms[data-view="feed"] .cbi-section.tg-sms-listsec { height: auto; min-height: 320px; }
+.tg-sms[data-view="feed"][data-screen="new"] .tg-sms-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+.tg-sms[data-view="feed"][data-screen="new"] .cbi-section.tg-sms-listsec { height: clamp(460px, 72vh, 720px); }
+.tg-sms:not([data-screen="new"]) .tg-sms-newsec { display: none !important; }
+.tg-sms[data-screen="new"] .tg-sms-thsec { display: none !important; }
+
+/* list pane */
+.tg-sms .tg-sms-tool { display: flex; gap: 8px; align-items: center; padding: 12px 14px !important; border-bottom: 1px solid var(--tg-sms-line); }
+.tg-sms-search { position: relative; flex: 1 1 140px; min-width: 0; }
+.tg-sms-search > span { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--tg-muted); pointer-events: none; }
+.tg-sms .tg-sms-search input { width: 100% !important; min-width: 0 !important; padding-left: 28px !important; margin: 0 !important; box-sizing: border-box; }
+.tg-sms-tool .cbi-button.on { border-color: var(--tg-accent) !important; color: var(--tg-accent); }
+.tg-sms-selbar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: var(--tg-sms-info-bg); border-bottom: 1px solid var(--tg-sms-line); flex-wrap: wrap; font-size: 13px; }
+.tg-sms-selbar b { margin-right: auto; }
+.tg-sms-prog { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 12px; border-bottom: 1px solid var(--tg-sms-line); }
+.tg-sms-prog .tg-mbar { flex: 1 1 auto; width: auto; min-height: 0; }
+.tg-sms-prog .tg-mbar-t { height: 6px; }
+.tg-sms-items { flex: 1 1 auto; overflow: auto; min-height: 0; }
+.tg-sms .tg-sms-item { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 2px 10px; padding: 11px 14px !important; border-bottom: 1px solid var(--tg-sms-line); border-left: 3px solid transparent; cursor: pointer; align-items: center; }
+.tg-sms-item:hover { background: var(--tg-sms-hover); }
+.tg-sms-item:focus-visible { outline: 2px solid var(--tg-accent); outline-offset: -2px; }
+.tg-sms-item.on { background: rgba(0,149,255,.15); }
+.tg-sms-item.new { border-left-color: var(--tg-accent); }
+.tg-sms-av { grid-row: 1 / span 2; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12.5px; background: rgba(127,127,127,.16); font-family: var(--tg-sms-mono); overflow: hidden; }
+.tg-sms-av.op { background: rgba(0,149,255,.14); color: var(--tg-accent); }
+.tg-sms-item.sel .tg-sms-av { background: var(--tg-accent); color: #fff; }
+.tg-sms-from { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-sms-item.new .tg-sms-from { font-weight: 750; }
+.tg-sms-time { font-size: 11.5px; color: var(--tg-muted); white-space: nowrap; font-variant-numeric: tabular-nums; justify-self: end; }
+.tg-sms-snip { font-size: 13px; color: var(--tg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-sms-item.new .tg-sms-snip { color: inherit; }
+.tg-sms-cnt { justify-self: end; min-width: 19px; height: 19px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 700; display: grid; place-items: center; background: rgba(127,127,127,.18); box-sizing: border-box; }
+.tg-sms-item.new .tg-sms-cnt { background: var(--tg-accent); color: #fff; }
+.tg-sms-empty { display: grid; place-items: center; text-align: center; padding: 34px 16px; color: var(--tg-muted); font-size: 13px; }
+.tg-sms-empty > div { display: grid; gap: 8px; justify-items: center; max-width: 34ch; }
+.tg-sms-empty b { color: var(--tg-sms-fg, inherit); font-size: 14px; font-weight: 600; }
+.tg-sms-empty .spinning { color: inherit; }
+
+/* feed */
+/* grid-auto-rows: max-content - in a pane of fixed height (Feed + New SMS) auto rows would shrink to the
+   cards' zero minimum and draw them over each other */
+.tg-sms-feed { padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); grid-auto-rows: max-content; gap: 8px; align-content: start; align-items: start; }
+/* next to an open New SMS pane the feed is one card per row, like the conversation list */
+.tg-sms[data-screen="new"] .tg-sms-feed { grid-template-columns: minmax(0, 1fr); }
+.tg-sms-feed > .tg-sms-empty { grid-column: 1 / -1; }
+.tg-sms .tg-sms-card { display: grid !important; grid-template-columns: minmax(0, 1fr); justify-content: stretch; align-items: start; gap: 3px; text-align: left; width: 100%; height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 7px 11px !important; border-radius: 6px; font-weight: 400; line-height: 1.35; white-space: normal; cursor: pointer; box-sizing: border-box; }
+.tg-sms .tg-sms-card.new { border-left: 3px solid var(--tg-accent) !important; }
+.tg-sms .tg-sms-card.sel { border-color: var(--tg-accent) !important; background: var(--tg-sms-info-bg) !important; box-shadow: 0 0 0 1px var(--tg-accent); }
+.tg-sms-card .h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-weight: 600; min-width: 0; }
+.tg-sms-card .h > span { overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; text-align: left; }
+.tg-sms-card .h > small { flex: none; }
+.tg-sms-card .h small { font-weight: 400; color: var(--tg-muted); font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tg-sms-card .t { font-size: 13px; overflow-wrap: anywhere; }
+.tg-sms-card.new .h > span:first-child { font-weight: 750; }
+
+/* thread pane */
+.tg-sms .tg-sms-th { display: flex; align-items: center; gap: 10px; padding: 12px 16px !important; border-bottom: 1px solid var(--tg-sms-line); min-height: 40px; }
+.tg-sms-th .tg-sms-av { grid-row: auto; flex: none; }
+.tg-sms-who { min-width: 0; flex: 1 1 auto; }
+.tg-sms-who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-sms-who span { font-size: 12px; color: var(--tg-muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tg-sms-thact { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.tg-sms-thsec .tg-sms-back { display: none !important; }
+.tg-sms-body { flex: 1 1 auto; min-height: 0; padding: 14px; display: flex; flex-direction: column; gap: 8px; overflow: auto; background: rgba(127,127,127,.04); }
+.tg-sms-ph { flex: 1 1 auto; }
+.tg-sms-thsec.none .tg-sms-th,
+.tg-sms-thsec.none .tg-sms-body,
+.tg-sms-thsec.none .tg-sms-comp { display: none !important; }
+.tg-sms-thsec:not(.none) .tg-sms-ph { display: none; }
+.tg-sms-day { align-self: center; font-size: 11.5px; color: var(--tg-muted); padding: 2px 10px; border-radius: 999px; border: 1px solid var(--tg-sms-line); margin: 4px 0; }
+.tg-sms-bub { max-width: 78%; padding: 8px 11px 6px; border-radius: 12px; background: var(--tg-sms-bub-in); align-self: flex-start; border-bottom-left-radius: 4px; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.4; white-space: pre-wrap; }
+.tg-sms-bub.out { align-self: flex-end; background: var(--tg-sms-bub-out); color: #fff; border-bottom-left-radius: 12px; border-bottom-right-radius: 4px; }
+.tg-sms-bub.new { box-shadow: inset 3px 0 0 var(--tg-accent); }
+.tg-sms-bub.err { background: var(--tg-sms-bad-bg); color: inherit; border: 1px solid rgba(229,72,77,.45); }
+.tg-sms-meta { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 11px; opacity: .7; margin-top: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tg-sms-parts { font-size: 10.5px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; opacity: .85; }
+.tg-sms-outnote { align-self: flex-end; font-size: 11px; color: var(--tg-muted); }
+.tg-sms-code { display: inline-flex; align-items: center; gap: 5px; font-family: var(--tg-sms-mono); font-weight: 700; padding: 0 7px; border-radius: 6px; border: 1px dashed var(--tg-accent); color: var(--tg-accent); background: var(--tg-sms-info-bg); cursor: pointer; white-space: nowrap; }
+.tg-sms-code.copied { border-style: solid; }
+.tg-sms-code.copied::after { content: "\2713"; font-family: var(--tg-sms-font); }
+.tg-sms-code.copied > span { display: none; }
+.tg-sms-bub a, .tg-sms-card a { color: var(--tg-accent); }
+.tg-sms-bub.out a { color: inherit; }
+
+/* composer */
+.tg-sms-comp { border-top: 1px solid var(--tg-sms-line); padding: 10px 12px; display: grid; gap: 8px; }
+.tg-sms-comp .wrap { position: relative; }
+.tg-sms .tg-sms-comp textarea { display: block; width: 100% !important; max-width: none !important; min-height: 40px; padding-right: 112px !important; box-sizing: border-box; resize: vertical; margin: 0 !important; }
+.tg-sms-cnt2 { position: absolute; right: 9px; bottom: 7px; font-size: 11.5px; color: var(--tg-muted); font-variant-numeric: tabular-nums; pointer-events: none; user-select: none; text-align: right; line-height: 1.25; }
+.tg-sms-cnt2 b { color: var(--tg-sms-warn); }
+.tg-sms-crow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; position: relative; }
+.tg-sms-crow .grow { flex: 1 1 160px; min-width: 0; }
+.tg-sms-note { font-size: 12px; color: var(--tg-muted); }
+.tg-sms-crow .tg-sms-seg > button { font-size: 12px; padding: 3px 9px; }
+.tg-sms-menu { position: absolute; right: 0; bottom: calc(100% + 4px); z-index: 5; display: grid; padding: 4px; border-radius: 8px; border: 1px solid var(--tg-sms-line); background: var(--background-color-high, #fff); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+:root[data-darkmode="true"] .tg-sms-menu { background: #232a35; }
+@media (prefers-color-scheme: dark) { .tg-sms-menu { background: var(--background-color-high, #232a35); } }
+.tg-sms-stbox { display: grid; gap: 6px; }
+.tg-sms-stbox:empty { display: none; }
+.tg-sms-st { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; padding: 8px 10px; border-radius: 8px; }
+.tg-sms-st > div { flex: 1 1 auto; min-width: 0; }
+.tg-sms-st.ok { background: rgba(34,165,89,.10); color: var(--tg-sms-ok); }
+.tg-sms-st.q { background: var(--tg-sms-warn-bg); }
+.tg-sms-st.bad { background: var(--tg-sms-bad-bg); }
+.tg-sms-st pre { margin: 2px 0 0; padding: 0; background: transparent; border: 0; font-family: var(--tg-sms-mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; color: inherit; }
+.tg-sms-log { font-family: var(--tg-sms-mono); font-size: 12px; white-space: pre-wrap; padding: 8px 10px; border-radius: 8px; background: var(--tg-term-bg, #161c26); color: var(--tg-term-fg, #d6e0ea); margin: 0; max-height: 220px; overflow: auto; }
+
+/* new message */
+.tg-sms-to { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--tg-sms-line); }
+.tg-sms-to label { color: var(--tg-muted); font-size: 13px; }
+.tg-sms .tg-sms-to input { width: 100% !important; min-width: 0 !important; margin: 0 !important; font-family: var(--tg-sms-mono); box-sizing: border-box; }
+.tg-sms-chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--tg-sms-line); max-height: 96px; overflow: auto; }
+.tg-sms-chip { font: inherit; font-size: 12.5px; padding: 2px 9px; border-radius: 999px; border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; line-height: 1.5; }
+.tg-sms-chip.on { border-color: var(--tg-accent); color: var(--tg-accent); font-weight: 600; }
+.tg-sms-newsec .tg-sms-body { justify-content: flex-end; }
+.tg-sms-newsec .tg-sms-back { display: inline-flex; }
+
+.tg-sms-fab { display: none !important; }
+
+/* settings */
+.tg-sms-set h3.tg-sms-coll { display: flex; align-items: center; gap: .35em; cursor: pointer; user-select: none; margin-bottom: 0; }
+.tg-sms-set h3.tg-sms-coll[aria-expanded="true"] { margin-bottom: .5em; }
+.tg-sms-set h3.tg-sms-coll:focus-visible { outline: 2px solid var(--tg-accent); outline-offset: 2px; }
+.tg-sms-chev { display: inline-flex; transition: transform .15s ease; }
+.tg-sms-chev.open { transform: rotate(180deg); }
+.tg-sms-collsum { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--tg-muted); text-align: right; }
+.tg-sms-set h3.tg-sms-coll[aria-expanded="true"] .tg-sms-collsum { display: none; }
+.tg-sms-set .cbi-map { margin: 0; }
+.tg-sms-set .cbi-map > .cbi-section,
+.tg-sms-set .cbi-map .cbi-section { box-shadow: none !important; border: 0 !important; padding-left: 0 !important; padding-right: 0 !important; margin: 0 !important; background: transparent !important; }
+
+@media (max-width: 700px) {
+  .tg-sms-head .tginfo-general { gap: .9em; flex-wrap: nowrap; }
+  .tg-sms-head .tginfo-right { display: none; }
+  .tg-sms-headm { display: flex; }
+  .tg-sms-title .tg-sms-pill.has { display: inline-flex; }
+  .tg-sms-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 12px; }
+  .tg-sms .cbi-section.tg-sms-pane { height: auto !important; min-height: 0; overflow: visible; }
+  .tg-sms-items { overflow: visible; }
+  .tg-sms-body { overflow: visible; min-height: 180px; }
+  .tg-sms-comp { position: sticky; bottom: 0; z-index: 2; background: var(--background-color-high, #fff); border-radius: 0 0 8px 8px; }
+  :root[data-darkmode="true"] .tg-sms-comp { background: #1a2029; }
+  .tg-sms-thsec .tg-sms-back { display: inline-flex !important; }
+  .tg-sms-thact .lbl { display: none; }
+  .tg-sms-thact { flex-wrap: nowrap; gap: 6px; }
+  .tg-sms-tool { gap: 6px; }
+  .tg-sms-tool .tg-sms-seg > button { padding: 5px 8px; }
+  .tg-sms-bub { max-width: 88%; }
+  .tg-sms-feed { grid-template-columns: minmax(0, 1fr); }
+  .tg-sms .tg-sms-newbtn { display: none !important; }
+  .tg-sms-to { grid-template-columns: minmax(0, 1fr) auto; }
+  .tg-sms-to label { grid-column: 1 / -1; }
+  .tg-sms-collsum { display: none; }
+  /* one screen at a time: list, conversation or new message */
+  .tg-sms[data-screen="list"] .tg-sms-thsec,
+  .tg-sms[data-screen="list"] .tg-sms-newsec { display: none !important; }
+  .tg-sms[data-screen="thread"] .tg-sms-hidem,
+  .tg-sms[data-screen="thread"] .tg-sms-listsec,
+  .tg-sms[data-screen="new"] .tg-sms-hidem,
+  .tg-sms[data-screen="new"] .tg-sms-listsec { display: none !important; }
+  .tg-sms[data-screen="list"] .tg-sms-fab { display: inline-flex !important; position: fixed; right: 18px; bottom: 18px; z-index: 50; width: 52px; height: 52px; border-radius: 50% !important; padding: 0 !important; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-sms-chev { transition: none; }
+}
+
+/* the list and thread panes are fixed-height flex columns: without flex:none their header rows
+   were squeezed (a 12px padding around a 38px avatar ended up 43px high, everything touched the edges) */
+.tg-sms .tg-sms-th,
+.tg-sms .tg-sms-tool,
+.tg-sms .tg-sms-selbar,
+.tg-sms .tg-sms-prog { flex: none !important; }
+.tg-sms .tg-sms-th { min-height: 64px; padding: 12px 16px !important; }
+
+/* the search field lost the theme's input metrics (20px high, square corners): give it a normal field look */
+.tg-sms .tg-sms-search input {
+  height: 34px !important;
+  line-height: 20px !important;
+  padding: 6px 12px 6px 32px !important;
+  border: 1px solid rgba(127, 127, 127, .4) !important;
+  border-radius: 8px !important;
+  background: rgba(127, 127, 127, .08) !important;
+  color: inherit !important;
+  font-size: 13px !important;
+  box-shadow: none !important;
+}
+.tg-sms .tg-sms-search input:focus { border-color: var(--tg-accent) !important; outline: none; }
+.tg-sms-search > span { left: 11px; display: inline-flex; }
+
+/* selection bar: counter and the three actions on one line, also in the 360px list pane and on phones */
+.tg-sms .tg-sms-selbar { flex-wrap: nowrap; gap: 3px; padding: 6px 10px; }
+.tg-sms .tg-sms-selbar b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-sms .tg-sms-selbar .cbi-button { flex: none; margin: 0 !important; padding: 0 6px !important; white-space: nowrap; font-size: 13px; }
+/* the icons cost ~20px per button, the counter needs that room; the labels are plain enough */
+.tg-sms .tg-sms-selbar .cbi-button > .tg-sms-i { display: none !important; }

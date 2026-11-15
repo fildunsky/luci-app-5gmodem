@@ -1708,8 +1708,8 @@ msgstr "USSD 設置"
 msgid "AT settings"
 msgstr "AT 設置"
 
-msgid "This option deletes all SMS messages, including ones not visible on the Inbox tab"
-msgstr "此選項會刪除所有簡訊,包括收件箱標籤頁中不可見的簡訊"
+msgid "This option deletes all SMS messages, including ones not visible on the SMS tab"
+msgstr "此選項會刪除所有簡訊,包括簡訊標籤頁中不可見的簡訊"
 
 msgid "Select 'No' if the router has a single LED or the LED serves several purposes. This option needs an LED defined in the system to work reliably when the LED is shared."
 msgstr "如果路由器只有一個 LED 或該 LED 有多種用途,請選擇「否」。當 LED 被共用時,此選項需要系統中已定義的 LED 才能可靠工作。"
@@ -1801,14 +1801,8 @@ msgstr "安裝更新"
 msgid "Release page"
 msgstr "發布頁面"
 
-msgid "Current version"
-msgstr "當前版本"
-
 msgid "It also installs the translation if available"
 msgstr "如有可用翻譯也會一併安裝"
-
-msgid "Checking the latest release…"
-msgstr "正在檢查最新版本…"
 
 msgid "Could not check for updates"
 msgstr "無法檢查更新"
@@ -2046,12 +2040,6 @@ msgstr "請稍候，正在讀取 eUICC——更新配置文件列表可能較慢
 
 msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
 msgstr "eSIM 配置文件已下載。正在重啟數據機以使其生效..."
-
-msgid "Update installed. Refreshing resources…"
-msgstr "更新已安裝。正在刷新資源…"
-
-msgid "Update installed. Signing out to apply it…"
-msgstr "更新已安裝。正在退出登錄以使其生效…"
 
 msgid "IP type"
 msgstr "IP 類型"
@@ -3832,14 +3820,9 @@ msgstr "收集統計數據"
 msgid "Series live in RAM and are lost on reboot."
 msgstr "數據序列保存在內存中，重啟後丟失。"
 
-msgid "Keep monthly traffic across reboots"
-msgstr "重啟後保留每月流量"
-
 msgid "Monthly totals are written to flash about once an hour. Ping series are never written there."
 msgstr "每月總量約每小時寫入快閃記憶體一次。Ping 序列從不寫入快閃記憶體。"
 
-msgid "Reset statistics"
-msgstr "重置統計數據"
 
 msgid "Uplink latency"
 msgstr "上聯延遲"
@@ -3997,14 +3980,6 @@ msgstr "號碼"
 msgid "text"
 msgstr "內容"
 
-msgid "APN database"
-msgstr "APN 資料庫"
-
-msgid "Check the APN database"
-msgstr "檢查 APN 資料庫"
-
-msgid "Update the APN database"
-msgstr "更新 APN 資料庫"
 
 msgid "Checking the APN database…"
 msgstr "正在檢查 APN 資料庫…"
@@ -4069,8 +4044,6 @@ msgstr "優先級編號"
 msgid "Icons"
 msgstr "圖示"
 
-msgid "Large translucent mark on each uplink card"
-msgstr "每張上聯卡片上的大號半透明標記"
 
 msgid "Free the modem and read eSIM"
 msgstr "釋放模塊並讀取 eSIM"
@@ -4690,8 +4663,11 @@ msgstr "聲音：開"
 msgid "Sound: off"
 msgstr "聲音：關"
 
-msgid "Interval, s"
-msgstr "間隔（秒）"
+msgid "Refresh every"
+msgstr "更新間隔"
+
+msgid "%s s"
+msgstr "%s 秒"
 
 msgid "excellent"
 msgstr "極好"
@@ -5137,8 +5113,8 @@ msgstr "與“外網 IP”共用 — 在“專家選項”中設定"
 msgid "Show the external address"
 msgstr "顯示外部位址"
 
-msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
-msgstr "把它顯示在電信業者分配的位址旁邊——在數據機卡片中形如“IPv4: 10.x.x.x | 1.2.3.4”。在 CGNAT 或隧道後面二者並不相同，正是這個差別說明路由器自身的流量是否走了 VPN。預設關閉：這會向第三方服務發出請求。"
+msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. It is a request to a third-party service."
+msgstr "把它顯示在電信業者分配的位址旁邊——在數據機卡片中形如“IPv4: 10.x.x.x | 1.2.3.4”。在 CGNAT 或隧道後面二者並不相同，正是這個差別說明路由器自身的流量是否走了 VPN。這會向第三方服務發出請求。"
 
 msgid "Used only when the service above returns an address but no country: the flag is then resolved by a second request, for the country alone. Use {ip} as the address placeholder."
 msgstr "只有當上面的服務回傳了位址卻沒有國家時才用到：這時會再發一次請求，只為查國家，從而得到國旗。用 {ip} 作為位址佔位符。"
@@ -5356,9 +5332,6 @@ msgstr "最大"
 msgid "min"
 msgstr "最小"
 
-msgid "RSRP / SINR"
-msgstr "RSRP / SINR"
-
 msgid "Show signal history"
 msgstr "顯示訊號歷史"
 
@@ -5394,9 +5367,6 @@ msgstr "此數據機不支援"
 
 msgid "the modem did not accept it"
 msgstr "數據機未接受"
-
-msgid "Collect signal in the background"
-msgstr "在背景收集訊號"
 
 msgid "Off"
 msgstr "關閉"
@@ -5944,8 +5914,8 @@ msgstr "藍色：LTE 且已連線。綠色：已註冊 3G 或 2G。紅色閃爍�
 msgid "Delete from the modem after forwarding"
 msgstr "轉發後從數據機刪除"
 
-msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
-msgstr "當所有已啟用的管道（Telegram、ntfy、Webhook）都已送達，且（如已啟用）SMS 指令已檢查後，訊息將從數據機中刪除。未開啟「在路由器記憶體中保存訊息」時，它也會從收件匣中消失。"
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the SMS tab too."
+msgstr "當所有已啟用的管道（Telegram、ntfy、Webhook）都已送達，且（如已啟用）SMS 指令已檢查後，訊息將從數據機中刪除。未開啟「在路由器記憶體中保存訊息」時，它也會從簡訊標籤頁中消失。"
 
 msgid "Follow network address changes"
 msgstr "追蹤網路分配的位址變化"
@@ -6169,3 +6139,1329 @@ msgstr "未啟用時上傳速度常停留在 1-2 Mbit/s。此選擇會被保存�
 
 msgid "Upload is aggregated too: %s"
 msgstr "上傳也已聚合：%s"
+
+msgid "%s km/h"
+msgstr "%s 公里/小時"
+
+msgid "%s m"
+msgstr "%s 公尺"
+
+msgid "2D"
+msgstr "2D"
+
+msgid "3D"
+msgstr "3D"
+
+msgid "2GIS"
+msgstr "2GIS"
+
+msgid "AT commands"
+msgstr "AT 指令"
+
+msgid "Add the GNSS position, speed and satellites of the modem to the published file and to MQTT. Off by default: a stream of coordinates is a log of where the router has been. Each update asks the modem for the position."
+msgstr "將數據機的 GNSS 位置、速度和衛星數加入發佈檔案和 MQTT。預設關閉：連續的座標就是路由器去過哪裡的紀錄。每次更新都會向數據機查詢位置。"
+
+msgid "Address template of the map tiles with {z}, {x} and {y}. Empty - OpenStreetMap. Use your own server if OpenStreetMap does not open from your network."
+msgstr "包含 {z}、{x} 和 {y} 的地圖圖磚位址範本。留空則使用 OpenStreetMap。如果您的網路打不開 OpenStreetMap，請填寫自己的伺服器。"
+
+msgid "Altitude"
+msgstr "海拔"
+
+msgid "An https:// address with {z}, {x} and {y}"
+msgstr "包含 {z}、{x} 和 {y} 的 https:// 位址"
+
+msgid "Asking the modem…"
+msgstr "正在查詢數據機…"
+
+msgid "Clear track"
+msgstr "清除軌跡"
+
+msgid "Cold start"
+msgstr "冷啟動"
+
+msgid "Coordinates"
+msgstr "座標"
+
+msgid "Copied: %s"
+msgstr "已複製：%s"
+
+msgid "Copy coordinates"
+msgstr "複製座標"
+
+msgid "Could not load the map component."
+msgstr "無法載入地圖元件。"
+
+msgid "Course"
+msgstr "航向"
+
+msgid "Field reports: on some firmware the modem kept restarting in a loop after GNSS was turned off while it sat in a router. Turn it off only if you can reach the modem from a computer."
+msgstr "使用者回報：部分韌體在路由器中關閉 GNSS 後，數據機會不斷重新啟動。只有在能用電腦連接數據機時才關閉。"
+
+msgid "Fix"
+msgstr "定位"
+
+msgid "GPS"
+msgstr "GPS"
+
+msgid "Google Maps"
+msgstr "Google 地圖"
+
+msgid "HDOP (lower is more accurate)"
+msgstr "HDOP（越小越精確）"
+
+msgid "Hide the map"
+msgstr "隱藏地圖"
+
+msgid "Hot start"
+msgstr "熱啟動"
+
+msgid "Include the position"
+msgstr "包含位置"
+
+msgid "Keep the position in the center"
+msgstr "保持位置置中"
+
+msgid "Load the map as soon as the position is known instead of waiting for the \"Show on map\" button. The map service then learns the area every time the tab is opened."
+msgstr "一取得位置就載入地圖，而不等待「在地圖上顯示」按鈕。這樣每次開啟該頁時地圖服務都會得知所在區域。"
+
+msgid "Map"
+msgstr "地圖"
+
+msgid "Map tiles"
+msgstr "地圖圖磚"
+
+msgid "NMEA port %s"
+msgstr "NMEA 連接埠 %s"
+
+msgid "No GNSS receiver was found on this modem. Supported: Qualcomm modems with the QMI location service (also in MBIM mode), Quectel, SIMCom, Telit, MeiG, Fibocom (FM350 and Qualcomm-based), Foxconn/Dell (T77W968, T99W175, T99W373) and Sierra modems with a GNSS port. A receiver handled by ugps is shown too."
+msgstr "未在此數據機上找到 GNSS 接收器。支援：帶 QMI 定位服務的高通數據機（MBIM 模式下也可）、Quectel、SIMCom、Telit、MeiG、Fibocom（FM350 及高通平台）、Foxconn/Dell（T77W968、T99W175、T99W373）以及帶 GNSS 連接埠的 Sierra 數據機。由 ugps 管理的接收器也會顯示。"
+
+msgid "On this modem the GNSS setting is stored in the modem and applied by its restart: the connection drops for about a minute."
+msgstr "此數據機的 GNSS 設定儲存在數據機內，需重新啟動數據機才會生效：連線會中斷約一分鐘。"
+
+msgid "Open the map at once"
+msgstr "立即開啟地圖"
+
+msgid "OpenStreetMap"
+msgstr "OpenStreetMap"
+
+msgid "Position from the GNSS receiver built into the modem. The page asks the modem every few seconds while it is open; nothing runs in the background."
+msgstr "來自數據機內建 GNSS 接收器的位置。頁面開啟時每隔幾秒查詢一次數據機；背景不執行任何工作。"
+
+msgid "Receiver"
+msgstr "接收器"
+
+msgid "Restart the modem"
+msgstr "重新啟動數據機"
+
+msgid "Restart the search"
+msgstr "重新搜尋"
+
+msgid "Satellites (used / in view)"
+msgstr "衛星（使用 / 可見）"
+
+msgid "Show on map"
+msgstr "在地圖上顯示"
+
+msgid "Source"
+msgstr "來源"
+
+msgid "Speed"
+msgstr "速度"
+
+msgid "The \"GPS\" tab: position from the GNSS receiver of the modem and a map. It appears only for a modem with a receiver the app knows how to read."
+msgstr "「GPS」頁：數據機 GNSS 接收器提供的位置和地圖。僅在數據機帶有本應用程式可讀取的接收器時顯示。"
+
+msgid "The map tiles are loaded by your browser from the map service, which learns the approximate area shown. The track is kept only while this page is open."
+msgstr "地圖圖磚由您的瀏覽器從地圖服務載入，該服務會得知所顯示的大致區域。軌跡只在本頁開啟期間保留。"
+
+msgid "The modem did not accept the command."
+msgstr "數據機未接受該指令。"
+
+msgid "The modem restarts to apply the setting."
+msgstr "數據機正在重新啟動以套用設定。"
+
+msgid "The receiver is searching for satellites again. A cold start can take several minutes under open sky."
+msgstr "接收器正在重新搜尋衛星。冷啟動在開闊天空下也可能需要幾分鐘。"
+
+msgid "Time (UTC)"
+msgstr "時間（UTC）"
+
+msgid "Turn GNSS off"
+msgstr "關閉 GNSS"
+
+msgid "Turn GNSS on"
+msgstr "開啟 GNSS"
+
+msgid "Warm start"
+msgstr "溫啟動"
+
+msgid "Yandex Maps"
+msgstr "Yandex 地圖"
+
+msgid "blocked in the modem (GTGPSSWITCH=0)"
+msgstr "已在數據機中停用（GTGPSSWITCH=0）"
+
+msgid "searching for satellites"
+msgstr "正在搜尋衛星"
+
+msgid "ugps service"
+msgstr "ugps 服務"
+
+msgid "QMI location service"
+msgstr "QMI 定位服務"
+
+msgid "A cold start takes several minutes under open sky."
+msgstr "冷啟動在開闊天空下也需要幾分鐘。"
+
+msgid "An http:// or https:// address without a query"
+msgstr "不帶查詢參數的 http:// 或 https:// 位址"
+
+msgid "Clock from GNSS"
+msgstr "從 GNSS 校時"
+
+msgid "Cold"
+msgstr "冷"
+
+msgid "Coordinates are not determined yet"
+msgstr "尚未確定座標"
+
+msgid "E"
+msgstr "東"
+
+msgid "Fix %s"
+msgstr "定位 %s"
+
+msgid "GNSS receiver"
+msgstr "GNSS 接收器"
+
+msgid "Latitude, longitude"
+msgstr "緯度，經度"
+
+msgid "Letters, digits, dot, dash and underscore, up to 64"
+msgstr "字母、數字、點、短橫線和底線，最多 64 個"
+
+msgid "Load the map"
+msgstr "載入地圖"
+
+msgid "Load the map tiles as soon as the position is known. Off: the map waits for the \"Load the map\" button. The map service learns the area shown."
+msgstr "一取得位置就載入地圖圖磚。關閉時地圖等待「載入地圖」按鈕。地圖服務會得知所顯示的區域。"
+
+msgid "Loading the map…"
+msgstr "正在載入地圖…"
+
+msgid "N"
+msgstr "北"
+
+msgid "NE"
+msgstr "東北"
+
+msgid "NMEA over the network"
+msgstr "透過網路輸出 NMEA"
+
+msgid "NW"
+msgstr "西北"
+
+msgid "No coordinates"
+msgstr "無座標"
+
+msgid "Open in"
+msgstr "開啟於"
+
+msgid "Phone location service (Android)"
+msgstr "手機定位服務（Android）"
+
+msgid "Readings"
+msgstr "讀數"
+
+msgid "Receiver is off"
+msgstr "接收器已關閉"
+
+msgid "S"
+msgstr "南"
+
+msgid "SE"
+msgstr "東南"
+
+msgid "SW"
+msgstr "西南"
+
+msgid "Satellites"
+msgstr "衛星"
+
+msgid "Satellites in view: %s, used: %s"
+msgstr "可見衛星：%s，使用中：%s"
+
+msgid "Searching for satellites"
+msgstr "正在搜尋衛星"
+
+msgid "Seconds between positions. The shortest is 30."
+msgstr "兩次傳送位置之間的秒數，最短 30。"
+
+msgid "Send the position to a Traccar server over the OsmAnd protocol, for example http://192.168.1.10:5055. Empty - off. The position leaves the router: everyone with access to that server sees where the router is. Nothing is sent without a fix."
+msgstr "透過 OsmAnd 協定把位置傳送到 Traccar 伺服器，例如 http://192.168.1.10:5055。留空則關閉。位置會離開路由器：能存取該伺服器的人都能看到路由器在哪裡。沒有定位時不傳送。"
+
+msgid "Set the router clock from the GNSS receiver when there is no NTP sync, for example with no internet after a boot. Never changes a clock that NTP has synced."
+msgstr "沒有 NTP 同步時（例如開機後沒有網路）用 GNSS 接收器設定路由器時間。已由 NTP 同步的時間絕不更改。"
+
+msgid "Start mode"
+msgstr "啟動模式"
+
+msgid "TCP port that streams the position as NMEA (GGA and RMC once a second) to gpsd, navigation apps or a car head unit, for example 10110. Empty - off. It listens on the LAN address only, without a password. Needs the socat or ncat package."
+msgstr "以 NMEA（每秒 GGA 和 RMC）向 gpsd、導航應用程式或車機輸出位置的 TCP 連接埠，例如 10110。留空則關閉。只在 LAN 位址上監聽，無密碼。需要 socat 或 ncat 套件。"
+
+msgid "The external USB receiver on %s needs no control; this page only shows its data."
+msgstr "%s 上的外接 USB 接收器無需控制，本頁只顯示其資料。"
+
+msgid "The identifier of this device on the Traccar server."
+msgstr "此裝置在 Traccar 伺服器上的識別碼。"
+
+msgid "The map appears after the receiver is turned on and gets a fix."
+msgstr "接收器開啟並定位後顯示地圖。"
+
+msgid "The map is not loaded"
+msgstr "地圖未載入"
+
+msgid "The map opens at the modem position as soon as coordinates appear."
+msgstr "一有座標，地圖就在數據機的位置開啟。"
+
+msgid "The map service learns the area where the router is."
+msgstr "地圖服務會得知路由器所在的區域。"
+
+msgid "The receiver is managed by the ugps service; this page only shows its data."
+msgstr "接收器由 ugps 服務管理，本頁只顯示其資料。"
+
+msgid "This modem has no GNSS receiver that the app can read"
+msgstr "此數據機沒有本應用程式可讀取的 GNSS 接收器"
+
+msgid "Tiles are loaded by your browser from %s, which learns the area shown. The track is kept only while this page is open."
+msgstr "地圖圖磚由您的瀏覽器從 %s 載入，對方會得知所顯示的區域。軌跡只在本頁開啟期間保留。"
+
+msgid "Traccar device ID"
+msgstr "Traccar 裝置 ID"
+
+msgid "Traccar interval"
+msgstr "Traccar 間隔"
+
+msgid "Traccar server"
+msgstr "Traccar 伺服器"
+
+msgid "Turn the receiver on to get coordinates."
+msgstr "開啟接收器以取得座標。"
+
+msgid "Under open sky the first fix takes from 30 s to several minutes."
+msgstr "在開闊天空下首次定位需要 30 秒到幾分鐘。"
+
+msgid "W"
+msgstr "西"
+
+msgid "Waiting for the first fix"
+msgstr "等待首次定位"
+
+msgid "above sea level"
+msgstr "海拔"
+
+msgid "lower is more accurate"
+msgstr "越小越精確"
+
+msgid "updated %s s ago"
+msgstr "%s 秒前更新"
+
+msgid "used / in view"
+msgstr "使用 / 可見"
+
+msgid "%d of %d buttons configured"
+msgstr "已設定 %d / %d 個按鈕"
+
+msgid "%d of %d on"
+msgstr "已開啟 %d / %d"
+
+msgid "%d parts"
+msgstr "%d 段"
+
+msgid "%s (by modem)"
+msgstr "%s（依數據機）"
+
+msgid "AT command console"
+msgstr "AT 指令主控台"
+
+msgid "Back"
+msgstr "返回"
+
+msgid "Base station"
+msgstr "基地台"
+
+msgid "Collected every 10 s while this page is open"
+msgstr "本頁開啟時每 10 秒蒐集一次"
+
+msgid "Collecting"
+msgstr "正在蒐集"
+
+
+msgid "Commands go through atcmd.sh: the port and the command form are checked on the router. The reply is awaited up to %d seconds."
+msgstr "指令經 atcmd.sh 傳送，連接埠和指令格式在路由器上檢查。最多等待回覆 %d 秒。"
+
+msgid "Connection"
+msgstr "連線"
+
+msgid "Conversations"
+msgstr "對話"
+
+msgid "Delete the conversation"
+msgstr "刪除對話"
+
+msgid "Delete the conversation (%d messages)?"
+msgstr "刪除該對話（%d 則訊息）？"
+
+msgid "Drive not mounted"
+msgstr "儲存裝置未掛載"
+
+msgid "Active profile: %s"
+msgstr "目前使用中的設定檔：%s"
+
+msgid "Feed"
+msgstr "列表"
+
+msgid "Forwarding"
+msgstr "轉寄"
+
+msgid "GPS tab"
+msgstr "GPS 頁"
+
+msgid "GSM-7: 160 characters per SMS, 153 per part"
+msgstr "GSM-7：每則 160 字元，分段時每段 153"
+
+msgid "History is kept until the page is closed · ↑ recalls the previous command"
+msgstr "歷史保留到頁面關閉 · ↑ 叫出上一條指令"
+
+msgid "How the app talks to the modem"
+msgstr "應用程式與數據機的通訊方式"
+
+msgid "How to use it"
+msgstr "使用方法"
+
+msgid "In queue: %d"
+msgstr "佇列中：%d"
+
+msgid "Installing"
+msgstr "正在安裝"
+
+msgid "It is sent in the background when the modem is free; you can close the page."
+msgstr "數據機空閒時在背景傳送，可以關閉頁面。"
+
+msgid "My codes"
+msgstr "我的代碼"
+
+msgid "New SMS appear here on their own: the page checks the modem every 15 seconds."
+msgstr "新簡訊會自動出現在這裡：頁面每 15 秒檢查一次數據機。"
+
+msgid "No new messages"
+msgstr "沒有新訊息"
+
+msgid "No profile is enabled"
+msgstr "沒有啟用的設定檔"
+
+msgid "Not sent"
+msgstr "未傳送"
+
+msgid "Nothing found"
+msgstr "未找到"
+
+msgid "Notifications"
+msgstr "通知"
+
+msgid "Phone storage: %s messages"
+msgstr "手機儲存：%s 則訊息"
+
+msgid "Physical SIM is active"
+msgstr "實體 SIM 卡已啟用"
+
+msgid "Pick a code from the list or type one below."
+msgstr "從清單中選擇代碼，或在下方輸入。"
+
+msgid "Pick a template or type a command below."
+msgstr "選擇範本，或在下方輸入指令。"
+
+msgid "Port"
+msgstr "連接埠"
+
+msgid "Ports and interface"
+msgstr "連接埠和介面"
+
+msgid "Profiles"
+msgstr "設定檔"
+
+msgid "Profiles: %d"
+msgstr "設定檔：%d"
+
+msgid "Ready to send USSD codes"
+msgstr "可以傳送 USSD 代碼"
+
+msgid "Retry"
+msgstr "重試"
+
+msgid "SMS can also be sent from a Telegram chat - set the bot up on the Forwarding tab."
+msgstr "也可以從 Telegram 聊天傳送簡訊——在「轉寄」標籤頁設定機器人。"
+
+msgid "SMS only"
+msgstr "僅簡訊"
+
+msgid "Search by sender and text"
+msgstr "依寄件者和內容搜尋"
+
+msgid "Select a conversation on the left"
+msgstr "請在左側選擇對話"
+
+msgid "Select several"
+msgstr "多選"
+
+msgid "Sending"
+msgstr "傳送"
+
+msgid "Sending to contacts: %d, delay %s s"
+msgstr "傳送給聯絡人：%d，間隔 %s 秒"
+
+msgid "Session open"
+msgstr "工作階段已開啟"
+
+msgid "Shared with \"External IP\" - set it in the \"External IP\" section"
+msgstr "與「外部 IP」共用——在「外部 IP」區段設定"
+
+msgid "Storage"
+msgstr "儲存"
+
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Forwarding tab."
+msgstr "機器人已連線用於接收訊息。要從聊天傳送簡訊，請在「轉寄」標籤頁勾選「允許從聊天傳送簡訊」。"
+
+msgid "The first points appear within 10-20 seconds. With the page closed, the signal is collected only when background collection is on."
+msgstr "首批資料點在 10–20 秒內出現。頁面關閉時，只有開啟背景蒐集才會蒐集訊號。"
+
+msgid "The message is queued."
+msgstr "訊息已加入佇列。"
+
+msgid "The modem does not answer USSD"
+msgstr "數據機不回應 USSD"
+
+msgid "The modem is in %s: USSD needs the voice channel"
+msgstr "數據機處於 %s：USSD 需要語音通道"
+
+msgid "The modem is managed by ModemManager"
+msgstr "數據機由 ModemManager 管理"
+
+msgid "The network registered this SIM for SMS only"
+msgstr "網路僅為簡訊註冊了此 SIM 卡"
+
+msgid "The request can be sent, but most likely there will be no reply."
+msgstr "可以傳送請求，但很可能不會有回覆。"
+
+msgid "The request goes through 3G and returns to %s"
+msgstr "請求經 3G 傳送，然後返回 %s"
+
+msgid "The sender is alphanumeric, you cannot reply to it. To write to a number, use \"New SMS\"."
+msgstr "寄件者為字母名稱，無法回覆。要傳送到號碼，請使用「新簡訊」。"
+
+msgid "To e-mail"
+msgstr "轉到郵件"
+
+msgid "Traffic for %s"
+msgstr "%s 流量"
+
+msgid "USSD codes"
+msgstr "USSD 代碼"
+
+msgid "USSD unavailable"
+msgstr "USSD 無法使用"
+
+msgid "USSD works"
+msgstr "USSD 可用"
+
+msgid "Unicode: 70 characters per SMS, 67 per part"
+msgstr "Unicode：每則 70 字元，分段時每段 67"
+
+msgid "Up to date"
+msgstr "已是最新"
+
+msgid "Waiting for the active modem. If the selected modem is not the active one, switch to it in the modem bar."
+msgstr "正在等待使用中的數據機。如果所選數據機不是使用中的，請在數據機列中切換。"
+
+msgid "all automatic"
+msgstr "全部自動"
+
+msgid "alphanumeric sender"
+msgstr "字母名稱寄件者"
+
+msgid "consent needed"
+msgstr "需要同意"
+
+msgid "eSIM active"
+msgstr "eSIM 已啟用"
+
+msgid "eSIM management is unavailable"
+msgstr "eSIM 管理無法使用"
+
+msgid "from modem %s"
+msgstr "來自數據機 %s"
+
+msgid "messages: %d"
+msgstr "訊息：%d"
+
+
+msgid "sent from this page"
+msgstr "從本頁傳送"
+
+msgid "short number"
+msgstr "短號碼"
+
+msgid "today"
+msgstr "今天"
+
+msgid "via 3G"
+msgstr "經 3G"
+
+msgid "waiting for a reply"
+msgstr "等待回覆"
+
+msgid "yesterday"
+msgstr "昨天"
+
+msgid "Paused"
+msgstr "已暫停"
+
+msgid "Collection"
+msgstr "蒐集"
+
+msgid "Keep after reboot"
+msgstr "重新開機後保留"
+
+
+msgid "Collect in background"
+msgstr "背景收集"
+
+msgid "Collect in background:"
+msgstr "背景收集："
+
+msgid "Deletes all collected charts and monthly traffic"
+msgstr "刪除所有已收集的圖表和月流量"
+
+msgid "Store in:"
+msgstr "儲存位置："
+
+msgid "every 5 minutes"
+msgstr "每 5 分鐘"
+
+msgid "every minute"
+msgstr "每分鐘"
+
+msgid "Asking GitHub for the latest release"
+msgstr "正在向 GitHub 查詢最新版本"
+
+msgid "Check again"
+msgstr "再次檢查"
+
+msgid "Check the internet connection or pick another interface in \"Download through\" below."
+msgstr "請檢查網路連線，或在下方「下載途徑」中選擇其他介面。"
+
+msgid "Checking for updates…"
+msgstr "正在檢查更新…"
+
+msgid "GitHub is not reachable"
+msgstr "無法連線 GitHub"
+
+msgid "Install %s"
+msgstr "安裝 %s"
+
+msgid "Installed: %s"
+msgstr "已安裝：%s"
+
+msgid "Installing %s…"
+msgstr "正在安裝 %s…"
+
+msgid "Installing…"
+msgstr "正在安裝…"
+
+msgid "Not checked"
+msgstr "未檢查"
+
+msgid "Offline"
+msgstr "離線"
+
+msgid "Refreshing resources…"
+msgstr "正在重新整理資源…"
+
+msgid "Signing out to apply it…"
+msgstr "正在登出以套用更新…"
+
+msgid "Try again"
+msgstr "重試"
+
+msgid "Update failed"
+msgstr "更新失敗"
+
+msgid "Update now"
+msgstr "立即更新"
+
+msgid "Updates have not been checked yet"
+msgstr "尚未檢查更新"
+
+msgid "Updating…"
+msgstr "正在更新…"
+
+msgid "Version %s"
+msgstr "版本 %s"
+
+msgid "Version %s installed"
+msgstr "已安裝版本 %s"
+
+msgid "Version %s is available"
+msgstr "版本 %s 可用"
+
+msgid "What's new in %s"
+msgstr "%s 更新內容"
+
+msgid "checked at %s"
+msgstr "檢查於 %s"
+
+msgid "released %s"
+msgstr "發佈於 %s"
+
+msgid "not registered, not searching"
+msgstr "未註冊，未搜尋"
+
+msgid "registered, home network"
+msgstr "已註冊，本地網路"
+
+msgid "not registered, searching for a network"
+msgstr "未註冊，正在搜尋網路"
+
+msgid "registration denied by the network"
+msgstr "網路拒絕註冊"
+
+msgid "unknown"
+msgstr "未知"
+
+msgid "registered, roaming"
+msgstr "已註冊，漫遊"
+
+msgid "registered for SMS only, home network"
+msgstr "僅註冊簡訊，本地網路"
+
+msgid "registered for SMS only, roaming"
+msgstr "僅註冊簡訊，漫遊"
+
+msgid "emergency calls only"
+msgstr "僅限緊急通話"
+
+msgid "Signal level: CSQ %s ≈ %s dBm%s"
+msgstr "訊號電平：CSQ %s ≈ %s dBm%s"
+
+msgid "Signal level: CSQ %s ≈ %s dBm (extended scale)"
+msgstr "訊號電平：CSQ %s ≈ %s dBm（擴展刻度）"
+
+msgid "Signal level: unknown (99), the modem has not measured it"
+msgstr "訊號電平：未知 (99)，模組尚未測量"
+
+msgid "Bit error rate: not reported (normal for LTE and 5G)"
+msgstr "誤碼率：未回報（LTE 與 5G 下屬正常）"
+
+msgid "Bit error rate: class %s of 7 (0 is best)"
+msgstr "誤碼率：等級 %s / 7（0 最好）"
+
+msgid "No measurements: 99 and 255 mean no data for that network type"
+msgstr "無測量值：99 和 255 表示該網路類型沒有資料"
+
+msgid "automatic"
+msgstr "自動"
+
+msgid "deregistered from the network"
+msgstr "已從網路註銷"
+
+msgid "manual, automatic if that fails"
+msgstr "手動，失敗時自動"
+
+msgid "Operator selection: %s"
+msgstr "電信商選擇：%s"
+
+msgid "No operator: the modem is not registered"
+msgstr "無電信商：模組未註冊"
+
+msgid "Network code (MCC MNC): %s %s"
+msgstr "網路代碼 (MCC MNC)：%s %s"
+
+msgid "Operator: %s"
+msgstr "電信商：%s"
+
+msgid "Network type: %s"
+msgstr "網路類型：%s"
+
+msgid "State: %s"
+msgstr "狀態：%s"
+
+msgid "Area code (LAC/TAC): %s, cell ID: %s"
+msgstr "區域碼 (LAC/TAC)：%s，細胞 ID：%s"
+
+msgid "Cell ID: %s"
+msgstr "細胞 ID：%s"
+
+msgid "Base station (eNB) %s, sector %s"
+msgstr "基地台 (eNB) %s，扇區 %s"
+
+msgid "Profile %s: APN \"%s\", %s"
+msgstr "設定檔 %s：APN \"%s\"，%s"
+
+msgid "Profiles without an APN: %s (the network picks the default one)"
+msgstr "無 APN 的設定檔：%s（由網路選擇預設值）"
+
+msgid "Profile %s has an address: %s"
+msgstr "設定檔 %s 已取得位址：%s"
+
+msgid "No profile has an address yet"
+msgstr "尚無設定檔取得位址"
+
+msgid "Attached to the packet service: mobile data is available"
+msgstr "已附著封包服務：行動數據可用"
+
+msgid "Not attached to the packet service: no mobile data"
+msgstr "未附著封包服務：無行動數據"
+
+msgid "Active profiles: %s"
+msgstr "已啟用的設定檔：%s"
+
+msgid "No profile is active"
+msgstr "沒有已啟用的設定檔"
+
+msgid "The SIM is ready, no code is needed"
+msgstr "SIM 已就緒，無需密碼"
+
+msgid "The SIM waits for the PIN code"
+msgstr "SIM 等待輸入 PIN 碼"
+
+msgid "The SIM is blocked: the PUK code is needed"
+msgstr "SIM 已鎖定：需要 PUK 碼"
+
+msgid "The SIM waits for the PIN2 code"
+msgstr "SIM 等待輸入 PIN2 碼"
+
+msgid "The SIM waits for the PUK2 code"
+msgstr "SIM 等待輸入 PUK2 碼"
+
+msgid "The modem is locked to another operator (network lock code needed)"
+msgstr "模組已鎖定到其他電信商（需要網路解鎖碼）"
+
+msgid "The SIM is not ready yet"
+msgstr "SIM 尚未就緒"
+
+msgid "SIM state: %s"
+msgstr "SIM 狀態：%s"
+
+msgid "Modem date and time: %s"
+msgstr "模組日期和時間：%s"
+
+msgid "Time zone: UTC%s"
+msgstr "時區：UTC%s"
+
+msgid "Minimum functionality: the radio is off"
+msgstr "最小功能：射頻已關閉"
+
+msgid "Full functionality: the radio is on"
+msgstr "全功能：射頻已開啟"
+
+msgid "Flight mode: the transmitter and receiver are off"
+msgstr "飛航模式：發射和接收均已關閉"
+
+msgid "Factory test mode"
+msgstr "工廠測試模式"
+
+msgid "Offline mode: the radio is off"
+msgstr "離線模式：射頻已關閉"
+
+msgid "Mode %s"
+msgstr "模式 %s"
+
+msgid "Connected to the cell (RRC connected): data is being exchanged"
+msgstr "已連接細胞 (RRC connected)：正在交換資料"
+
+msgid "Idle (RRC idle): no traffic right now, the connection itself is kept"
+msgstr "閒置 (RRC idle)：目前無流量，連線本身仍保持"
+
+msgid "%s: %s digits"
+msgstr "%s：%s 位"
+
+msgid "A number is stored on the SIM"
+msgstr "SIM 上存有號碼"
+
+msgid "No own number is stored on the SIM"
+msgstr "SIM 上未儲存本機號碼"
+
+msgid "The reply also shows the IMEI"
+msgstr "回覆中還包含 IMEI"
+
+msgid "registered, idle"
+msgstr "已註冊，閒置"
+
+msgid "connected, data is flowing"
+msgstr "已連接，正在傳輸資料"
+
+msgid "searching for a cell"
+msgstr "正在搜尋細胞"
+
+msgid "limited service (emergency calls only)"
+msgstr "受限服務（僅限緊急通話）"
+
+msgid "Cell state: %s"
+msgstr "細胞狀態：%s"
+
+msgid "5G NSA anchor:"
+msgstr "5G NSA 錨點："
+
+msgid "5G NSA carrier:"
+msgstr "5G NSA 載波："
+
+msgid "No service"
+msgstr "無服務"
+
+msgid "Network: %s, band %s, channel %s"
+msgstr "網路：%s，頻段 %s，頻道 %s"
+
+msgid "Primary carrier: %s"
+msgstr "主載波：%s"
+
+msgid "Added carriers: %s"
+msgstr "附加載波：%s"
+
+msgid "No added carriers: aggregation is not in use"
+msgstr "無附加載波：未使用載波聚合"
+
+msgid "Antenna branches: %s dBm; the signal is heard on %s of %s"
+msgstr "天線支路：%s dBm；有訊號的支路 %s / %s"
+
+msgid "Data interface: %s"
+msgstr "資料介面：%s"
+
+msgid "Cell lock is off"
+msgstr "細胞鎖定已關閉"
+
+msgid "Cell lock is on"
+msgstr "細胞鎖定已開啟"
+
+msgid "Active SIM slot: %s"
+msgstr "目前 SIM 卡槽：%s"
+
+msgid "A SIM card is inserted"
+msgstr "已插入 SIM 卡"
+
+msgid "no service"
+msgstr "無服務"
+
+msgid "limited service"
+msgstr "受限服務"
+
+msgid "normal service"
+msgstr "正常服務"
+
+msgid "limited regional service"
+msgstr "受限區域服務"
+
+msgid "power saving"
+msgstr "省電"
+
+msgid "Service: %s"
+msgstr "服務：%s"
+
+msgid "calls only"
+msgstr "僅通話"
+
+msgid "data only"
+msgstr "僅數據"
+
+msgid "calls and data"
+msgstr "通話和數據"
+
+msgid "camped on a cell"
+msgstr "已駐留細胞"
+
+msgid "Network: %s"
+msgstr "網路：%s"
+
+msgid "Cell %s, PCI %s, band %s, channel %s"
+msgstr "細胞 %s，PCI %s，頻段 %s，頻道 %s"
+
+msgid "Cells heard: %s; the strongest is PCI %s on channel %s, RSRP %s dBm"
+msgstr "可聽到的細胞：%s；最強為 PCI %s（頻道 %s），RSRP %s dBm"
+
+msgid "Network mode: %s"
+msgstr "網路模式：%s"
+
+msgid "online"
+msgstr "在線"
+
+msgid "offline"
+msgstr "離線"
+
+msgid "band %s"
+msgstr "頻段 %s"
+
+msgid "Temperature: %s °C"
+msgstr "溫度：%s °C"
+
+msgid "The SIM is inserted and unlocked"
+msgstr "SIM 已插入並已解鎖"
+
+msgid "The SIM is ready"
+msgstr "SIM 已就緒"
+
+msgid "LTE bands: %s"
+msgstr "LTE 頻段：%s"
+
+msgid "5G bands: %s"
+msgstr "5G 頻段：%s"
+
+msgid "Modem identification: manufacturer, model and firmware version."
+msgstr "模組識別：廠商、型號和韌體版本。"
+
+msgid "Modem manufacturer."
+msgstr "模組廠商。"
+
+msgid "Modem model."
+msgstr "模組型號。"
+
+msgid "Firmware version."
+msgstr "韌體版本。"
+
+msgid "Modem IMEI: the device number in the mobile network."
+msgstr "模組 IMEI：裝置在行動網路中的編號。"
+
+msgid "SIM subscriber identity (IMSI): it identifies the subscription in the operator network."
+msgstr "SIM 用戶識別碼 (IMSI)：電信商網路用它識別門號。"
+
+msgid "Serial number of the SIM card (ICCID), the one printed on the card."
+msgstr "SIM 卡序號 (ICCID)，即卡上印刷的號碼。"
+
+msgid "Own phone number stored on the SIM. Many operators do not store it, then the reply has no number."
+msgstr "SIM 上儲存的本機號碼。許多電信商不寫入，此時回覆中沒有號碼。"
+
+msgid "Selects the phone book for the next commands (\"ON\" holds the own numbers of the SIM)."
+msgstr "為後續指令選擇電話簿（\"ON\" 存放 SIM 的本機號碼）。"
+
+msgid "Sets the character set for text in commands and replies."
+msgstr "設定指令和回覆中文字的字元集。"
+
+msgid "Writes an entry to the selected phone book."
+msgstr "向所選電話簿寫入一筆記錄。"
+
+msgid "Model, firmware and hardware versions"
+msgstr "型號、韌體和硬體版本"
+
+msgid "Received signal strength (RSSI) and bit error rate: the oldest and roughest signal measure, 0-31."
+msgstr "接收訊號強度 (RSSI) 和誤碼率：最早也最粗略的訊號指標，0-31。"
+
+msgid "Extended signal quality: 2G, 3G and LTE levels in one reply."
+msgstr "擴展訊號品質：一次回覆中包含 2G、3G 和 LTE 電平。"
+
+msgid "Current operator and how it was chosen."
+msgstr "目前電信商及其選擇方式。"
+
+msgid "Registration for calls and SMS (circuit-switched network)."
+msgstr "通話和簡訊的註冊（電路交換網路）。"
+
+msgid "Registration in the 2G/3G packet (data) network."
+msgstr "在 2G/3G 封包（數據）網路中的註冊。"
+
+msgid "Registration in the LTE network."
+msgstr "在 LTE 網路中的註冊。"
+
+msgid "Registration in the 5G network (5G core; NSA mode shows up in +CEREG)."
+msgstr "在 5G 網路中的註冊（5G 核心網；NSA 模式顯示在 +CEREG 中）。"
+
+msgid "Radio connection state: connected or idle."
+msgstr "無線連線狀態：已連接或閒置。"
+
+msgid "Data connection profiles (PDP contexts): number, IP type and APN."
+msgstr "數據連線設定檔（PDP 內容）：編號、IP 類型和 APN。"
+
+msgid "Addresses the network gave to each data profile."
+msgstr "網路為每個數據設定檔分配的位址。"
+
+msgid "Attach to the packet service (mobile data)."
+msgstr "封包服務（行動數據）附著狀態。"
+
+msgid "Which data profiles are active."
+msgstr "哪些數據設定檔已啟用。"
+
+msgid "Connection parameters the network gave to the profile: address, gateway, DNS, MTU."
+msgstr "網路為該設定檔分配的連線參數：位址、閘道、DNS、MTU。"
+
+msgid "DNS servers of the profile."
+msgstr "該設定檔的 DNS 伺服器。"
+
+msgid "SIM state: ready, or waiting for the PIN or PUK code."
+msgstr "SIM 狀態：已就緒，或等待 PIN 或 PUK 碼。"
+
+msgid "Modem clock. Most modems take the time from the network."
+msgstr "模組時鐘。大多數模組從網路取得時間。"
+
+msgid "Radio function mode."
+msgstr "射頻功能模式。"
+
+msgid "Reboots the modem. The connection drops for about a minute."
+msgstr "重新啟動模組。連線會中斷約一分鐘。"
+
+msgid "Turns the radio off (flight mode). There is no connection until AT+CFUN=1."
+msgstr "關閉射頻（飛航模式）。在 AT+CFUN=1 之前沒有連線。"
+
+msgid "Minimum functionality: the radio and the SIM are off."
+msgstr "最小功能：射頻和 SIM 均關閉。"
+
+msgid "Turns the radio on (full functionality)."
+msgstr "開啟射頻（全功能）。"
+
+msgid "Serving cell: network type, band, channel and signal levels."
+msgstr "服務細胞：網路類型、頻段、頻道和訊號電平。"
+
+msgid "Neighbour cells the modem hears; the modem picks among them when it changes cells."
+msgstr "模組能聽到的鄰近細胞；切換細胞時從中選擇。"
+
+msgid "Access technology, operator code, band and channel."
+msgstr "接取技術、電信商代碼、頻段和頻道。"
+
+msgid "Carrier aggregation: the primary carrier (PCC) and the added ones (SCC)."
+msgstr "載波聚合：主載波 (PCC) 和附加載波 (SCC)。"
+
+msgid "RSRP on each antenna branch; -140 and lower means the branch hears nothing."
+msgstr "各天線支路的 RSRP；-140 及以下表示該支路收不到訊號。"
+
+msgid "Temperatures of the modem sensors, °C."
+msgstr "模組各感測器溫度，°C。"
+
+msgid "USB data interface mode."
+msgstr "USB 資料介面模式。"
+
+msgid "Allowed bands as bit masks."
+msgstr "以位元遮罩表示的允許頻段。"
+
+msgid "Lock to a specific cell: shows whether it is on."
+msgstr "鎖定到特定細胞：顯示是否開啟。"
+
+msgid "Active SIM slot."
+msgstr "目前 SIM 卡槽。"
+
+msgid "SIM card detection: whether a card is inserted."
+msgstr "SIM 卡偵測：是否插入了卡。"
+
+msgid "Operator configuration profiles (MBN) in the modem; the active one is marked with 1."
+msgstr "模組中的電信商設定檔 (MBN)；目前使用的標記為 1。"
+
+msgid "Signal levels of the network in use."
+msgstr "目前網路的訊號電平。"
+
+msgid "System information: service, roaming, SIM and network type."
+msgstr "系統資訊：服務、漫遊、SIM 和網路類型。"
+
+msgid "Signal quality: RSRP, RSRQ, RSSI and SINR."
+msgstr "訊號品質：RSRP、RSRQ、RSSI 和 SINR。"
+
+msgid "Serving cell: cell ID, PCI, band and channel."
+msgstr "服務細胞：細胞 ID、PCI、頻段和頻道。"
+
+msgid "Carrier aggregation: the primary carrier and the added ones."
+msgstr "載波聚合：主載波和附加載波。"
+
+msgid "Cells the modem hears: PCI, channel and RSRP of each."
+msgstr "模組能聽到的細胞：各自的 PCI、頻道和 RSRP。"
+
+msgid "Network type and service domain (calls, data)."
+msgstr "網路類型和服務域（通話、數據）。"
+
+msgid "Network mode preference."
+msgstr "網路模式偏好。"
+
+msgid "Uplink carrier aggregation (sending over several carriers)."
+msgstr "上行載波聚合（透過多個載波傳送）。"
+
+msgid "Switches to the physical SIM. The modem re-registers on the network."
+msgstr "切換到實體 SIM。模組會重新註冊網路。"
+
+msgid "Switches to the eSIM. The modem re-registers on the network."
+msgstr "切換到 eSIM。模組會重新註冊網路。"
+
+msgid "Engineering information: cell, band and signal levels."
+msgstr "工程資訊：細胞、頻段和訊號電平。"
+
+msgid "Serving cell: network type, state, band and signal."
+msgstr "服務細胞：網路類型、狀態、頻段和訊號。"
+
+msgid "Modem temperature, °C."
+msgstr "模組溫度，°C。"
+
+msgid "Radio status: cell, channel, signal levels and operator."
+msgstr "射頻狀態：細胞、頻道、訊號電平和電信商。"
+
+msgid "Channel quality indicator (CQI) reported to the cell: 0-15, higher is better."
+msgstr "回報給細胞的頻道品質指標 (CQI)：0-15，越高越好。"
+
+msgid "Whether receiving on four antennas is turned off."
+msgstr "是否關閉了四天線接收。"
+
+msgid "Thermal mitigation level: how much the modem slows down to cool off."
+msgstr "熱緩解等級：模組為降溫而降速的程度。"
+
+msgid "Last GNSS position fix. The position itself is not repeated here."
+msgstr "最近一次 GNSS 定位。此處不重複顯示位置本身。"
+
+msgid "Network mode and allowed bands."
+msgstr "網路模式和允許的頻段。"
+
+msgid "Carrier aggregation: carriers, bandwidth, MIMO and modulation."
+msgstr "載波聚合：載波、頻寬、MIMO 和調變。"
+
+msgid "Receive paths in use (main, AUX, MIMO)."
+msgstr "正在使用的接收通路（主、AUX、MIMO）。"
+
+msgid "5G cell and signal levels (the reply takes about 3 seconds)."
+msgstr "5G 細胞和訊號電平（回覆約需 3 秒）。"
+
+msgid "Changes the USB composition: the modem reconnects with other ports and the connection drops."
+msgstr "變更 USB 組合：模組會以其他連接埠重新連接，連線會中斷。"
+
+msgid "The reply has no data in the expected form: this modem may not support the command."
+msgstr "回覆中沒有預期格式的資料：此模組可能不支援該指令。"
+
+msgid "Explanation"
+msgstr "說明"
+
+msgid "Install updates"
+msgstr "安裝更新"
+
+msgid "Update the APN database"
+msgstr "更新 APN 資料庫"
+
+msgid "Updates of the app and the APN database"
+msgstr "應用程式和 APN 資料庫更新"
+
+msgid "Available: 5gmodem %s and APN database %s"
+msgstr "可用：5gmodem %s 和 APN 資料庫 %s"
+
+msgid "APN database: could not check"
+msgstr "APN 資料庫：無法檢查"
+
+msgid "Version %s is up to date"
+msgstr "版本 %s 已是最新"
+
+msgid "Could not check the app: %s"
+msgstr "無法檢查應用程式：%s"
+
+msgid "APN database %s is available"
+msgstr "APN 資料庫 %s 可用"
+
+msgid "Everything is up to date"
+msgstr "全部已是最新"
+
+msgid "APN database %s"
+msgstr "APN 資料庫 %s"
+
+msgid "APN database %s installed"
+msgstr "APN 資料庫 %s 已安裝"
+
+msgid "The APN database was not updated: %s"
+msgstr "APN 資料庫未更新：%s"
+
+msgid "APN in the modem"
+msgstr "數據機中的 APN"
+
+msgid "APN: Latin letters, digits, dots, hyphens"
+msgstr "APN：拉丁字母、數字、點、連字號"
+
+msgid "Now:"
+msgstr "目前："
+
+msgid "Reading…"
+msgstr "正在讀取…"
+
+msgid "Saved. The stick is reconnecting."
+msgstr "已儲存。網卡正在重新連線。"
+
+msgid "Stick's own choice"
+msgstr "由網卡自選"
+
+msgid "The stick did not return its APN settings."
+msgstr "網卡未回傳 APN 設定。"
+
+msgid "The stick keeps the APN in its own memory. \"Write\" saves it as the \"5gmodem\" profile, makes it the default and reconnects the stick; the connection drops for a few seconds."
+msgstr "網卡把 APN 儲存在自身記憶體中。寫入會將其儲存為「5gmodem」設定檔並設為預設，然後重新連線網卡；連線會中斷幾秒。"
+
+msgid "The stick refused the APN (%s)"
+msgstr "網卡拒絕了 APN（%s）"
+
+msgid "Write to the modem"
+msgstr "寫入數據機"
+
+msgid "Writing and reconnecting the stick…"
+msgstr "正在寫入並重新連線網卡…"
+
+msgid "empty"
+msgstr "空"
+
+msgid "for this operator: %s"
+msgstr "此電信商：%s"
+
+msgid "profile %s"
+msgstr "設定檔 %s"
+
+msgid "the stick's own choice"
+msgstr "網卡自選"
+
+msgid "Add host"
+msgstr "新增主機"
+
+msgid "Add service"
+msgstr "新增服務"
+
+msgid "Host or IP address"
+msgstr "主機或 IP 位址"
+
+msgid "Web server: parallel requests"
+msgstr "Web 伺服器：並行請求數"
+
+msgid "How many requests the router web server (uhttpd) handles at once. OpenWrt ships 3. If pages load slowly, buttons or data appear late or freeze, set 10: it is safe on routers with 128 MB of RAM or more. This router has %d MB. The web server restarts after saving."
+msgstr "路由器 Web 伺服器（uhttpd）同時處理的請求數。OpenWrt 預設值為 3。如果頁面載入緩慢、按鈕或資料顯示延遲或卡住，請設為 10：對於記憶體 128 MB 以上的路由器是安全的。本路由器記憶體 %d MB。儲存後 Web 伺服器將重新啟動。"
+
+msgid "no reply"
+msgstr "無回應"
+
+msgid "Could not change the web server setting."
+msgstr "無法變更 Web 伺服器設定。"
+
+msgid "GNSS antenna"
+msgstr "GNSS 天線"
+
+msgid "GNSS connector, passive antenna"
+msgstr "GNSS 接頭，被動天線"
+
+msgid "GNSS connector, active antenna (power on the connector)"
+msgstr "GNSS 接頭，主動天線（接頭供電）"
+
+msgid "GNSS connector, active antenna, high gain"
+msgstr "GNSS 接頭，主動天線，高增益"
+
+msgid "AUX (diversity) connector, passive antenna"
+msgstr "AUX（分集）接頭，被動天線"
+
+msgid "GNSS antenna connector changed. The search starts over."
+msgstr "GNSS 天線接頭已變更，重新開始搜尋。"
+
+msgid "The connector the receiver listens on, stored in the modem. No satellites at all usually means the antenna sits on the other connector."
+msgstr "接收機接收訊號所用的接頭，設定儲存在模組中。如果完全看不到衛星，通常是天線接在另一個接頭上。"
+
+msgid "Anonymous"
+msgstr "匿名"
+
+msgid "Masks IMEI, IMSI, ICCID, EID, serial and phone numbers, the public IP and MAC addresses of the router and coordinates. The first digits stay: they name the modem model and the operator."
+msgstr "隱藏 IMEI、IMSI、ICCID、EID、序號和電話號碼、路由器的公網 IP 與 MAC 位址以及座標。保留開頭幾位數字：可據此看出模組型號和電信業者。"
+
+msgid "Map style"
+msgstr "地圖樣式"
+
+msgid "The map shown on the GPS tab: pick a ready style or type an https:// address template of your own tile server with {z}, {x} and {y}. Empty - OpenStreetMap. The style can also be switched right under the map; that choice is kept in the browser."
+msgstr "GPS 分頁上的地圖：選擇現成樣式，或輸入自有圖磚伺服器的 https:// 位址範本（含 {z}、{x}、{y}）。留空為 OpenStreetMap。也可以在地圖下方直接切換樣式，該選擇儲存在瀏覽器中。"
+
+msgid "Could not save the settings."
+msgstr "無法儲存設定。"

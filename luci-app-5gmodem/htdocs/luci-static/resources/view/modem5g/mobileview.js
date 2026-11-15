@@ -14,8 +14,9 @@ function tabTitles() {
 	return { sig: _('Signal'), freq: _('Bands'), cell: _('Cell'), more: _('More') };
 }
 
+// the "New mobile view" switch was removed with the 2026-11 redesign: the mobile layout is always on
 function enabled() {
-	return uci.get('5gmodem', '@5gmodem[0]', 'mobile_view') !== '0';
+	return true;
 }
 
 function val(v) {
@@ -239,7 +240,7 @@ function clearSig() {
 }
 
 return baseclass.extend({
-	API: 30946,
+	API: 40000,
 
 	prepare: function(root) {
 		st = null;

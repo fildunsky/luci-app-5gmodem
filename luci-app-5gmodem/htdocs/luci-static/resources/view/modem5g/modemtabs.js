@@ -142,10 +142,30 @@ function esimHideRule(on) {
 	try {
 		var k = esimSeenKey();
 		keyed = (k !== ESIM_SEEN_BASE);
-		was = localStorage.getItem(k) || '0';
+		// before uci is loaded the modem is unknown: the last answer for any modem (the base key)
+		// draws the tab at once instead of hiding it and showing it a second later
+		was = localStorage.getItem(keyed ? k : ESIM_SEEN_BASE) || '0';
 	} catch (e) {}
-	esimHideRule(!(keyed && was === '1'));
+	esimHideRule(was !== '1');
 })();
+
+var GPS_SEEN_BASE = '5gmodem.gps.supported';
+function gpsSeenKey() {
+	var p = '';
+	try { p = (uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || ''); } catch (e) {}
+	return p ? (GPS_SEEN_BASE + '.' + p) : GPS_SEEN_BASE;
+}
+
+// hidden until this modem was seen with a GNSS receiver, see docs/subsystems/gps.md#tab
+function gpsSeenHide() {
+	try {
+		// the base key holds the last answer for any modem: used until uci says which modem is active
+		var k = gpsSeenKey(), v = localStorage.getItem(k);
+		if (v === null && k !== GPS_SEEN_BASE) { v = localStorage.getItem(GPS_SEEN_BASE); }
+		gateHideRule('gps-tab-hide', 'gps', v !== '1');
+	} catch (e) { gateHideRule('gps-tab-hide', 'gps', true); }
+}
+gpsSeenHide();
 
 var USSD_SEEN_BASE = '5gmodem.ussd.supported';
 function ussdSeenKey() {
@@ -187,7 +207,7 @@ function gateHideRule(id, sub, on) {
 	}
 }
 
-var NETONLY_TABS = [ 'esim', 'diagnostics', 'align', 'readsms', 'sendsms', 'sendussd', 'sendat' ];
+var NETONLY_TABS = [ 'esim', 'diagnostics', 'align', 'gps', 'sms', 'sendussd', 'sendat' ];
 
 function netonlyHideTabs(on) {
 	NETONLY_TABS.forEach(function(sub) {
@@ -203,12 +223,15 @@ function applyGateTabs() {
 		var stt = sid ? String(uci.get('5gmodem', sid, 'show_stats') || '') : '';
 		var no = sid ? String(uci.get('5gmodem', sid, 'netonly') || '') : '';
 		gateHideRule('align-tab-hide', 'align', al !== '1' || no === '1');
+		var gp = sid ? String(uci.get('5gmodem', sid, 'show_gps') || '') : '';
 		gateHideRule('stats-tab-hide', 'stats', stt === '0');
+		gateHideRule('gpsopt-tab-hide', 'gps', gp === '0');
 		netonlyHideTabs(no === '1');
 		try {
 			localStorage.setItem('5gmodem.gate.align', al === '1' ? '1' : '0');
 			localStorage.setItem('5gmodem.gate.stats', stt === '0' ? '0' : '1');
 			localStorage.setItem('5gmodem.gate.netonly', no === '1' ? '1' : '0');
+			localStorage.setItem('5gmodem.gate.gps', gp === '0' ? '0' : '1');
 		} catch (e) {}
 	});
 }
@@ -218,6 +241,7 @@ function applyGateTabs() {
 		if (localStorage.getItem('5gmodem.gate.align') !== '1') { gateHideRule('align-tab-hide', 'align', true); }
 		if (localStorage.getItem('5gmodem.gate.stats') === '0') { gateHideRule('stats-tab-hide', 'stats', true); }
 		if (localStorage.getItem('5gmodem.gate.netonly') === '1') { netonlyHideTabs(true); }
+		if (localStorage.getItem('5gmodem.gate.gps') === '0') { gateHideRule('gpsopt-tab-hide', 'gps', true); }
 	} catch (e) {}
 })();
 
@@ -251,8 +275,27 @@ function applyEsimTabVisibility(tries) {
 			}
 			var have = !!(st && st.available);
 			esimHideRule(!have);
-			try { localStorage.setItem(esimSeenKey(), have ? '1' : '0'); } catch (e) {}
+			try { localStorage.setItem(esimSeenKey(), have ? '1' : '0'); localStorage.setItem(ESIM_SEEN_BASE, have ? '1' : '0'); } catch (e) {}
 			mutil.lsTouch(esimSeenKey());
+		});
+}
+
+function applyGpsTabVisibility() {
+	return L.resolveDefault(uci.load('5gmodem'))
+		.then(function() {
+			if (String(uci.get('5gmodem', '@5gmodem[0]', 'show_gps') || '') === '0') { return null; }
+			return L.resolveDefault(fs.exec('/usr/share/5gmodem/gps.sh', [ 'caps' ]), null);
+		})
+		.then(function(r) {
+			if (!r) { return; }
+			var st = {};
+			try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) { return; }
+			try {
+				var gv = String(st.supported) === '1' ? '1' : '0';
+				localStorage.setItem(gpsSeenKey(), gv); localStorage.setItem(GPS_SEEN_BASE, gv);
+			} catch (e) {}
+			mutil.lsTouch(gpsSeenKey());
+			gpsSeenHide();
 		});
 }
 
@@ -472,7 +515,8 @@ function tabsBar(modems, active) {
 					try { _inplace(path); }
 					catch (e) { pageLeaveThenReload(); return; }
 					if (row) { row.querySelectorAll('.modemtab').forEach(function(b) { b.style.pointerEvents = ''; }); }
-					L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
+					// kept for the page: write actions wait for it (execW in 5gdetail.js / bandsui.js)
+					window.__5gmSwitchP = L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
 						.then(function(res) {
 							var err = switchFailure(res);
 							if (!err) { return; }
@@ -534,7 +578,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 30946,
+	API: 40000,
 	renderBar: function() {
 		pageFadeIn();
 		return loadModems().then(function(st) {
@@ -551,6 +595,7 @@ return baseclass.extend({
 
 	refreshEsimTab: function() { applyEsimTabVisibility(0); },
 	refreshUssdTab: function() { applyUssdTabVisibility(); },
+	refreshGpsTab: function() { return applyGpsTabVisibility(); },
 	refreshGateTabs: function() { return applyGateTabs(); },
 	// for pages without the modem bar: settings gates plus the remembered eSIM/USSD state, no modem calls
 	refreshMenuTabs: function() {
@@ -561,6 +606,7 @@ return baseclass.extend({
 				var u = ussdSeenKey();
 				ussdHideRule(u !== USSD_SEEN_BASE && localStorage.getItem(u) === '0');
 			} catch (e) {}
+			gpsSeenHide();
 		});
 	},
 
@@ -568,6 +614,7 @@ return baseclass.extend({
 		window.setTimeout(function() {
 			applyEsimTabVisibility(0);
 			applyUssdTabVisibility();
+			applyGpsTabVisibility();
 		}, 1000);
 		applyGateTabs();
 

@@ -4,13 +4,38 @@
 'require ui';
 'require uci';
 'require poll';
+'require rpc';
 'require view.modem5g.modemtabs as modemtabs';
 'require view.modem5g.mutil as mutil';
 'require view.modem5g.fresh as fresh';
 
+(function() {
+	if (document.getElementById('tg-page-stats-css')) { return; }
+	var l = document.createElement('link');
+	l.id = 'tg-page-stats-css';
+	l.rel = 'stylesheet';
+	l.href = L.resource('view/modem5g/page-stats.css');
+	document.head.appendChild(l);
+})();
+
 var BIN = '/usr/share/5gmodem/stats.sh';
 
+// The "Collection" switch is the show_stats flag of Settings: saved the same way
+// (uci save + commit of the 5gmodem config), then the menu tab gate is refreshed.
+var uciCommit = rpc.declare({
+	object: 'uci',
+	method: 'commit',
+	params: [ 'config' ],
+	expect: { '': {} }
+});
+
+function mainSid() {
+	var ss = uci.sections('5gmodem', '5gmodem');
+	return (ss && ss[0]) ? ss[0]['.name'] : null;
+}
+
 var _state = { list: null, series: {}, traffic: null };
+var _ui = null;
 
 function callStats(args) {
 	return L.resolveDefault(fs.exec_direct(BIN, args), '').then(function(out) {
@@ -20,25 +45,72 @@ function callStats(args) {
 
 var LINE_COLORS = [ '#2b8a3e', '#1c7ed6', '#e8590c', '#7048e8', '#c92a2a' ];
 
+var ICONS = {
+	chart: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-5 4 3 5-7"/></g>',
+	trash: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></g>',
+	chev: '<path d="M7 10l5 5 5-5z" fill="currentColor"/>'
+};
+function svg(name, size) {
+	return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+function icon(name, size) {
+	var s = E('span', { 'class': 'tg-stats-i' });
+	s.innerHTML = svg(name, size);
+	return s;
+}
+
+// Light text on the page means a dark theme, whatever the theme calls its dark mode (gps.js).
+function isDarkUI(el) {
+	var c = getComputedStyle(el || document.body).color;
+	var m = String(c).match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+	if (!m) { return false; }
+	return (0.2126 * (+m[1]) + 0.7152 * (+m[2]) + 0.0722 * (+m[3])) > 128;
+}
+
 function hexToRgba(hex, a) {
 	var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
 	if (!m) { return hex; }
 	return 'rgba(' + parseInt(m[1], 16) + ',' + parseInt(m[2], 16) + ',' + parseInt(m[3], 16) + ',' + a + ')';
 }
 
+// A canvas inside a hidden card or a collapsed block has no width: it is not drawn then,
+// the arguments are kept on the element and the resize observer draws it once it gets a size.
+var _ro = null;
+function watchSize(canvas) {
+	if (!_ro && window.ResizeObserver) {
+		var pending = [];
+		_ro = new ResizeObserver(function(entries) {
+			entries.forEach(function(en) { if (pending.indexOf(en.target) < 0) { pending.push(en.target); } });
+			window.requestAnimationFrame(function() {
+				var list = pending; pending = [];
+				list.forEach(function(c) { if (c.__args && c.isConnected) { drawChart(c, c.__args[0], c.__args[1]); } });
+			});
+		});
+	}
+	if (_ro) { _ro.observe(canvas); }
+}
+if (!window.ResizeObserver) {
+	window.addEventListener('resize', function() {
+		document.querySelectorAll('canvas.tg-stats-chart').forEach(function(c) {
+			if (c.__args) { drawChart(c, c.__args[0], c.__args[1]); }
+		});
+	});
+}
+
 function drawChart(canvas, series, opts) {
 	opts = opts || {};
+	canvas.__args = [ series, opts ];
 	var dpr = window.devicePixelRatio || 1;
 	var rect = canvas.getBoundingClientRect();
-	var W = Math.max(1, rect.width || canvas.clientWidth || 600);
-	var H = Math.max(1, rect.height || 190);
+	if (!(rect.width > 0) || !(rect.height > 0)) { return; }
+	var W = rect.width, H = rect.height;
 	canvas.width = Math.floor(W * dpr);
 	canvas.height = Math.floor(H * dpr);
 	var ctx = canvas.getContext('2d');
 	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
 	var padL = 52, padR = 12, padT = 12, padB = 24;
-	var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+	var dark = isDarkUI(canvas);
 	var fg = dark ? '#c9ccd1' : '#444';
 	var grid = dark ? 'rgba(255,255,255,.10)' : 'rgba(0,0,0,.08)';
 
@@ -94,19 +166,18 @@ function drawChart(canvas, series, opts) {
 			ctx.lineTo(x(pts[pts.length - 1][0]), y(pts[pts.length - 1][1]));
 		};
 
-		if (true) {
-			ctx.beginPath();
-			tracePath();
-			ctx.lineTo(x(pts[pts.length - 1][0]), padT + innerH);
-			ctx.lineTo(x(pts[0][0]), padT + innerH);
-			ctx.closePath();
-			var grad = ctx.createLinearGradient(0, padT, 0, padT + innerH);
-			var a0 = (series.length > 1) ? (dark ? 0.20 : 0.14) : (dark ? 0.38 : 0.28);
-			grad.addColorStop(0, hexToRgba(col, a0));
-			grad.addColorStop(1, hexToRgba(col, 0));
-			ctx.fillStyle = grad;
-			ctx.fill();
-		}
+		ctx.beginPath();
+		tracePath();
+		ctx.lineTo(x(pts[pts.length - 1][0]), padT + innerH);
+		ctx.lineTo(x(pts[0][0]), padT + innerH);
+		ctx.closePath();
+		var grad = ctx.createLinearGradient(0, padT, 0, padT + innerH);
+		var a0 = (series.length > 1) ? (dark ? 0.20 : 0.14) : (dark ? 0.38 : 0.28);
+		grad.addColorStop(0, hexToRgba(col, a0));
+		grad.addColorStop(1, hexToRgba(col, 0));
+		ctx.fillStyle = grad;
+		ctx.fill();
+
 		ctx.strokeStyle = col;
 		ctx.lineWidth = 1.6;
 		ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -159,9 +230,8 @@ function drawChart(canvas, series, opts) {
 	}
 }
 
-function chartCanvas(id, height) {
-	return E('canvas', { 'id': id,
-		'style': 'width:100%; height:' + (height || 190) + 'px; display:block; cursor:crosshair',
+function chartCanvas(id, cls) {
+	var c = E('canvas', { 'id': id, 'class': 'tg-stats-chart' + (cls ? ' ' + cls : ''),
 		'mousemove': function(ev) {
 			var r = ev.target.getBoundingClientRect();
 			ev.target.__hoverX = ev.clientX - r.left;
@@ -174,37 +244,39 @@ function chartCanvas(id, height) {
 				ev.target.__chart.opts); }
 		}
 	});
+	watchSize(c);
+	return c;
 }
 
-function dualChartCard(title, idA, labelA, idB, labelB) {
-	var sub = function(t, top) {
-		return E('div', { 'style': 'font-size:12px; opacity:.7; margin:' + top + ' 0 2px 0' }, [ t ]);
-	};
-	return E('div', { 'class': 'cbi-section tg5g' }, [
+function chartCard(title, id, cardId, hidden) {
+	return E('div', { 'class': 'cbi-section tg5g', 'id': cardId || null, 'style': hidden ? 'display:none' : null }, [
 		E('h3', {}, [ title ]),
-		E('div', { 'id': idA + '-legend', 'style': 'display:flex; gap:1em; flex-wrap:wrap; margin-bottom:.4em; font-size:.9em' }, []),
-		sub(labelA, '0'),
-		chartCanvas(idA, 150),
-		sub(labelB, '10px'),
-		chartCanvas(idB, 150)
+		chartCanvas(id),
+		E('div', { 'id': id + '-legend', 'class': 'tg-stats-leg' }, [])
 	]);
 }
 
-function chartCard(title, id, legend) {
-	var canvas = chartCanvas(id);
-	return E('div', { 'class': 'cbi-section tg5g' }, [
-		E('h3', {}, [ title ]),
-		E('div', { 'id': id + '-legend', 'style': 'display:flex; gap:1em; flex-wrap:wrap; margin-bottom:.4em; font-size:.9em' }, legend || []),
-		canvas
+function legendItem(name, idx, value) {
+	return E('span', {}, [
+		E('i', { 'style': 'background:' + LINE_COLORS[idx % LINE_COLORS.length] }),
+		name + (value ? ' · ' + value : '')
 	]);
 }
 
-function legendItem(name, idx) {
-	return E('span', { 'style': 'display:inline-flex; align-items:center; gap:.35em' }, [
-		E('span', { 'style': 'width:12px; height:3px; border-radius:2px; display:inline-block; background:'
-			+ LINE_COLORS[idx % LINE_COLORS.length] }),
-		E('span', {}, [ name ])
-	]);
+function lastVal(pts) { return (pts && pts.length) ? pts[pts.length - 1][1] : null; }
+
+function fillLegend(id, list, fmt) {
+	var el = document.getElementById(id);
+	if (!el) { return; }
+	var parts = list.map(function(s, i) {
+		var v = lastVal(s.points);
+		return { n: s.name, i: i, v: v == null ? '' : fmt(v) };
+	});
+	var sig = JSON.stringify(parts);
+	if (el.getAttribute('data-sig') === sig) { return; }
+	el.setAttribute('data-sig', sig);
+	el.innerHTML = '';
+	parts.forEach(function(p) { el.appendChild(legendItem(p.n, p.i, p.v)); });
 }
 
 function fmtBytes(n) {
@@ -216,15 +288,23 @@ function fmtBytes(n) {
 	return n.toFixed(d) + ' ' + units[i];
 }
 
-function fmtMonth(ym) {
+// month names follow the LuCI interface language (<html lang>), not the browser's own locale:
+// an English browser showed "November, 2026" on a Russian interface. In a sentence the name keeps
+// the language's own case ("Трафик за ноябрь 2026"), as a label it starts with a capital.
+function fmtMonth(ym, inSentence) {
 	var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
 	if (!m) { return String(ym || ''); }
-	var name = ym;
+	var name = ym, lang = (document.documentElement.getAttribute('lang') || '').replace('_', '-') || undefined;
 	try {
-		name = new Date(+m[1], +m[2] - 1, 1).toLocaleString(undefined, { month: 'long' });
-		name = name.charAt(0).toUpperCase() + name.slice(1);
+		name = new Date(+m[1], +m[2] - 1, 1).toLocaleString(lang, { month: 'long' });
+		if (!inSentence) { name = name.charAt(0).toUpperCase() + name.slice(1); }
 	} catch (e) { return String(ym); }
-	return name + ', ' + m[1];
+	return /^\d/.test(name) ? m[1] + ' ' + name : name + ' ' + m[1];
+}
+
+function curMonth() {
+	var d = new Date();
+	return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
 }
 
 function trafficIcon(key, label, opName) {
@@ -240,7 +320,7 @@ function trafficIcon(key, label, opName) {
 		f = 'icons/5gmodem/op-sim.svg';
 	}
 	return E('img', { 'src': mutil.icon(f), 'width': 18, 'height': 18, 'alt': '',
-		'style': 'display:block' });
+		'style': 'display:block; flex:none' });
 }
 
 function prettyTrafficLabel(label) {
@@ -251,51 +331,60 @@ function prettyTrafficLabel(label) {
 	return s.replace(/\+?\d[\d\s()-]{9,}\d/, function(m2) { return mutil.formatPhone(m2); });
 }
 
+// Monthly traffic as cards (one per SIM or interface and month), newest month first.
 function trafficTable(data, labels) {
-	var rows = [ E('tr', { 'class': 'tr table-titles' }, [
-		E('th', { 'class': 'th', 'style': 'width:1%' }, [ '' ]),
-		E('th', { 'class': 'th' }, [ _('SIM card') ]),
-		E('th', { 'class': 'th' }, [ _('Month') ]),
-		E('th', { 'class': 'th' }, [ _('Received') ]),
-		E('th', { 'class': 'th' }, [ _('Sent') ]),
-		E('th', { 'class': 'th' }, [ _('Total') ]),
-		E('th', { 'class': 'th', 'style': 'width:1%' }, [ '' ])
-	]) ];
-	var keys = Object.keys(data || {}).sort();
-	keys.forEach(function(k) {
+	labels = labels || {};
+	var keys = Object.keys(data || {}).sort(function(a, b) {
+		var ma = a.split('|')[1] || '', mb = b.split('|')[1] || '';
+		if (ma !== mb) { return ma < mb ? 1 : -1; }
+		return a < b ? -1 : (a > b ? 1 : 0);
+	});
+	if (!keys.length) {
+		return E('div', { 'class': 'cbi-section-descr' }, [ _('No data yet') ]);
+	}
+	return E('div', { 'class': 'tg-stats-tr' }, keys.map(function(k) {
 		var parts = k.split('|'), v = data[k] || {};
 		var rx = parseInt(v.rx, 10) || 0, tx = parseInt(v.tx, 10) || 0;
-		var lab = (labels || {})[parts[0]] || (labels || {})['ping.' + parts[0]] || parts[0];
-		rows.push(E('tr', { 'class': 'tr' }, [
-			E('td', { 'class': 'td', 'style': 'width:1%' },
-				[ trafficIcon(parts[0], lab, (labels || {})['op.' + parts[0]]) ]),
-			E('td', { 'class': 'td', 'data-title': _('SIM card') }, [ prettyTrafficLabel(lab) ]),
-			E('td', { 'class': 'td', 'data-title': _('Month') }, [ fmtMonth(parts[1]) ]),
-			E('td', { 'class': 'td', 'data-title': _('Received') }, [ fmtBytes(rx) ]),
-			E('td', { 'class': 'td', 'data-title': _('Sent') }, [ fmtBytes(tx) ]),
-			E('td', { 'class': 'td', 'data-title': _('Total') }, [ fmtBytes(rx + tx) ]),
-			E('td', { 'class': 'td', 'style': 'width:1%' }, [
-				E('button', {
-					'class': 'tg-trdel',
-					'title': _('Delete this row'),
-					'style': 'width:20px;height:20px;padding:0;border-radius:50%;' +
-					         'border:1px solid rgba(128,128,128,.45);background:transparent;' +
-					         'color:inherit;opacity:.6;cursor:pointer;line-height:1;' +
-					         'display:inline-flex;align-items:center;justify-content:center;' +
-					         'font-size:13px',
-					'mouseover': function(ev) { ev.currentTarget.style.opacity = '1'; },
-					'mouseout': function(ev) { ev.currentTarget.style.opacity = '.6'; },
-					'click': function(ev) { forgetTrafficRow(ev.currentTarget, parts[0], parts[1]); }
-				}, '×')
+		var lab = labels[parts[0]] || labels['ping.' + parts[0]] || parts[0];
+		var tot = fmtBytes(rx + tx), sp = tot.lastIndexOf(' ');
+		var pRx = (rx + tx) > 0 ? Math.round(100 * rx / (rx + tx)) : 0;
+		var del = E('button', {
+			'class': 'cbi-button tg-trdel tg-stats-del',
+			'title': _('Delete this row'),
+			'aria-label': _('Delete this row'),
+			'click': function(ev) { forgetTrafficRow(ev.currentTarget, parts[0], parts[1]); }
+		});
+		del.innerHTML = svg('trash', 14);
+		return E('div', { 'class': 'tg-hist-card' }, [
+			E('div', { 'class': 'tg-hist-h' }, [
+				E('span', { 'class': 'tg-stats-trname' }, [
+					trafficIcon(parts[0], lab, labels['op.' + parts[0]]),
+					E('b', { 'title': prettyTrafficLabel(lab) }, [ prettyTrafficLabel(lab) ])
+				]),
+				del
+			]),
+			E('div', { 'class': 'tg-hist-now' }, [ tot.slice(0, sp), ' ', E('small', {}, [ tot.slice(sp + 1) + ' · ' + fmtMonth(parts[1]) ]) ]),
+			E('div', { 'class': 'tg-stats-split', 'title': _('Received') + ' ' + pRx + '%' }, [
+				E('span', { 'class': 'rx', 'style': 'width:' + pRx + '%' }),
+				E('span', { 'class': 'tx', 'style': 'width:' + ((rx + tx) > 0 ? 100 - pRx : 0) + '%' })
+			]),
+			E('div', { 'class': 'tg-hist-f' }, [
+				E('span', {}, [ '↓ ' + _('Received') + ' ' + fmtBytes(rx) ]),
+				E('span', {}, [ '↑ ' + _('Sent') + ' ' + fmtBytes(tx) ])
 			])
-		]));
-	});
-	if (keys.length === 0) {
-		rows.push(E('tr', { 'class': 'tr' }, [
-			E('td', { 'class': 'td', 'colspan': '7' }, [ _('No data yet') ])
-		]));
-	}
-	return E('table', { 'class': 'table' }, rows);
+		]);
+	}));
+}
+
+function paintTraffic(force) {
+	var tt = document.getElementById('traffic-table');
+	if (!tt) { return; }
+	var lab = (_state.list || {}).labels || {};
+	var sig = JSON.stringify([ _state.traffic || {}, lab ]);
+	if (!force && tt.getAttribute('data-sig') === sig) { return; }
+	tt.setAttribute('data-sig', sig);
+	tt.innerHTML = '';
+	tt.appendChild(trafficTable(_state.traffic, lab));
 }
 
 function forgetTrafficRow(btn, key, month) {
@@ -305,12 +394,146 @@ function forgetTrafficRow(btn, key, month) {
 		return callStats([ 'traffic' ]);
 	}).then(function(t) {
 		_state.traffic = t || {};
-		var tt = document.getElementById('traffic-table');
-		if (tt) {
-			tt.innerHTML = '';
-			tt.appendChild(trafficTable(_state.traffic, (_state.list || {}).labels || {}));
-		}
+		paintTraffic(true);
+		paintHead();
 	});
+}
+
+function monthTotals() {
+	var cm = curMonth(), rx = 0, tx = 0, any = false;
+	Object.keys(_state.traffic || {}).forEach(function(k) {
+		if (k.split('|')[1] !== cm) { return; }
+		var v = _state.traffic[k] || {};
+		rx += parseInt(v.rx, 10) || 0; tx += parseInt(v.tx, 10) || 0; any = true;
+	});
+	return any ? { rx: rx, tx: tx } : null;
+}
+
+function driveMissing(lst) {
+	lst = lst || {};
+	return !!(lst.persist && lst.path && lst.path_now && lst.path_now !== lst.path);
+}
+
+function statsOn(lst) {
+	return !lst || lst.enabled == null || String(lst.enabled) !== '0';
+}
+
+// A switch is left alone while its own save is in flight: the 10 s refresh would flip it back.
+function setSwitch(b, on) {
+	if (!b || b.disabled) { return; }
+	b.setAttribute('aria-checked', String(!!on));
+	b.classList.toggle('on', !!on);
+}
+
+function setSeg(seg, v) {
+	if (!seg || seg.getAttribute('data-busy')) { return; }
+	Array.prototype.forEach.call(seg.querySelectorAll('button'), function(b) {
+		var on = b.getAttribute('data-v') === v;
+		b.classList.toggle('on', on);
+		b.setAttribute('aria-pressed', String(on));
+	});
+}
+
+// the arrows of the Network page's traffic line (5gdetail.js), so both pages read the same
+var ARR_DN = '<svg width="11" height="11" viewBox="0 0 52 52" style="vertical-align:-1px" aria-hidden="true"><path fill="#009955" d="M8.3,14h35.4c1,0,1.7,1.3,0.9,2.2L27.3,37.4c-0.6,0.8-1.9,0.8-2.5,0L7.3,16.2C6.6,15.3,7.2,14,8.3,14z"/></svg>';
+var ARR_UP = '<svg width="11" height="11" viewBox="0 0 52 52" style="vertical-align:-1px" aria-hidden="true"><path fill="#0099ff" d="M43.7,38H8.3c-1,0-1.7-1.3-0.9-2.2l17.3-21.2c0.6-0.8,1.9-0.8,2.5,0l17.5,21.2C45.4,36.7,44.8,38,43.7,38z"/></svg>';
+
+function paintHead() {
+	if (!_ui) { return; }
+	var lst = _state.list || {}, on = statsOn(lst), warn = on && driveMissing(lst);
+	var pillKind = !on ? 'off' : warn ? 'warn' : 'ok';
+	var pillText = !on ? _('Paused') : warn ? _('Drive not mounted') : _('Collecting');
+	[ _ui.pill, _ui.pillM ].forEach(function(p) {
+		p.className = 'tg-stats-pill ' + pillKind + (p === _ui.pillM ? ' tg-stats-pillm' : '');
+		p.lastChild.textContent = pillText;
+	});
+	_ui.ico.className = 'tginfo-signal tg-stats-ico ' + pillKind;
+	var mt = monthTotals();
+	_ui.month.textContent = _('Traffic for %s').format(fmtMonth(curMonth(), true));
+	_ui.main.textContent = mt ? fmtBytes(mt.rx + mt.tx) : _('No data yet');
+	_ui.main.classList.toggle('none', !mt);
+	// the Network page's traffic line: the same down/up arrows
+	_ui.split.innerHTML = mt ? ARR_DN + '\u202f' + fmtBytes(mt.rx) + ' &nbsp;' + ARR_UP + '\u202f' + fmtBytes(mt.tx) : '';
+	_ui.split.style.display = mt ? '' : 'none';
+	var pnow = pathNowText(lst);
+	var bad = !!lst.persist && (driveMissing(lst) || !lst.path_now);
+	_ui.warn.textContent = bad ? pnow : '';
+	_ui.warn.style.display = bad ? '' : 'none';
+	setSwitch(_ui.swOn, on);
+	setSwitch(_ui.swPersist, !!lst.persist);
+	_ui.swPersist.title = _('Monthly totals are written to flash about once an hour. Ping series are never written there.') + '\n' + pnow;
+	setSeg(_ui.segBg, String(lst.bgpoll || 0));
+	if (_ui.pathWrap) { _ui.pathWrap.style.display = lst.persist ? '' : 'none'; }
+}
+
+var QG = function(l) { return (mutil.QUAL_GRAD || [])[l] || (mutil.QUAL_COLOR || [])[l] || ''; };
+
+function setTile(t, val, unit, foot, pct, lvl) {
+	var none = (val === null || val === undefined || val === '');
+	t.now.textContent = none ? '-' : String(val);
+	t.unit.textContent = none ? '' : (unit || '');
+	t.val.classList.toggle('dash', none);
+	t.foot.textContent = none ? '' : (foot || '');
+	t.footRow.style.display = (!none && foot) ? '' : 'none';
+	if (t.bar) {
+		if (none || pct == null) { t.bar.style.visibility = 'hidden'; }
+		else {
+			t.bar.style.visibility = '';
+			t.fill.style.width = Math.max(3, Math.min(100, pct)) + '%';
+			t.fill.style.background = QG(lvl);
+		}
+	}
+}
+
+function firstWithPoints(list) {
+	for (var i = 0; i < list.length; i++) { if ((list[i].points || []).length) { return list[i]; } }
+	return null;
+}
+
+function paintTiles(ping, sig, rsrp, sinr, temp) {
+	if (!_ui) { return; }
+	var t = _ui.tiles;
+	var p = firstWithPoints(ping);
+	if (p) {
+		var vals = p.points.map(function(q) { return q[1]; }).filter(function(v) { return v > 0; });
+		var lv = lastVal(p.points), avg = vals.length ? vals.reduce(function(a, b) { return a + b; }, 0) / vals.length : null;
+		var mx = vals.length ? Math.max.apply(null, vals) : null;
+		var lvl = lv <= 0 ? 0 : lv <= 60 ? 3 : lv <= 120 ? 2 : lv <= 250 ? 1 : 0;
+		setTile(t.ping, lv > 0 ? Math.round(lv) : null, 'ms',
+			avg != null ? _('avg') + ' ' + Math.round(avg) + ' · ' + _('max') + ' ' + Math.round(mx) : '',
+			lv > 0 ? 100 - Math.min(96, lv / 4) : null, lvl);
+	} else { setTile(t.ping, null); }
+
+	var s = firstWithPoints(sig);
+	if (s) {
+		var sv = lastVal(s.points), sa = s.points.reduce(function(a, q) { return a + q[1]; }, 0) / s.points.length;
+		setTile(t.signal, Math.round(sv), '%', _('avg') + ' ' + Math.round(sa) + '%', sv,
+			sv >= 75 ? 3 : sv >= 50 ? 2 : sv >= 25 ? 1 : 0);
+	} else { setTile(t.signal, null); }
+
+	var r = firstWithPoints(rsrp), n = firstWithPoints(sinr);
+	t.rsrp.card.style.display = (rsrp.length || sinr.length) ? '' : 'none';
+	// same shape as the other tiles: RSRP is the value and the bar, SINR goes to the footer
+	if (r || n) {
+		var nv = n ? Math.round(lastVal(n.points) * 10) / 10 : null;
+		var sinrFoot = nv != null ? 'SINR ' + nv + ' dB' : '';
+		if (r) {
+			var rv = Math.round(lastVal(r.points));
+			t.rsrp.name.textContent = 'RSRP';
+			setTile(t.rsrp, rv, 'dBm', sinrFoot, mutil.qualPct('rsrp', rv), mutil.qualLevel('rsrp', rv));
+		} else {
+			t.rsrp.name.textContent = 'SINR';
+			setTile(t.rsrp, nv, 'dB', '', mutil.qualPct('sinr', nv), mutil.qualLevel('sinr', nv));
+		}
+	} else { setTile(t.rsrp, null); }
+
+	var tp = firstWithPoints(temp);
+	t.temp.card.style.display = temp.length ? '' : 'none';
+	if (tp) {
+		var tv = lastVal(tp.points), tm = Math.max.apply(null, tp.points.map(function(q) { return q[1]; }));
+		setTile(t.temp, Math.round(tv), '°C', _('max') + ' ' + Math.round(tm) + ' °C', tv,
+			tv < 60 ? 3 : tv < 70 ? 2 : tv < 80 ? 1 : 0);
+	} else { setTile(t.temp, null); }
 }
 
 function redraw() {
@@ -319,19 +542,9 @@ function redraw() {
 	var pingSeries = (lst.ping || []).map(function(n) {
 		return { name: lab['ping.' + n] || n, points: (_state.series['ping.' + n] || []) };
 	});
-	var c1 = document.getElementById('chart-ping');
-	if (c1) { drawChart(c1, pingSeries, { zeroBase: true, fmt: function(v) { return Math.round(v) + ' ms'; } }); }
-	var l1 = document.getElementById('chart-ping-legend');
-	if (l1) { l1.innerHTML = ''; pingSeries.forEach(function(s, i) { l1.appendChild(legendItem(s.name, i)); }); }
-
 	var sigSeries = (lst.signal || []).map(function(n) {
 		return { name: lab['signal.' + n] || n.replace(/_/g, ' '), points: (_state.series['signal.' + n] || []) };
 	});
-	var c2 = document.getElementById('chart-signal');
-	if (c2) { drawChart(c2, sigSeries, { min: 0, max: 100, fmt: function(v) { return Math.round(v) + '%'; } }); }
-	var l2 = document.getElementById('chart-signal-legend');
-	if (l2) { l2.innerHTML = ''; sigSeries.forEach(function(s, i) { l2.appendChild(legendItem(s.name, i)); }); }
-
 	var rawNames = (lst.rsrp || []).slice();
 	(lst.sinr || []).forEach(function(n) { if (rawNames.indexOf(n) < 0) { rawNames.push(n); } });
 	var rawSeries = function(kind) {
@@ -340,36 +553,58 @@ function redraw() {
 		});
 	};
 	var rsrpSeries = rawSeries('rsrp'), sinrSeries = rawSeries('sinr');
-	var rsrpOpts = { fmt: function(v) { return Math.round(v) + ' dBm'; } };
-	var sinrOpts = { fmt: function(v) { return (Math.round(v * 10) / 10) + ' dB'; } };
-	var c4 = document.getElementById('chart-rsrp'), c5 = document.getElementById('chart-sinr');
-	var rc = document.getElementById('card-rsrp');
-	if (rc) { rc.style.display = rawNames.length ? '' : 'none'; }
-	if (rawNames.length) {
-		if (c4) { drawChart(c4, rsrpSeries, rsrpOpts); }
-		if (c5) { drawChart(c5, sinrSeries, sinrOpts); }
-	}
-	var l4 = document.getElementById('chart-rsrp-legend');
-	if (l4) { l4.innerHTML = ''; rsrpSeries.forEach(function(s, i) { l4.appendChild(legendItem(s.name, i)); }); }
-
 	var tempSeries = (lst.temp || []).map(function(n) {
 		return { name: lab['temp.' + n] || n.replace(/_/g, ' '), points: (_state.series['temp.' + n] || []) };
 	});
-	var c3 = document.getElementById('chart-temp');
-	if (c3) { drawChart(c3, tempSeries, { fmt: function(v) { return Math.round(v) + ' °C'; } }); }
-	var l3 = document.getElementById('chart-temp-legend');
-	if (l3) { l3.innerHTML = ''; tempSeries.forEach(function(s, i) { l3.appendChild(legendItem(s.name, i)); }); }
+
+	// Nothing collected yet: one empty-state card instead of four empty charts.
+	var any = [ pingSeries, sigSeries, rsrpSeries, sinrSeries, tempSeries ].some(function(l) { return !!firstWithPoints(l); });
+	var grid = document.getElementById('stats-charts'), empty = document.getElementById('stats-empty');
+	if (grid) { grid.style.display = any ? '' : 'none'; }
+	if (empty) { empty.style.display = any ? 'none' : ''; }
+
+	// Card visibility first: a canvas drawn while hidden has no width (see drawChart).
+	[ 'card-rsrp', 'card-sinr' ].forEach(function(id) {
+		var el = document.getElementById(id);
+		if (el) { el.style.display = rawNames.length ? '' : 'none'; }
+	});
 	var tc = document.getElementById('card-temp');
-	if (tc) {
-		var wasHidden = (tc.style.display === 'none');
-		tc.style.display = tempSeries.length ? '' : 'none';
-		if (wasHidden && tempSeries.length && c3) {
-			drawChart(c3, tempSeries, { fmt: function(v) { return Math.round(v) + ' °C'; } });
-		}
+	if (tc) { tc.style.display = tempSeries.length ? '' : 'none'; }
+	// an odd card out spans the whole row, so no card is left with a hole next to it
+	if (grid) {
+		var vis = Array.prototype.filter.call(grid.children, function(c) { return c.style.display !== 'none'; });
+		vis.forEach(function(c, i) { c.classList.toggle('tg-stats-wide', i === vis.length - 1 && vis.length % 2 === 1); });
 	}
 
-	var tt = document.getElementById('traffic-table');
-	if (tt) { tt.innerHTML = ''; tt.appendChild(trafficTable(_state.traffic, lab)); }
+	var msFmt = function(v) { return Math.round(v) + ' ms'; };
+	var pctFmt = function(v) { return Math.round(v) + '%'; };
+	var dbmFmt = function(v) { return Math.round(v) + ' dBm'; };
+	var dbFmt = function(v) { return (Math.round(v * 10) / 10) + ' dB'; };
+	var cFmt = function(v) { return Math.round(v) + ' °C'; };
+
+	var c1 = document.getElementById('chart-ping');
+	if (c1) { drawChart(c1, pingSeries, { zeroBase: true, fmt: msFmt }); }
+	fillLegend('chart-ping-legend', pingSeries, msFmt);
+
+	var c2 = document.getElementById('chart-signal');
+	if (c2) { drawChart(c2, sigSeries, { min: 0, max: 100, fmt: pctFmt }); }
+	fillLegend('chart-signal-legend', sigSeries, pctFmt);
+
+	var c4 = document.getElementById('chart-rsrp'), c5 = document.getElementById('chart-sinr');
+	if (rawNames.length) {
+		if (c4) { drawChart(c4, rsrpSeries, { fmt: dbmFmt }); }
+		if (c5) { drawChart(c5, sinrSeries, { fmt: dbFmt }); }
+	}
+	fillLegend('chart-rsrp-legend', rsrpSeries, dbmFmt);
+	fillLegend('chart-sinr-legend', sinrSeries, dbFmt);
+
+	var c3 = document.getElementById('chart-temp');
+	if (c3) { drawChart(c3, tempSeries, { fmt: cFmt }); }
+	fillLegend('chart-temp-legend', tempSeries, cFmt);
+
+	paintTiles(pingSeries, sigSeries, rsrpSeries, sinrSeries, tempSeries);
+	paintTraffic(false);
+	paintHead();
 }
 
 function pathNowText(lst) {
@@ -431,10 +666,26 @@ function refresh(have, tick) {
 	}).then(redraw);
 }
 
+function tileEl(name, foot, bar) {
+	var t = { now: E('span', {}, '-'), unit: E('small', {}, ''), name: E('b', {}, name) };
+	t.val = E('div', { 'class': 'tg-hist-now dash' }, [ t.now, ' ', t.unit ]);
+	var kids = [ E('div', { 'class': 'tg-hist-h' }, E('span', { 'class': 'tg-hist-name' }, t.name)), t.val ];
+	if (bar) {
+		t.fill = E('div', { 'class': 'tg-mbar-fill' });
+		t.bar = E('div', { 'class': 'tg-mbar', 'style': 'visibility:hidden' }, E('div', { 'class': 'tg-mbar-t' }, t.fill));
+		kids.push(t.bar);
+	}
+	t.foot = E('span', {}, foot || '');
+	t.footRow = E('div', { 'class': 'tg-hist-f', 'style': 'display:none' }, t.foot);
+	kids.push(t.footRow);
+	t.card = E('div', { 'class': 'tg-hist-card' }, kids);
+	return t;
+}
+
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30946, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40000, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -451,108 +702,164 @@ return view.extend({
 		var lst = (isBundle(first) ? first.list : first) || {};
 		_state.list = lst;
 
-		var head = E('div');
+		/* ---------- header card ---------- */
+		var listAgain = function() {
+			return callStats([ 'list' ]).then(function(lst2) {
+				if (lst2) { _state.list = lst2; }
+			});
+		};
+		var mkPill = function(cls) { return E('span', { 'class': 'tg-stats-pill ok' + (cls ? ' ' + cls : '') }, [ E('i'), E('span', {}, '') ]); };
+		_ui = { tiles: {} };
+		_ui.pill = mkPill();
+		_ui.pillM = mkPill('tg-stats-pillm');
+		_ui.ico = E('div', { 'class': 'tginfo-signal tg-stats-ico ok', 'title': _('Collected every 10 s while this page is open') });
+		_ui.ico.innerHTML = svg('chart', 36);
+		_ui.ico.appendChild(E('medium', {}, _('%d s').format(10)));
+		// the Network page's modem card: small line, bold main line, small line; then an info column
+		_ui.month = E('div', { 'class': 'tginfo-reg' }, '');
+		_ui.main = E('div', { 'class': 'tginfo-op tg-stats-main' }, '');
+		_ui.split = E('div', { 'class': 'tginfo-loc tg-stats-trf' }, '');
+		_ui.warn = E('div', { 'class': 'tginfo-loc tg-stats-warn', 'style': 'display:none' }, '');
 
-		var controls = E('div', { 'class': 'cbi-section tg5g' }, [
-			E('h3', {}, [ _('Statistics') ]),
-			E('div', { 'class': 'cbi-value tg-flag' }, [
-				E('label', { 'class': 'cbi-value-title' }, [ _('Keep monthly traffic across reboots') ]),
-				E('div', { 'class': 'cbi-value-field' }, [
-					(function() {
-						var w = new ui.Checkbox(lst.persist ? '1' : '0', { id: 'st-persist' });
-						var n = w.render();
-						n.addEventListener('widget-change', function() {
-							callStats([ 'setconf', 'persist=' + (w.isChecked() ? '1' : '0') ]).then(function() {
-								return callStats([ 'list' ]).then(function(lst2) {
-									_state.list = lst2 || {};
-									var el = document.getElementById('st-path-now');
-									if (el) { el.textContent = pathNowText(lst2); }
-								});
-							});
+		// a switch shows the new state at once and goes back if the save fails
+		var mkSwitch = function(label, title, save) {
+			var b = E('button', { 'type': 'button', 'class': 'tg-stats-sw', 'role': 'switch',
+				'aria-checked': 'false', 'title': title }, [ E('i'), E('span', {}, label) ]);
+			b.addEventListener('click', function() {
+				if (b.disabled) { return; }
+				var v = b.getAttribute('aria-checked') !== 'true';
+				setSwitch(b, v);
+				b.disabled = true;
+				Promise.resolve().then(function() { return save(v); }).catch(function() {
+					b.disabled = false;
+					setSwitch(b, !v);
+				}).then(function() {
+					b.disabled = false;
+					paintHead();
+				});
+			});
+			return b;
+		};
+		_ui.swOn = mkSwitch(_('Collection'), _('Collects uplink latency, signal, temperature and monthly traffic, and shows the "Statistics" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself.'), function(v) {
+			var sid = mainSid();
+			if (!sid) { throw new Error('no section'); }
+			uci.set('5gmodem', sid, 'show_stats', v ? '1' : '0');
+			return uci.save().then(function() {
+				return uciCommit('5gmodem');
+			}).then(function() {
+				if (_state.list) { _state.list.enabled = v ? 1 : 0; }
+				return L.resolveDefault(modemtabs.refreshGateTabs(), null);
+			}).then(listAgain);
+		});
+		_ui.swPersist = mkSwitch(_('Keep after reboot'), '', function(v) {
+			return callStats([ 'setconf', 'persist=' + (v ? '1' : '0') ]).then(function(r) {
+				if (!r || r.error) { throw new Error('setconf'); }
+				return listAgain();
+			});
+		});
+		_ui.segBg = E('div', { 'class': 'tg-stats-seg', 'role': 'group', 'aria-label': _('Collect in background'),
+			'title': _('With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped.') },
+			[ [ '0', _('Off') ], [ '300', _('every 5 minutes') ], [ '60', _('every minute') ] ].map(function(o) {
+				return E('button', { 'type': 'button', 'data-v': o[0], 'aria-pressed': 'false',
+					'click': function() {
+						var seg = _ui.segBg, was = String((_state.list || {}).bgpoll || 0);
+						if (seg.getAttribute('data-busy') || was === o[0]) { return; }
+						setSeg(seg, o[0]);
+						seg.setAttribute('data-busy', '1');
+						callStats([ 'setconf', 'bgpoll=' + o[0] ]).then(function(r) {
+							seg.removeAttribute('data-busy');
+							if (!r || r.error) { setSeg(seg, was); return; }
+							if (_state.list) { _state.list.bgpoll = o[0]; }
+							paintHead();
 						});
-						return n;
-					})(),
-					E('div', { 'class': 'cbi-value-description' },
-						[ _('Monthly totals are written to flash about once an hour. Ping series are never written there.') ])
-				])
+					} }, o[1]);
+			}));
+
+		// where to store and reset: one compact row under the switches
+		_ui.path = E('input', {
+			'type': 'text', 'class': 'cbi-input-text tg-stats-path', 'id': 'st-path',
+			'value': lst.path || '', 'placeholder': lst.path_default || '/etc/5gmodem/stats',
+			'aria-label': _('Where to store'),
+			'title': _('Empty - the router\'s own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals.').format(lst.path_default || '/etc/5gmodem/stats'),
+			'change': function(ev) {
+				callStats([ 'setconf', 'path=' + String(ev.target.value || '').trim() ]).then(function(r) {
+					if (r && r.error) {
+						_ui.warn.textContent = _('Path rejected: %s').format(r.error);
+						_ui.warn.style.display = '';
+						return;
+					}
+					return listAgain().then(paintHead);
+				});
+			}
+		});
+		_ui.reset = E('button', { 'type': 'button', 'class': 'tg-stats-sw tg-stats-reset', 'title': _('Deletes all collected charts and monthly traffic') }, [ E('span', { 'class': 'tg-stats-ri' }), E('span', {}, _('Reset')) ]);
+		_ui.reset.firstChild.innerHTML = svg('trash', 14);
+		_ui.reset.addEventListener('click', function() {
+			if (_ui.reset.disabled) { return; }
+			_ui.reset.disabled = true;
+			callStats([ 'reset' ]).then(function() {
+				_state.series = {}; _state.traffic = {};
+				return refresh();
+			}).catch(function() {}).then(function() { _ui.reset.disabled = false; });
+		});
+
+		var head = E('div', { 'class': 'cbi-section tg5g tg-pg-head tg-stats-head' }, [
+			E('h3', { 'class': 'tg-pg-title tg-stats-title' }, [ E('span', {}, _('Statistics')), _ui.pillM ]),
+			E('div', { 'class': 'tginfo-general' }, [
+				_ui.ico,
+				E('div', { 'class': 'tginfo-status' }, [ _ui.month, _ui.main, _ui.split, _ui.warn ]),
+				E('div', { 'class': 'tginfo-right' }, [ _ui.pill ])
 			]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, [ _('Collect signal in the background') ]),
-				E('div', { 'class': 'cbi-value-field' }, [
-					(function() {
-						var w = new ui.Select(String(lst.bgpoll || 0), {
-							'0': _('Off'),
-							'300': _('Every 5 minutes'),
-							'60': _('Every minute')
-						}, { id: 'st-bgpoll', sort: [ '0', '300', '60' ] });
-						var n = w.render();
-						n.addEventListener('widget-change', function() {
-							callStats([ 'setconf', 'bgpoll=' + w.getValue() ]);
-						});
-						return n;
-					})(),
-					E('div', { 'class': 'cbi-value-description' },
-						[ _('With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped.') ])
-				])
-			]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, [ _('Where to store') ]),
-				E('div', { 'class': 'cbi-value-field' }, [
-					E('input', {
-						'type': 'text', 'class': 'cbi-input-text', 'id': 'st-path',
-						'value': lst.path || '', 'placeholder': lst.path_default || '/etc/5gmodem/stats',
-						'style': 'width:22em;max-width:100%',
-						'change': function(ev) {
-							callStats([ 'setconf', 'path=' + String(ev.target.value || '').trim() ]).then(function(r) {
-								var el = document.getElementById('st-path-now');
-								if (r && r.error) { if (el) { el.textContent = _('Path rejected: %s').format(r.error); } return; }
-								return callStats([ 'list' ]).then(function(lst2) {
-									_state.list = lst2 || {};
-									if (el) { el.textContent = pathNowText(lst2); }
-								});
-							});
-						}
-					}),
-					E('div', { 'class': 'cbi-value-description' }, [
-						_('Empty - the router\'s own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals.').format(lst.path_default || '/etc/5gmodem/stats'),
-						E('div', { 'id': 'st-path-now', 'style': 'margin-top:4px' }, [ pathNowText(lst) ])
-					])
-				])
-			]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, [ _('Reset statistics') ]),
-				E('div', { 'class': 'cbi-value-field' }, [
-					E('button', {
-						'class': 'btn cbi-button cbi-button-remove',
-						'click': ui.createHandlerFn(this, function() {
-							return callStats([ 'reset' ]).then(function() {
-								_state.series = {}; _state.traffic = {};
-								return refresh();
-							});
-						})
-					}, [ _('Reset') ])
-				])
+			// every control in one bar of one height: switches, the background segment, the path, reset
+			E('div', { 'class': 'tg-stats-ctl' }, [
+				_ui.swOn, _ui.swPersist,
+				E('span', { 'class': 'tg-stats-bg tg-stats-poll' }, [ E('span', { 'class': 'tg-stats-lbl' }, _('Collect in background:')), _ui.segBg ]),
+				_ui.pathWrap = E('span', { 'class': 'tg-stats-bg tg-stats-store' }, [ E('span', { 'class': 'tg-stats-lbl' }, _('Store in:')), _ui.path ]),
+				_ui.reset
 			])
 		]);
 
-		var body = E('div', {}, [
-			head,
-			controls,
+		/* ---------- current values ---------- */
+		var T = _ui.tiles;
+		T.ping = tileEl(_('Uplink latency'), '', true);
+		T.signal = tileEl(_('Signal'), '', true);
+		T.rsrp = tileEl('RSRP', '', true);
+		T.temp = tileEl(_('Temperature'), '', true);
+		// this month's traffic is the main line of the header card, so it has no tile of its own
+		var tiles = E('div', { 'class': 'tg-stats-tiles' }, [ T.ping.card, T.signal.card, T.rsrp.card, T.temp.card ]);
+
+		/* ---------- charts ---------- */
+		var emptyIco = E('span', { 'class': 'tg-stats-i' });
+		emptyIco.innerHTML = svg('chart', 30);
+		var empty = E('div', { 'class': 'cbi-section tg5g', 'id': 'stats-empty', 'style': 'display:none' }, [
+			E('div', { 'class': 'tg-stats-empty' }, E('div', {}, [ emptyIco, E('b', {}, _('No data yet')),
+				E('span', {}, _('The first points appear within 10-20 seconds. With the page closed, the signal is collected only when background collection is on.')) ]))
+		]);
+		var charts = E('div', { 'class': 'tg-stats-charts', 'id': 'stats-charts' }, [
 			chartCard(_('Uplink latency'), 'chart-ping'),
 			chartCard(_('Signal level'), 'chart-signal'),
-			E('div', { 'id': 'card-rsrp', 'style': 'display:none' }, [
-				dualChartCard(_('RSRP / SINR'), 'chart-rsrp', 'RSRP, dBm', 'chart-sinr', 'SINR, dB')
-			]),
-			E('div', { 'id': 'card-temp', 'style': 'display:none' }, [
-				chartCard(_('Modem temperature'), 'chart-temp')
-			]),
-			E('div', { 'class': 'cbi-section tg5g' }, [
-				E('h3', {}, [ _('Monthly traffic') ]),
-				E('div', { 'id': 'traffic-table' }, [])
-			])
+			chartCard('RSRP', 'chart-rsrp', 'card-rsrp', true),
+			chartCard('SINR', 'chart-sinr', 'card-sinr', true),
+			chartCard(_('Modem temperature'), 'chart-temp', 'card-temp', true)
 		]);
 
-		refresh(first);
+		/* ---------- monthly traffic ---------- */
+		var traffic = E('div', { 'class': 'cbi-section tg5g' }, [
+			E('h3', {}, [ _('Monthly traffic') ]),
+			E('div', { 'id': 'traffic-table' }, [])
+		]);
+
+		var body = E('div', { 'class': 'tg-stats' }, [
+			head,
+			tiles,
+			empty,
+			charts,
+			traffic
+		]);
+
+		paintHead();
+		// redraw() looks its targets up by id: the first one runs once LuCI has put the page in.
+		window.setTimeout(function() { refresh(first); }, 0);
 		poll.add(function() {
 			if (document.hidden) { return Promise.resolve(); }
 			return refresh(null, true);

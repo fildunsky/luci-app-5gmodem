@@ -1,0 +1,167 @@
+/* Settings page (5gsettings.js): update card in the Network-page layout, LuCI tabs over the
+   form sections (one section per tab, only the active one shown). The LuCI form itself is unchanged;
+   these rules sit on top of it. Loaded by 5gsettings.js; colours come from modem.css. */
+.tg-set {
+  --tg-set-ok: #22a559;
+  --tg-set-warn: #e0a100;
+  --tg-set-bad: #e5484d;
+  --tg-set-line: rgba(128,128,128,.28);
+}
+/* Update card. Three fixed one-line slots (caption, state, detail or progress) and the one
+   action button under them, the pill alone on the right; the version in the text links to
+   its release. Slots keep their height in every
+   state and the button keeps its size, so nothing moves while checking or installing. */
+.tg-set-ico { color: var(--tg-accent); }
+.tg-set-ico { display: flex; flex-direction: column; align-items: center; }
+/* the gear spins in its own fixed square box, centred, so it turns around its own centre */
+.tg-set-gear { display: block; width: 36px; height: 36px; flex: none; transform-origin: 50% 50%; }
+.tg-set-gear svg { display: block; width: 36px; height: 36px; margin: 0; }
+.tg-set-ico.busy .tg-set-gear { animation: tg-set-rot 2.4s linear infinite; }
+.tg-set-head .tginfo-status > .tginfo-reg,
+.tg-set-head .tginfo-status > .tg-set-main,
+.tg-set-head .tginfo-status > .tg-set-sub { height: 1.5em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.tg-set-sub > .tg-set-subt { display: block; overflow: hidden; text-overflow: ellipsis; }
+.tg-set-sub > .tg-set-prog { display: none; align-items: center; gap: 10px; height: 100%; }
+.tg-set-sub.prog { opacity: 1; }
+.tg-set-sub.prog > .tg-set-subt { display: none; }
+.tg-set-sub.prog > .tg-set-prog { display: flex; }
+.tg-set-prog .tg-updprog { display: block; flex: 0 0 min(160px, 40%); margin: 0; }
+.tg-set-prog .tg-updfill { display: block; }
+.tg-set-pt { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--tg-muted); font-variant-numeric: tabular-nums; }
+
+.tg-set-head .tginfo-right { flex: none; gap: 6px; }
+.tg-set-act { display: flex; justify-content: flex-start; margin-top: 10px; }
+.tg-set .cbi-button { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.tg-set .tg-set-btn { justify-content: center; white-space: nowrap; }
+.tg-set-stack { display: inline-grid; }
+.tg-set-stack > span { grid-area: 1 / 1; visibility: hidden; text-align: center; }
+.tg-set-stack > span.on { visibility: visible; }
+.tg-set-i { display: inline-flex; }
+.tg-set-i svg { display: block; }
+.tg-set-i.spin svg { animation: tg-set-rot .9s linear infinite; }
+@keyframes tg-set-rot { to { transform: rotate(360deg); } }
+.tg-set .tg-set-ver, .tg-set .tg-set-ver:visited { color: inherit; text-decoration: none; font: inherit; }
+.tg-set .tg-set-ver:hover, .tg-set .tg-set-ver:focus-visible { text-decoration: underline; }
+
+.tg-set-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; line-height: 1.3; border: 1px solid currentColor; white-space: nowrap; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.tg-set-pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.tg-set-pill.ok { color: var(--tg-set-ok); }
+.tg-set-pill.acc { color: var(--tg-accent); }
+.tg-set-pill.bad { color: var(--tg-set-bad); }
+.tg-set-pill.off { color: var(--tg-muted); }
+.tg-set-title .tg-set-pillm { display: none; }
+
+/* foot row: two quiet cells, label / control / one muted line */
+.tg-set-foot { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 28px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--tg-set-line); font-size: 13px; }
+.tg-set-cell { display: grid; gap: 5px; align-content: start; min-width: 0; }
+.tg-set-cell select { width: 100%; max-width: 30em; min-width: 0; }
+.tg-set-lbl { color: var(--tg-muted); }
+.tg-set-inline { display: flex !important; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.tg-set-inline > .tg-set-lbl { white-space: nowrap; }
+.tg-set-inline > select { width: auto !important; min-width: 14em; max-width: 100%; margin: 0 !important; }
+.tg-set-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--tg-muted); }
+.tg-set-hint.warn { color: var(--tg-set-warn); }
+.tg-set-apnrow { min-width: 0; overflow-wrap: anywhere; }
+
+/* release notes under the status block, above the foot row; long errors at the bottom */
+.tg-set-notes { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--tg-set-line); font-size: 13px; }
+.tg-set-notes > .tg-set-lbl { margin-bottom: 4px; font-weight: 600; }
+.tg-set-detail { margin: 12px 0 0; white-space: pre-wrap; font-size: 85%; max-width: 640px; }
+
+/* the tab menu is LuCI's own (ul.cbi-tabmenu), styled by the theme; on a narrow screen the
+   tabs wrap to a second row, like the page tabs above, so every tab stays in sight */
+.tg-set-tabs { display: flex; flex-wrap: wrap; max-width: 100%; }
+.tg-set-tabs > li { flex: none; max-width: 100%; }
+.tg-set-tabs > li > a { white-space: nowrap; max-width: none; text-overflow: clip; }
+/* the tab names the section: its own heading would repeat it */
+.tg-set-form .cbi-section.tg-set-sec > h3 { display: none !important; }
+
+/* Appearance: the four widget switches as tiles, each with a copy of its widget drawn with
+   the Network-page classes (modem.css .netpribar); their settings below at full width */
+.tg-set-sec[data-tgset="look"] > .cbi-section-node { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.tg-set-sec[data-tgset="look"] > .cbi-section-node > * { grid-column: 1 / -1; }
+.tg-set-sec[data-tgset="look"] > .cbi-section-node > .cbi-value[data-name^="widget_"] {
+  grid-column: auto; display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 1fr; align-items: center; gap: 8px 10px;
+  margin: 0; padding: 8px 10px 10px !important; border: 1px solid var(--tg-set-line) !important; border-radius: 6px;
+}
+.tg-set-sec[data-tgset="look"] > .cbi-section-node > .cbi-value[data-name^="widget_"].hidden { display: none !important; }
+.tg-set-sec[data-tgset="look"] .cbi-value[data-name^="widget_"] > .cbi-value-title { float: none; width: auto; text-align: left; padding: 0; font-weight: 600; }
+.tg-set-sec[data-tgset="look"] .cbi-value[data-name^="widget_"] > .cbi-value-field { display: contents; }
+.tg-set-sec[data-tgset="look"] .cbi-value[data-name^="widget_"] > .cbi-value-field > .cbi-checkbox { grid-column: 2; grid-row: 1; }
+.tg-set-sec[data-tgset="look"] > .cbi-section-node > .cbi-value[data-name="netpri_rank"] { margin-top: 4px; }
+
+.tg-set .tg-wprev { grid-column: 1 / -1; grid-row: 2; align-self: stretch; display: flex; align-items: center; justify-content: center; margin: 0; padding: 10px 8px; min-height: 64px; border-radius: 6px; background: rgba(128,128,128,.08); cursor: pointer; transition: opacity .2s, filter .2s; }
+.tg-set .tg-wprev .netpri-row { flex-wrap: nowrap; justify-content: center; max-width: 100%; }
+.tg-set .tg-wprev .netpri-btn { pointer-events: none; margin: 0; flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+.tg-set .tg-wprev .netpri-btn { display: flex; align-items: flex-start; gap: 0; }
+.tg-set .tg-wprev .netpri-btn.netpri-status, .tg-set .tg-wprev .netpri-btn.netpri-ssclash, .tg-set .tg-wprev .netpri-btn.netpri-st { align-items: flex-end; }
+.tg-set .tg-wprev .netpri-btn .netpri-name { max-width: 100%; }
+/* two cards share a tile: a little less side padding than on the Network page, so names fit */
+.tg-set .tg-wprev { padding-left: 6px; padding-right: 6px; }
+.tg-set .tg-wprev .netpri-row { gap: .3em; }
+.tg-set .tg-wprev .netpri-btn { padding-left: .65em !important; padding-right: .65em !important; }
+.tg-set .tg-wprev .netpri-btn .netpri-name > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* the speed-test card takes the whole width of its tile */
+.tg-set .tg-wprev[data-wprev="speedtest"] .netpri-row { width: 100%; }
+.tg-set .tg-wprev[data-wprev="speedtest"] .netpri-btn { flex: 1 1 auto; }
+.tg-set .tg-wprev .netpri-btn > .netpri-rank:not(.netpri-rank-ic):not(.netpri-rank-bg) { font-size: 60px; line-height: 1; top: -9px; }
+.tg-set .tg-wprev .netpri-btn .netpri-pingbadge { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px; font-size: 15px; line-height: 1; }
+.tg-set .tg-wprev .netpri-btn .netpri-pingico { display: inline-flex; flex: 0 0 auto; width: 16px; height: 16px; }
+.tg-set .tg-wprev .netpri-btn .netpri-pingico svg { display: block; width: 16px; height: 16px; }
+.tg-set .tg-wprev .netpri-st .netpri-st-arrow { display: block; width: 11px; height: 11px; }
+.tg-set .tg-wtile-off .tg-wprev { opacity: .4; filter: grayscale(1); }
+
+/* ping and service cards: one compact row per card, inline edit and remove, add under them */
+.tg-wl { display: grid; gap: 6px; max-width: 560px; }
+.tg-wl-rows { display: grid; gap: 6px; }
+.tg-wl-rows:empty { display: none; }
+.tg-wl-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; border: 1px solid var(--tg-set-line); border-radius: 6px; }
+.tg-wl-row > select { width: 100% !important; min-width: 0; max-width: none; margin: 0 !important; }
+/* host field: free input with a button that opens the preset hosts */
+.tg-wl-combo { position: relative; display: flex; min-width: 0; }
+.tg-wl-combo > input.tg-wl-host { flex: 1 1 auto; width: 100% !important; min-width: 0; max-width: none; margin: 0 !important; border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.tg-set .tg-wl-combo > .tg-wl-pick { flex: none; width: 32px; min-width: 0; padding: 0 !important; justify-content: center; margin: 0 0 0 -1px !important; border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important; }
+.tg-wl-combo.open > .tg-wl-pick svg { transform: rotate(180deg); }
+.tg-wl-menu { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0; min-width: 220px; display: grid; padding: 4px; border: 1px solid var(--tg-set-line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.tg-wl-menu[hidden] { display: none; }
+.tg-wl-opt { display: grid; grid-template-columns: 18px auto minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; margin: 0; padding: 6px 8px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.tg-wl-opt:hover, .tg-wl-opt:focus-visible, .tg-wl-opt.sel { background: rgba(128,128,128,.16); }
+.tg-wl-optn { font-weight: 600; }
+.tg-wl-opth { color: var(--tg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.tg-wl-row > select.tg-wl-sel:not(:nth-child(2)) { width: auto !important; min-width: 9em; }
+.tg-wl-icobox { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; }
+.tg-wl-ico { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex: none; border-radius: 4px; overflow: hidden; }
+.tg-wl-ico svg, .tg-wl-ico img { display: block; width: 16px; height: 16px; }
+.tg-wl-ico img.tg-wl-sm { width: 12px; height: 12px; }
+.tg-wl-badge { color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
+.tg-wl-glyph { font-size: 14px; line-height: 1; overflow: visible; }
+.tg-wl-clash { background: #3d4144; border: 1px solid #565a5d; color: #e8eef2; box-sizing: border-box; }
+.tg-wl-clash svg { width: 11px; height: 11px; }
+.tg-wl-chk { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.tg-wl-chk input { margin: 0; }
+.tg-set .tg-wl-rm { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; min-width: 0; padding: 0 !important; background: transparent !important; border-color: transparent !important; box-shadow: none !important; color: var(--tg-muted); }
+.tg-set .tg-wl-rm:hover, .tg-set .tg-wl-rm:focus-visible { color: var(--tg-set-bad); border-color: var(--tg-set-bad) !important; }
+.tg-set .tg-wl-add { justify-self: start; display: inline-flex; align-items: center; gap: 6px; }
+.tg-set .tg-wl-add[disabled] { opacity: .5; cursor: default; }
+.tg-wl-arrow { display: inline-block; vertical-align: -1px; }
+
+/* a nested form section (SectionValue) sits in its parent's column grid, no frame or indent */
+.tg-set-form .cbi-value[data-widget="CBI.ContainerValue"] { display: block !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+.tg-set-form .cbi-value[data-widget="CBI.ContainerValue"] > .cbi-section,
+.tg-set-form .cbi-value[data-widget="CBI.ContainerValue"] > .cbi-section > .cbi-section-node { margin: 0 !important; padding: 0 !important; border: 0 !important; background: none !important; box-shadow: none !important; }
+.tg-set-form .cbi-value[data-widget="CBI.ContainerValue"] > .cbi-section > h3 { margin: 6px 0 14px !important; padding: 14px 0 0 !important; border-top: 1px solid var(--tg-set-line); font-size: 1em; font-weight: 600; background: none !important; }
+
+@media (max-width: 700px) {
+  /* the pill moves to the title row, the right column has nothing left */
+  .tg-set-head .tginfo-right { display: none; }
+  .tg-set-title .tg-set-pillm { display: inline-flex; }
+  .tg-set-cell select { max-width: none; }
+  .tg-set-sec[data-tgset="look"] > .cbi-section-node { grid-template-columns: minmax(0, 1fr); }
+  .tg-wl-row { grid-template-columns: 18px minmax(0, 1fr) auto; }
+  .tg-wl-row > :nth-child(3) { grid-column: 2 / 3; grid-row: 2; }
+  .tg-wl-row > .tg-wl-rm { grid-column: 3; grid-row: 1; }
+  .tg-wl-row > select.tg-wl-sel:not(:nth-child(2)) { width: 100% !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-set-ico.busy .tg-set-gear, .tg-set-i.spin svg { animation: none; }
+}

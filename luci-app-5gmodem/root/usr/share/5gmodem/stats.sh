@@ -512,7 +512,8 @@ _list_json() {
 		fi
 	fi
 	_ls_bg=$(uci -q get "$CFG.stats.bgpoll" 2>/dev/null)
-	case "$_ls_bg" in 60|300) : ;; *) _ls_bg=0 ;; esac
+	# unset = the default, every 5 minutes; "0" = switched off
+	case "$_ls_bg" in 60|300) : ;; '') _ls_bg=300 ;; *) _ls_bg=0 ;; esac
 	printf '{"enabled":%s,"persist":%s,"bgpoll":%s,"path":"%s","path_now":"%s","path_default":"%s","ping":[%s],"signal":[%s],"traffic":[%s],"temp":[%s],"rsrp":[%s],"sinr":[%s],"labels":{%s}}\n' \
 		"$(_enabled && echo 1 || echo 0)" "$(_persist && echo 1 || echo 0)" "$_ls_bg" \
 		"$(json_esc_s "$(_cfg path)")" "$(json_esc_s "$_ls_now")" "$PDIR_DEF" \
@@ -602,7 +603,7 @@ setconf)
 			bgpoll)
 				case "$_sc_v" in
 					60|300) uci -q set "$CFG.stats.bgpoll=$_sc_v" ;;
-					*) uci -q delete "$CFG.stats.bgpoll" ;;
+					*) uci -q set "$CFG.stats.bgpoll=0" ;;
 				esac ;;
 			path)
 				case "$_sc_v" in

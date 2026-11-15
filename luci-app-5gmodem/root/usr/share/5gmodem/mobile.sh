@@ -58,11 +58,10 @@ radio() {
 	fi
 	_r_p=$("$RES/detect.sh" 2>/dev/null)
 	[ -n "$_r_p" ] || return 1
-	if [ "$1" = off ]; then
-		at_query "$_r_p" "AT+CFUN=4" 8 | grep -q OK
-	else
-		at_query "$_r_p" "AT+CFUN=1" 8 | grep -q OK
-	fi
+	# AT_QUERY_RAW: plain sms_tool output has no OK line, so the check never passed
+	[ "$1" = off ] && _r_c="AT+CFUN=4" || _r_c="AT+CFUN=1"
+	AT_QUERY_RAW=1 at_query "$_r_p" "$_r_c" 8 | tr -d '\r' | grep -q '^OK'
+	_r_rc=$?; unset AT_QUERY_RAW; return $_r_rc
 }
 
 air_get() {

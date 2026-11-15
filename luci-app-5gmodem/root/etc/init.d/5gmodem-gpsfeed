@@ -1,0 +1,20 @@
+#!/bin/sh /etc/rc.common
+
+START=97
+STOP=10
+USE_PROCD=1
+
+start_service() {
+	/usr/share/5gmodem/gpsfeed.sh nmea-ready || return 0
+	procd_open_instance
+	procd_set_param command /usr/share/5gmodem/gpsfeed.sh serve
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 0
+	procd_set_param stderr 0
+	procd_close_instance
+}
+
+service_triggers() {
+	procd_add_reload_trigger 5gmodem
+	procd_add_reload_interface_trigger lan
+}

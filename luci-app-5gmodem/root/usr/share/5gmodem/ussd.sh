@@ -209,6 +209,9 @@ _st running starting
 	MODE3G=$(_mode_3g)
 	CUR=$("$RES/bands.sh" getmode 2>/dev/null)
 	[ -n "$CUR" ] || { sleep 3; CUR=$("$RES/bands.sh" getmode 2>/dev/null); }
+	# getmode can print a message instead of a mode id ("Port not found, quitting..." with
+	# background AT off): that is no mode to return to, the restore then goes to Auto
+	case "$CUR" in *[!A-Za-z0-9_.\|:-]*) CUR="" ;; esac
 	at_lock "$PORT" 15 2>/dev/null || {
 		_st done "" ',"out":"","err":"'"$(_b64 'port busy')"'"'
 		exit 0

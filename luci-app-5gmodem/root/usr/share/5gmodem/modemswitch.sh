@@ -945,7 +945,9 @@ resolve)
 		_sl_p=$(uci -q get "$CFG.$SEC.path")
 		[ -n "$_sl_p" ] && echo " $PRESENT " | grep -q " $_sl_p " || continue
 		[ "$(uci -q get "network.$_sl_if.auto")" = "0" ] || continue
-		[ "$(uci -q get "$CFG.$SEC.kind")" = tether ] && iface_user_off "$_sl_if" && continue
+		# auto=0 without the app's own marks (modem_swapped, modem_parked) is the user's choice:
+		# "mobile data off", airplane mode, "Bring up on boot" unticked. Any USB event runs this.
+		iface_user_off "$_sl_if" && continue
 		uci -q delete "network.$_sl_if.auto"; uci -q delete "network.$_sl_if.modem_swapped"; _sl_chg=1
 		if proto_in wdm "$(uci -q get "network.$_sl_if.proto")"; then
 			for _sl_w in /sys/bus/usb/devices/"$_sl_p":*/usbmisc/cdc-wdm* \

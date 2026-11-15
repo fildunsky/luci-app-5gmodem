@@ -1708,8 +1708,8 @@ msgstr "USSD 设置"
 msgid "AT settings"
 msgstr "AT 设置"
 
-msgid "This option deletes all SMS messages, including ones not visible on the Inbox tab"
-msgstr "此选项会删除所有短信,包括收件箱标签页中不可见的短信"
+msgid "This option deletes all SMS messages, including ones not visible on the SMS tab"
+msgstr "此选项会删除所有短信,包括短信标签页中不可见的短信"
 
 msgid "Select 'No' if the router has a single LED or the LED serves several purposes. This option needs an LED defined in the system to work reliably when the LED is shared."
 msgstr "如果路由器只有一个 LED 或该 LED 有多种用途,请选择「否」。当 LED 被共用时,此选项需要系统中已定义的 LED 才能可靠工作。"
@@ -1801,14 +1801,8 @@ msgstr "安装更新"
 msgid "Release page"
 msgstr "发布页面"
 
-msgid "Current version"
-msgstr "当前版本"
-
 msgid "It also installs the translation if available"
 msgstr "如有可用翻译也会一并安装"
-
-msgid "Checking the latest release…"
-msgstr "正在检查最新版本…"
 
 msgid "Could not check for updates"
 msgstr "无法检查更新"
@@ -2046,12 +2040,6 @@ msgstr "请稍候，正在读取 eUICC——更新配置文件列表可能较慢
 
 msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
 msgstr "eSIM 配置文件已下载。正在重启调制解调器以使其生效..."
-
-msgid "Update installed. Refreshing resources…"
-msgstr "更新已安装。正在刷新资源…"
-
-msgid "Update installed. Signing out to apply it…"
-msgstr "更新已安装。正在退出登录以使其生效…"
 
 msgid "IP type"
 msgstr "IP 类型"
@@ -3832,14 +3820,9 @@ msgstr "收集统计数据"
 msgid "Series live in RAM and are lost on reboot."
 msgstr "数据序列保存在内存中，重启后丢失。"
 
-msgid "Keep monthly traffic across reboots"
-msgstr "重启后保留每月流量"
-
 msgid "Monthly totals are written to flash about once an hour. Ping series are never written there."
 msgstr "每月总量约每小时写入闪存一次。Ping 序列从不写入闪存。"
 
-msgid "Reset statistics"
-msgstr "重置统计数据"
 
 msgid "Uplink latency"
 msgstr "上联延迟"
@@ -3997,14 +3980,6 @@ msgstr "号码"
 msgid "text"
 msgstr "内容"
 
-msgid "APN database"
-msgstr "APN 数据库"
-
-msgid "Check the APN database"
-msgstr "检查 APN 数据库"
-
-msgid "Update the APN database"
-msgstr "更新 APN 数据库"
 
 msgid "Checking the APN database…"
 msgstr "正在检查 APN 数据库…"
@@ -4069,8 +4044,6 @@ msgstr "优先级编号"
 msgid "Icons"
 msgstr "图标"
 
-msgid "Large translucent mark on each uplink card"
-msgstr "每张上联卡片上的大号半透明标记"
 
 msgid "Free the modem and read eSIM"
 msgstr "释放模块并读取 eSIM"
@@ -4690,8 +4663,11 @@ msgstr "声音：开"
 msgid "Sound: off"
 msgstr "声音：关"
 
-msgid "Interval, s"
-msgstr "间隔（秒）"
+msgid "Refresh every"
+msgstr "刷新间隔"
+
+msgid "%s s"
+msgstr "%s 秒"
 
 msgid "excellent"
 msgstr "极好"
@@ -5137,8 +5113,8 @@ msgstr "与“外网 IP”共用 — 在“专家选项”中设置"
 msgid "Show the external address"
 msgstr "显示外部地址"
 
-msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
-msgstr "把它显示在运营商分配的地址旁边——在调制解调器卡片中形如“IPv4: 10.x.x.x | 1.2.3.4”。在 CGNAT 或隧道后面二者并不相同，正是这个差别说明路由器自身的流量是否走了 VPN。默认关闭：这会向第三方服务发起请求。"
+msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. It is a request to a third-party service."
+msgstr "把它显示在运营商分配的地址旁边——在调制解调器卡片中形如“IPv4: 10.x.x.x | 1.2.3.4”。在 CGNAT 或隧道后面二者并不相同，正是这个差别说明路由器自身的流量是否走了 VPN。这会向第三方服务发起请求。"
 
 msgid "Used only when the service above returns an address but no country: the flag is then resolved by a second request, for the country alone. Use {ip} as the address placeholder."
 msgstr "只有当上面的服务返回了地址却没有国家时才用到：这时会再发一次请求，只为查国家，从而得到国旗。用 {ip} 作为地址占位符。"
@@ -5356,9 +5332,6 @@ msgstr "最大"
 msgid "min"
 msgstr "最小"
 
-msgid "RSRP / SINR"
-msgstr "RSRP / SINR"
-
 msgid "Show signal history"
 msgstr "显示信号历史"
 
@@ -5394,9 +5367,6 @@ msgstr "此调制解调器不支持"
 
 msgid "the modem did not accept it"
 msgstr "调制解调器未接受"
-
-msgid "Collect signal in the background"
-msgstr "在后台采集信号"
 
 msgid "Off"
 msgstr "关闭"
@@ -5944,8 +5914,8 @@ msgstr "蓝色：LTE 且已连接。绿色：已注册 3G 或 2G。红色闪烁�
 msgid "Delete from the modem after forwarding"
 msgstr "转发后从调制解调器删除"
 
-msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
-msgstr "当所有已启用的渠道（Telegram、ntfy、Webhook）都已送达，并且（如已启用）SMS 命令已检查后，消息将从调制解调器中删除。未开启“在路由器内存中保存消息”时，它也会从收件箱中消失。"
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the SMS tab too."
+msgstr "当所有已启用的渠道（Telegram、ntfy、Webhook）都已送达，并且（如已启用）SMS 命令已检查后，消息将从调制解调器中删除。未开启“在路由器内存中保存消息”时，它也会从短信标签页中消失。"
 
 msgid "Follow network address changes"
 msgstr "跟踪网络分配的地址变化"
@@ -6169,3 +6139,1329 @@ msgstr "未启用时上传速度常停留在 1-2 Mbit/s。该选择会被保存�
 
 msgid "Upload is aggregated too: %s"
 msgstr "上传也已聚合：%s"
+
+msgid "%s km/h"
+msgstr "%s 公里/小时"
+
+msgid "%s m"
+msgstr "%s 米"
+
+msgid "2D"
+msgstr "2D"
+
+msgid "3D"
+msgstr "3D"
+
+msgid "2GIS"
+msgstr "2GIS"
+
+msgid "AT commands"
+msgstr "AT 命令"
+
+msgid "Add the GNSS position, speed and satellites of the modem to the published file and to MQTT. Off by default: a stream of coordinates is a log of where the router has been. Each update asks the modem for the position."
+msgstr "将调制解调器的 GNSS 位置、速度和卫星数加入发布文件和 MQTT。默认关闭：连续的坐标就是路由器去过哪里的记录。每次更新都会向调制解调器查询位置。"
+
+msgid "Address template of the map tiles with {z}, {x} and {y}. Empty - OpenStreetMap. Use your own server if OpenStreetMap does not open from your network."
+msgstr "包含 {z}、{x} 和 {y} 的地图瓦片地址模板。留空则使用 OpenStreetMap。如果您的网络打不开 OpenStreetMap，请填写自己的服务器。"
+
+msgid "Altitude"
+msgstr "海拔"
+
+msgid "An https:// address with {z}, {x} and {y}"
+msgstr "包含 {z}、{x} 和 {y} 的 https:// 地址"
+
+msgid "Asking the modem…"
+msgstr "正在查询调制解调器…"
+
+msgid "Clear track"
+msgstr "清除轨迹"
+
+msgid "Cold start"
+msgstr "冷启动"
+
+msgid "Coordinates"
+msgstr "坐标"
+
+msgid "Copied: %s"
+msgstr "已复制：%s"
+
+msgid "Copy coordinates"
+msgstr "复制坐标"
+
+msgid "Could not load the map component."
+msgstr "无法加载地图组件。"
+
+msgid "Course"
+msgstr "航向"
+
+msgid "Field reports: on some firmware the modem kept restarting in a loop after GNSS was turned off while it sat in a router. Turn it off only if you can reach the modem from a computer."
+msgstr "用户反馈：部分固件在路由器中关闭 GNSS 后，调制解调器会不断重启。只有在能用电脑连接调制解调器时才关闭。"
+
+msgid "Fix"
+msgstr "定位"
+
+msgid "GPS"
+msgstr "GPS"
+
+msgid "Google Maps"
+msgstr "Google 地图"
+
+msgid "HDOP (lower is more accurate)"
+msgstr "HDOP（越小越精确）"
+
+msgid "Hide the map"
+msgstr "隐藏地图"
+
+msgid "Hot start"
+msgstr "热启动"
+
+msgid "Include the position"
+msgstr "包含位置"
+
+msgid "Keep the position in the center"
+msgstr "保持位置居中"
+
+msgid "Load the map as soon as the position is known instead of waiting for the \"Show on map\" button. The map service then learns the area every time the tab is opened."
+msgstr "一获得位置就加载地图，而不等待“在地图上显示”按钮。这样每次打开该页时地图服务都会得知所在区域。"
+
+msgid "Map"
+msgstr "地图"
+
+msgid "Map tiles"
+msgstr "地图瓦片"
+
+msgid "NMEA port %s"
+msgstr "NMEA 端口 %s"
+
+msgid "No GNSS receiver was found on this modem. Supported: Qualcomm modems with the QMI location service (also in MBIM mode), Quectel, SIMCom, Telit, MeiG, Fibocom (FM350 and Qualcomm-based), Foxconn/Dell (T77W968, T99W175, T99W373) and Sierra modems with a GNSS port. A receiver handled by ugps is shown too."
+msgstr "未在此调制解调器上找到 GNSS 接收机。支持：带 QMI 定位服务的高通调制解调器（MBIM 模式下也可）、Quectel、SIMCom、Telit、MeiG、Fibocom（FM350 及高通平台）、Foxconn/Dell（T77W968、T99W175、T99W373）以及带 GNSS 端口的 Sierra 调制解调器。由 ugps 管理的接收机也会显示。"
+
+msgid "On this modem the GNSS setting is stored in the modem and applied by its restart: the connection drops for about a minute."
+msgstr "此调制解调器的 GNSS 设置保存在调制解调器内，需重启调制解调器才能生效：连接会中断约一分钟。"
+
+msgid "Open the map at once"
+msgstr "立即打开地图"
+
+msgid "OpenStreetMap"
+msgstr "OpenStreetMap"
+
+msgid "Position from the GNSS receiver built into the modem. The page asks the modem every few seconds while it is open; nothing runs in the background."
+msgstr "来自调制解调器内置 GNSS 接收机的位置。页面打开时每隔几秒查询一次调制解调器；后台不运行任何任务。"
+
+msgid "Receiver"
+msgstr "接收机"
+
+msgid "Restart the modem"
+msgstr "重启调制解调器"
+
+msgid "Restart the search"
+msgstr "重新搜索"
+
+msgid "Satellites (used / in view)"
+msgstr "卫星（使用 / 可见）"
+
+msgid "Show on map"
+msgstr "在地图上显示"
+
+msgid "Source"
+msgstr "来源"
+
+msgid "Speed"
+msgstr "速度"
+
+msgid "The \"GPS\" tab: position from the GNSS receiver of the modem and a map. It appears only for a modem with a receiver the app knows how to read."
+msgstr "“GPS”页：调制解调器 GNSS 接收机给出的位置和地图。仅在调制解调器带有本应用可读取的接收机时显示。"
+
+msgid "The map tiles are loaded by your browser from the map service, which learns the approximate area shown. The track is kept only while this page is open."
+msgstr "地图瓦片由您的浏览器从地图服务加载，该服务会得知所显示的大致区域。轨迹只在本页打开期间保留。"
+
+msgid "The modem did not accept the command."
+msgstr "调制解调器未接受该命令。"
+
+msgid "The modem restarts to apply the setting."
+msgstr "调制解调器正在重启以应用设置。"
+
+msgid "The receiver is searching for satellites again. A cold start can take several minutes under open sky."
+msgstr "接收机正在重新搜索卫星。冷启动在开阔天空下也可能需要几分钟。"
+
+msgid "Time (UTC)"
+msgstr "时间（UTC）"
+
+msgid "Turn GNSS off"
+msgstr "关闭 GNSS"
+
+msgid "Turn GNSS on"
+msgstr "开启 GNSS"
+
+msgid "Warm start"
+msgstr "温启动"
+
+msgid "Yandex Maps"
+msgstr "Yandex 地图"
+
+msgid "blocked in the modem (GTGPSSWITCH=0)"
+msgstr "已在调制解调器中禁用（GTGPSSWITCH=0）"
+
+msgid "searching for satellites"
+msgstr "正在搜索卫星"
+
+msgid "ugps service"
+msgstr "ugps 服务"
+
+msgid "QMI location service"
+msgstr "QMI 定位服务"
+
+msgid "A cold start takes several minutes under open sky."
+msgstr "冷启动在开阔天空下也需要几分钟。"
+
+msgid "An http:// or https:// address without a query"
+msgstr "不带查询参数的 http:// 或 https:// 地址"
+
+msgid "Clock from GNSS"
+msgstr "从 GNSS 校时"
+
+msgid "Cold"
+msgstr "冷"
+
+msgid "Coordinates are not determined yet"
+msgstr "尚未确定坐标"
+
+msgid "E"
+msgstr "东"
+
+msgid "Fix %s"
+msgstr "定位 %s"
+
+msgid "GNSS receiver"
+msgstr "GNSS 接收机"
+
+msgid "Latitude, longitude"
+msgstr "纬度，经度"
+
+msgid "Letters, digits, dot, dash and underscore, up to 64"
+msgstr "字母、数字、点、短横线和下划线，最多 64 个"
+
+msgid "Load the map"
+msgstr "加载地图"
+
+msgid "Load the map tiles as soon as the position is known. Off: the map waits for the \"Load the map\" button. The map service learns the area shown."
+msgstr "一获得位置就加载地图瓦片。关闭时地图等待“加载地图”按钮。地图服务会得知所显示的区域。"
+
+msgid "Loading the map…"
+msgstr "正在加载地图…"
+
+msgid "N"
+msgstr "北"
+
+msgid "NE"
+msgstr "东北"
+
+msgid "NMEA over the network"
+msgstr "通过网络输出 NMEA"
+
+msgid "NW"
+msgstr "西北"
+
+msgid "No coordinates"
+msgstr "无坐标"
+
+msgid "Open in"
+msgstr "打开于"
+
+msgid "Phone location service (Android)"
+msgstr "手机定位服务（Android）"
+
+msgid "Readings"
+msgstr "读数"
+
+msgid "Receiver is off"
+msgstr "接收机已关闭"
+
+msgid "S"
+msgstr "南"
+
+msgid "SE"
+msgstr "东南"
+
+msgid "SW"
+msgstr "西南"
+
+msgid "Satellites"
+msgstr "卫星"
+
+msgid "Satellites in view: %s, used: %s"
+msgstr "可见卫星：%s，使用中：%s"
+
+msgid "Searching for satellites"
+msgstr "正在搜索卫星"
+
+msgid "Seconds between positions. The shortest is 30."
+msgstr "两次发送位置之间的秒数，最短 30。"
+
+msgid "Send the position to a Traccar server over the OsmAnd protocol, for example http://192.168.1.10:5055. Empty - off. The position leaves the router: everyone with access to that server sees where the router is. Nothing is sent without a fix."
+msgstr "通过 OsmAnd 协议把位置发送到 Traccar 服务器，例如 http://192.168.1.10:5055。留空则关闭。位置会离开路由器：能访问该服务器的人都能看到路由器在哪里。没有定位时不发送。"
+
+msgid "Set the router clock from the GNSS receiver when there is no NTP sync, for example with no internet after a boot. Never changes a clock that NTP has synced."
+msgstr "没有 NTP 同步时（例如开机后没有网络）用 GNSS 接收机设置路由器时间。已由 NTP 同步的时间绝不更改。"
+
+msgid "Start mode"
+msgstr "启动模式"
+
+msgid "TCP port that streams the position as NMEA (GGA and RMC once a second) to gpsd, navigation apps or a car head unit, for example 10110. Empty - off. It listens on the LAN address only, without a password. Needs the socat or ncat package."
+msgstr "以 NMEA（每秒 GGA 和 RMC）向 gpsd、导航应用或车机输出位置的 TCP 端口，例如 10110。留空则关闭。只在 LAN 地址上监听，无密码。需要 socat 或 ncat 软件包。"
+
+msgid "The external USB receiver on %s needs no control; this page only shows its data."
+msgstr "%s 上的外接 USB 接收机无需控制，本页只显示其数据。"
+
+msgid "The identifier of this device on the Traccar server."
+msgstr "此设备在 Traccar 服务器上的标识。"
+
+msgid "The map appears after the receiver is turned on and gets a fix."
+msgstr "接收机开启并定位后显示地图。"
+
+msgid "The map is not loaded"
+msgstr "地图未加载"
+
+msgid "The map opens at the modem position as soon as coordinates appear."
+msgstr "一有坐标，地图就在调制解调器的位置打开。"
+
+msgid "The map service learns the area where the router is."
+msgstr "地图服务会得知路由器所在的区域。"
+
+msgid "The receiver is managed by the ugps service; this page only shows its data."
+msgstr "接收机由 ugps 服务管理，本页只显示其数据。"
+
+msgid "This modem has no GNSS receiver that the app can read"
+msgstr "此调制解调器没有本应用可读取的 GNSS 接收机"
+
+msgid "Tiles are loaded by your browser from %s, which learns the area shown. The track is kept only while this page is open."
+msgstr "地图瓦片由您的浏览器从 %s 加载，对方会得知所显示的区域。轨迹只在本页打开期间保留。"
+
+msgid "Traccar device ID"
+msgstr "Traccar 设备 ID"
+
+msgid "Traccar interval"
+msgstr "Traccar 间隔"
+
+msgid "Traccar server"
+msgstr "Traccar 服务器"
+
+msgid "Turn the receiver on to get coordinates."
+msgstr "开启接收机以获取坐标。"
+
+msgid "Under open sky the first fix takes from 30 s to several minutes."
+msgstr "在开阔天空下首次定位需要 30 秒到几分钟。"
+
+msgid "W"
+msgstr "西"
+
+msgid "Waiting for the first fix"
+msgstr "等待首次定位"
+
+msgid "above sea level"
+msgstr "海拔"
+
+msgid "lower is more accurate"
+msgstr "越小越精确"
+
+msgid "updated %s s ago"
+msgstr "%s 秒前更新"
+
+msgid "used / in view"
+msgstr "使用 / 可见"
+
+msgid "%d of %d buttons configured"
+msgstr "已配置 %d / %d 个按钮"
+
+msgid "%d of %d on"
+msgstr "已开启 %d / %d"
+
+msgid "%d parts"
+msgstr "%d 段"
+
+msgid "%s (by modem)"
+msgstr "%s（按调制解调器）"
+
+msgid "AT command console"
+msgstr "AT 命令控制台"
+
+msgid "Back"
+msgstr "返回"
+
+msgid "Base station"
+msgstr "基站"
+
+msgid "Collected every 10 s while this page is open"
+msgstr "本页打开时每 10 秒采集一次"
+
+msgid "Collecting"
+msgstr "正在采集"
+
+
+msgid "Commands go through atcmd.sh: the port and the command form are checked on the router. The reply is awaited up to %d seconds."
+msgstr "命令经 atcmd.sh 发送，端口和命令格式在路由器上检查。最多等待回复 %d 秒。"
+
+msgid "Connection"
+msgstr "连接"
+
+msgid "Conversations"
+msgstr "会话"
+
+msgid "Delete the conversation"
+msgstr "删除会话"
+
+msgid "Delete the conversation (%d messages)?"
+msgstr "删除该会话（%d 条消息）？"
+
+msgid "Drive not mounted"
+msgstr "存储设备未挂载"
+
+msgid "Active profile: %s"
+msgstr "当前活动配置文件：%s"
+
+msgid "Feed"
+msgstr "列表"
+
+msgid "Forwarding"
+msgstr "转发"
+
+msgid "GPS tab"
+msgstr "GPS 页"
+
+msgid "GSM-7: 160 characters per SMS, 153 per part"
+msgstr "GSM-7：每条 160 字符，分段时每段 153"
+
+msgid "History is kept until the page is closed · ↑ recalls the previous command"
+msgstr "历史保留到页面关闭 · ↑ 调出上一条命令"
+
+msgid "How the app talks to the modem"
+msgstr "应用与调制解调器的通信方式"
+
+msgid "How to use it"
+msgstr "使用方法"
+
+msgid "In queue: %d"
+msgstr "队列中：%d"
+
+msgid "Installing"
+msgstr "正在安装"
+
+msgid "It is sent in the background when the modem is free; you can close the page."
+msgstr "调制解调器空闲时在后台发送，可以关闭页面。"
+
+msgid "My codes"
+msgstr "我的代码"
+
+msgid "New SMS appear here on their own: the page checks the modem every 15 seconds."
+msgstr "新短信会自动出现在这里：页面每 15 秒检查一次调制解调器。"
+
+msgid "No new messages"
+msgstr "没有新消息"
+
+msgid "No profile is enabled"
+msgstr "没有启用的配置文件"
+
+msgid "Not sent"
+msgstr "未发送"
+
+msgid "Nothing found"
+msgstr "未找到"
+
+msgid "Notifications"
+msgstr "通知"
+
+msgid "Phone storage: %s messages"
+msgstr "手机存储：%s 条消息"
+
+msgid "Physical SIM is active"
+msgstr "实体 SIM 卡已启用"
+
+msgid "Pick a code from the list or type one below."
+msgstr "从列表中选择代码，或在下方输入。"
+
+msgid "Pick a template or type a command below."
+msgstr "选择模板，或在下方输入命令。"
+
+msgid "Port"
+msgstr "端口"
+
+msgid "Ports and interface"
+msgstr "端口和接口"
+
+msgid "Profiles"
+msgstr "配置文件"
+
+msgid "Profiles: %d"
+msgstr "配置文件：%d"
+
+msgid "Ready to send USSD codes"
+msgstr "可以发送 USSD 代码"
+
+msgid "Retry"
+msgstr "重试"
+
+msgid "SMS can also be sent from a Telegram chat - set the bot up on the Forwarding tab."
+msgstr "也可以从 Telegram 聊天发送短信——在“转发”标签页设置机器人。"
+
+msgid "SMS only"
+msgstr "仅短信"
+
+msgid "Search by sender and text"
+msgstr "按发件人和内容搜索"
+
+msgid "Select a conversation on the left"
+msgstr "请在左侧选择会话"
+
+msgid "Select several"
+msgstr "多选"
+
+msgid "Sending"
+msgstr "发送"
+
+msgid "Sending to contacts: %d, delay %s s"
+msgstr "发送给联系人：%d，间隔 %s 秒"
+
+msgid "Session open"
+msgstr "会话已打开"
+
+msgid "Shared with \"External IP\" - set it in the \"External IP\" section"
+msgstr "与“外部 IP”共用——在“外部 IP”部分设置"
+
+msgid "Storage"
+msgstr "存储"
+
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Forwarding tab."
+msgstr "机器人已连接用于接收消息。要从聊天发送短信，请在“转发”标签页勾选“允许从聊天发送短信”。"
+
+msgid "The first points appear within 10-20 seconds. With the page closed, the signal is collected only when background collection is on."
+msgstr "首批数据点在 10–20 秒内出现。页面关闭时，只有开启后台采集才会采集信号。"
+
+msgid "The message is queued."
+msgstr "消息已加入队列。"
+
+msgid "The modem does not answer USSD"
+msgstr "调制解调器不响应 USSD"
+
+msgid "The modem is in %s: USSD needs the voice channel"
+msgstr "调制解调器处于 %s：USSD 需要语音通道"
+
+msgid "The modem is managed by ModemManager"
+msgstr "调制解调器由 ModemManager 管理"
+
+msgid "The network registered this SIM for SMS only"
+msgstr "网络仅为短信注册了此 SIM 卡"
+
+msgid "The request can be sent, but most likely there will be no reply."
+msgstr "可以发送请求，但很可能不会有回复。"
+
+msgid "The request goes through 3G and returns to %s"
+msgstr "请求经 3G 发送，然后返回 %s"
+
+msgid "The sender is alphanumeric, you cannot reply to it. To write to a number, use \"New SMS\"."
+msgstr "发件人为字母名称，无法回复。要发送到号码，请使用“新短信”。"
+
+msgid "To e-mail"
+msgstr "转到邮件"
+
+msgid "Traffic for %s"
+msgstr "%s 流量"
+
+msgid "USSD codes"
+msgstr "USSD 代码"
+
+msgid "USSD unavailable"
+msgstr "USSD 不可用"
+
+msgid "USSD works"
+msgstr "USSD 可用"
+
+msgid "Unicode: 70 characters per SMS, 67 per part"
+msgstr "Unicode：每条 70 字符，分段时每段 67"
+
+msgid "Up to date"
+msgstr "已是最新"
+
+msgid "Waiting for the active modem. If the selected modem is not the active one, switch to it in the modem bar."
+msgstr "正在等待活动调制解调器。如果所选调制解调器不是活动的，请在调制解调器栏中切换。"
+
+msgid "all automatic"
+msgstr "全部自动"
+
+msgid "alphanumeric sender"
+msgstr "字母名称发件人"
+
+msgid "consent needed"
+msgstr "需要同意"
+
+msgid "eSIM active"
+msgstr "eSIM 已启用"
+
+msgid "eSIM management is unavailable"
+msgstr "eSIM 管理不可用"
+
+msgid "from modem %s"
+msgstr "来自调制解调器 %s"
+
+msgid "messages: %d"
+msgstr "消息：%d"
+
+
+msgid "sent from this page"
+msgstr "从本页发送"
+
+msgid "short number"
+msgstr "短号码"
+
+msgid "today"
+msgstr "今天"
+
+msgid "via 3G"
+msgstr "经 3G"
+
+msgid "waiting for a reply"
+msgstr "等待回复"
+
+msgid "yesterday"
+msgstr "昨天"
+
+msgid "Paused"
+msgstr "已暂停"
+
+msgid "Collection"
+msgstr "采集"
+
+msgid "Keep after reboot"
+msgstr "重启后保留"
+
+
+msgid "Collect in background"
+msgstr "后台收集"
+
+msgid "Collect in background:"
+msgstr "后台收集："
+
+msgid "Deletes all collected charts and monthly traffic"
+msgstr "删除所有已收集的图表和月流量"
+
+msgid "Store in:"
+msgstr "存储位置："
+
+msgid "every 5 minutes"
+msgstr "每 5 分钟"
+
+msgid "every minute"
+msgstr "每分钟"
+
+msgid "Asking GitHub for the latest release"
+msgstr "正在向 GitHub 查询最新版本"
+
+msgid "Check again"
+msgstr "再次检查"
+
+msgid "Check the internet connection or pick another interface in \"Download through\" below."
+msgstr "请检查网络连接，或在下方“下载途径”中选择其他接口。"
+
+msgid "Checking for updates…"
+msgstr "正在检查更新…"
+
+msgid "GitHub is not reachable"
+msgstr "无法访问 GitHub"
+
+msgid "Install %s"
+msgstr "安装 %s"
+
+msgid "Installed: %s"
+msgstr "已安装：%s"
+
+msgid "Installing %s…"
+msgstr "正在安装 %s…"
+
+msgid "Installing…"
+msgstr "正在安装…"
+
+msgid "Not checked"
+msgstr "未检查"
+
+msgid "Offline"
+msgstr "离线"
+
+msgid "Refreshing resources…"
+msgstr "正在刷新资源…"
+
+msgid "Signing out to apply it…"
+msgstr "正在注销以应用更新…"
+
+msgid "Try again"
+msgstr "重试"
+
+msgid "Update failed"
+msgstr "更新失败"
+
+msgid "Update now"
+msgstr "立即更新"
+
+msgid "Updates have not been checked yet"
+msgstr "尚未检查更新"
+
+msgid "Updating…"
+msgstr "正在更新…"
+
+msgid "Version %s"
+msgstr "版本 %s"
+
+msgid "Version %s installed"
+msgstr "已安装版本 %s"
+
+msgid "Version %s is available"
+msgstr "版本 %s 可用"
+
+msgid "What's new in %s"
+msgstr "%s 更新内容"
+
+msgid "checked at %s"
+msgstr "检查于 %s"
+
+msgid "released %s"
+msgstr "发布于 %s"
+
+msgid "not registered, not searching"
+msgstr "未注册，未搜索"
+
+msgid "registered, home network"
+msgstr "已注册，本地网络"
+
+msgid "not registered, searching for a network"
+msgstr "未注册，正在搜索网络"
+
+msgid "registration denied by the network"
+msgstr "网络拒绝注册"
+
+msgid "unknown"
+msgstr "未知"
+
+msgid "registered, roaming"
+msgstr "已注册，漫游"
+
+msgid "registered for SMS only, home network"
+msgstr "仅注册短信，本地网络"
+
+msgid "registered for SMS only, roaming"
+msgstr "仅注册短信，漫游"
+
+msgid "emergency calls only"
+msgstr "仅限紧急呼叫"
+
+msgid "Signal level: CSQ %s ≈ %s dBm%s"
+msgstr "信号电平：CSQ %s ≈ %s dBm%s"
+
+msgid "Signal level: CSQ %s ≈ %s dBm (extended scale)"
+msgstr "信号电平：CSQ %s ≈ %s dBm（扩展刻度）"
+
+msgid "Signal level: unknown (99), the modem has not measured it"
+msgstr "信号电平：未知 (99)，模块尚未测量"
+
+msgid "Bit error rate: not reported (normal for LTE and 5G)"
+msgstr "误码率：未报告（LTE 和 5G 下属正常）"
+
+msgid "Bit error rate: class %s of 7 (0 is best)"
+msgstr "误码率：等级 %s / 7（0 最好）"
+
+msgid "No measurements: 99 and 255 mean no data for that network type"
+msgstr "无测量值：99 和 255 表示该网络类型没有数据"
+
+msgid "automatic"
+msgstr "自动"
+
+msgid "deregistered from the network"
+msgstr "已从网络注销"
+
+msgid "manual, automatic if that fails"
+msgstr "手动，失败时自动"
+
+msgid "Operator selection: %s"
+msgstr "运营商选择：%s"
+
+msgid "No operator: the modem is not registered"
+msgstr "无运营商：模块未注册"
+
+msgid "Network code (MCC MNC): %s %s"
+msgstr "网络代码 (MCC MNC)：%s %s"
+
+msgid "Operator: %s"
+msgstr "运营商：%s"
+
+msgid "Network type: %s"
+msgstr "网络类型：%s"
+
+msgid "State: %s"
+msgstr "状态：%s"
+
+msgid "Area code (LAC/TAC): %s, cell ID: %s"
+msgstr "区域码 (LAC/TAC)：%s，小区 ID：%s"
+
+msgid "Cell ID: %s"
+msgstr "小区 ID：%s"
+
+msgid "Base station (eNB) %s, sector %s"
+msgstr "基站 (eNB) %s，扇区 %s"
+
+msgid "Profile %s: APN \"%s\", %s"
+msgstr "配置 %s：APN \"%s\"，%s"
+
+msgid "Profiles without an APN: %s (the network picks the default one)"
+msgstr "无 APN 的配置：%s（由网络选择默认值）"
+
+msgid "Profile %s has an address: %s"
+msgstr "配置 %s 已获得地址：%s"
+
+msgid "No profile has an address yet"
+msgstr "尚无配置获得地址"
+
+msgid "Attached to the packet service: mobile data is available"
+msgstr "已附着分组业务：移动数据可用"
+
+msgid "Not attached to the packet service: no mobile data"
+msgstr "未附着分组业务：无移动数据"
+
+msgid "Active profiles: %s"
+msgstr "已激活的配置：%s"
+
+msgid "No profile is active"
+msgstr "没有已激活的配置"
+
+msgid "The SIM is ready, no code is needed"
+msgstr "SIM 已就绪，无需密码"
+
+msgid "The SIM waits for the PIN code"
+msgstr "SIM 等待输入 PIN 码"
+
+msgid "The SIM is blocked: the PUK code is needed"
+msgstr "SIM 已锁定：需要 PUK 码"
+
+msgid "The SIM waits for the PIN2 code"
+msgstr "SIM 等待输入 PIN2 码"
+
+msgid "The SIM waits for the PUK2 code"
+msgstr "SIM 等待输入 PUK2 码"
+
+msgid "The modem is locked to another operator (network lock code needed)"
+msgstr "模块已锁定到其他运营商（需要网络解锁码）"
+
+msgid "The SIM is not ready yet"
+msgstr "SIM 尚未就绪"
+
+msgid "SIM state: %s"
+msgstr "SIM 状态：%s"
+
+msgid "Modem date and time: %s"
+msgstr "模块日期和时间：%s"
+
+msgid "Time zone: UTC%s"
+msgstr "时区：UTC%s"
+
+msgid "Minimum functionality: the radio is off"
+msgstr "最小功能：射频已关闭"
+
+msgid "Full functionality: the radio is on"
+msgstr "全功能：射频已开启"
+
+msgid "Flight mode: the transmitter and receiver are off"
+msgstr "飞行模式：发射和接收均已关闭"
+
+msgid "Factory test mode"
+msgstr "工厂测试模式"
+
+msgid "Offline mode: the radio is off"
+msgstr "离线模式：射频已关闭"
+
+msgid "Mode %s"
+msgstr "模式 %s"
+
+msgid "Connected to the cell (RRC connected): data is being exchanged"
+msgstr "已连接小区 (RRC connected)：正在交换数据"
+
+msgid "Idle (RRC idle): no traffic right now, the connection itself is kept"
+msgstr "空闲 (RRC idle)：当前无流量，连接本身仍保持"
+
+msgid "%s: %s digits"
+msgstr "%s：%s 位"
+
+msgid "A number is stored on the SIM"
+msgstr "SIM 上存有号码"
+
+msgid "No own number is stored on the SIM"
+msgstr "SIM 上未存储本机号码"
+
+msgid "The reply also shows the IMEI"
+msgstr "回复中还包含 IMEI"
+
+msgid "registered, idle"
+msgstr "已注册，空闲"
+
+msgid "connected, data is flowing"
+msgstr "已连接，正在传输数据"
+
+msgid "searching for a cell"
+msgstr "正在搜索小区"
+
+msgid "limited service (emergency calls only)"
+msgstr "受限服务（仅限紧急呼叫）"
+
+msgid "Cell state: %s"
+msgstr "小区状态：%s"
+
+msgid "5G NSA anchor:"
+msgstr "5G NSA 锚点："
+
+msgid "5G NSA carrier:"
+msgstr "5G NSA 载波："
+
+msgid "No service"
+msgstr "无服务"
+
+msgid "Network: %s, band %s, channel %s"
+msgstr "网络：%s，频段 %s，信道 %s"
+
+msgid "Primary carrier: %s"
+msgstr "主载波：%s"
+
+msgid "Added carriers: %s"
+msgstr "附加载波：%s"
+
+msgid "No added carriers: aggregation is not in use"
+msgstr "无附加载波：未使用载波聚合"
+
+msgid "Antenna branches: %s dBm; the signal is heard on %s of %s"
+msgstr "天线支路：%s dBm；有信号的支路 %s / %s"
+
+msgid "Data interface: %s"
+msgstr "数据接口：%s"
+
+msgid "Cell lock is off"
+msgstr "小区锁定已关闭"
+
+msgid "Cell lock is on"
+msgstr "小区锁定已开启"
+
+msgid "Active SIM slot: %s"
+msgstr "当前 SIM 卡槽：%s"
+
+msgid "A SIM card is inserted"
+msgstr "已插入 SIM 卡"
+
+msgid "no service"
+msgstr "无服务"
+
+msgid "limited service"
+msgstr "受限服务"
+
+msgid "normal service"
+msgstr "正常服务"
+
+msgid "limited regional service"
+msgstr "受限区域服务"
+
+msgid "power saving"
+msgstr "省电"
+
+msgid "Service: %s"
+msgstr "服务：%s"
+
+msgid "calls only"
+msgstr "仅通话"
+
+msgid "data only"
+msgstr "仅数据"
+
+msgid "calls and data"
+msgstr "通话和数据"
+
+msgid "camped on a cell"
+msgstr "已驻留小区"
+
+msgid "Network: %s"
+msgstr "网络：%s"
+
+msgid "Cell %s, PCI %s, band %s, channel %s"
+msgstr "小区 %s，PCI %s，频段 %s，信道 %s"
+
+msgid "Cells heard: %s; the strongest is PCI %s on channel %s, RSRP %s dBm"
+msgstr "可听到的小区：%s；最强为 PCI %s（信道 %s），RSRP %s dBm"
+
+msgid "Network mode: %s"
+msgstr "网络模式：%s"
+
+msgid "online"
+msgstr "在线"
+
+msgid "offline"
+msgstr "离线"
+
+msgid "band %s"
+msgstr "频段 %s"
+
+msgid "Temperature: %s °C"
+msgstr "温度：%s °C"
+
+msgid "The SIM is inserted and unlocked"
+msgstr "SIM 已插入并已解锁"
+
+msgid "The SIM is ready"
+msgstr "SIM 已就绪"
+
+msgid "LTE bands: %s"
+msgstr "LTE 频段：%s"
+
+msgid "5G bands: %s"
+msgstr "5G 频段：%s"
+
+msgid "Modem identification: manufacturer, model and firmware version."
+msgstr "模块标识：厂商、型号和固件版本。"
+
+msgid "Modem manufacturer."
+msgstr "模块厂商。"
+
+msgid "Modem model."
+msgstr "模块型号。"
+
+msgid "Firmware version."
+msgstr "固件版本。"
+
+msgid "Modem IMEI: the device number in the mobile network."
+msgstr "模块 IMEI：设备在移动网络中的编号。"
+
+msgid "SIM subscriber identity (IMSI): it identifies the subscription in the operator network."
+msgstr "SIM 用户识别码 (IMSI)：运营商网络用它识别签约。"
+
+msgid "Serial number of the SIM card (ICCID), the one printed on the card."
+msgstr "SIM 卡序列号 (ICCID)，即卡上印刷的号码。"
+
+msgid "Own phone number stored on the SIM. Many operators do not store it, then the reply has no number."
+msgstr "SIM 上存储的本机号码。许多运营商不写入，此时回复中没有号码。"
+
+msgid "Selects the phone book for the next commands (\"ON\" holds the own numbers of the SIM)."
+msgstr "为后续命令选择电话簿（\"ON\" 存放 SIM 的本机号码）。"
+
+msgid "Sets the character set for text in commands and replies."
+msgstr "设置命令和回复中文本的字符集。"
+
+msgid "Writes an entry to the selected phone book."
+msgstr "向所选电话簿写入一条记录。"
+
+msgid "Model, firmware and hardware versions"
+msgstr "型号、固件和硬件版本"
+
+msgid "Received signal strength (RSSI) and bit error rate: the oldest and roughest signal measure, 0-31."
+msgstr "接收信号强度 (RSSI) 和误码率：最早也最粗略的信号指标，0-31。"
+
+msgid "Extended signal quality: 2G, 3G and LTE levels in one reply."
+msgstr "扩展信号质量：一次回复中包含 2G、3G 和 LTE 电平。"
+
+msgid "Current operator and how it was chosen."
+msgstr "当前运营商及其选择方式。"
+
+msgid "Registration for calls and SMS (circuit-switched network)."
+msgstr "通话和短信的注册（电路交换网络）。"
+
+msgid "Registration in the 2G/3G packet (data) network."
+msgstr "在 2G/3G 分组（数据）网络中的注册。"
+
+msgid "Registration in the LTE network."
+msgstr "在 LTE 网络中的注册。"
+
+msgid "Registration in the 5G network (5G core; NSA mode shows up in +CEREG)."
+msgstr "在 5G 网络中的注册（5G 核心网；NSA 模式显示在 +CEREG 中）。"
+
+msgid "Radio connection state: connected or idle."
+msgstr "无线连接状态：已连接或空闲。"
+
+msgid "Data connection profiles (PDP contexts): number, IP type and APN."
+msgstr "数据连接配置（PDP 上下文）：编号、IP 类型和 APN。"
+
+msgid "Addresses the network gave to each data profile."
+msgstr "网络为每个数据配置分配的地址。"
+
+msgid "Attach to the packet service (mobile data)."
+msgstr "分组业务（移动数据）附着状态。"
+
+msgid "Which data profiles are active."
+msgstr "哪些数据配置已激活。"
+
+msgid "Connection parameters the network gave to the profile: address, gateway, DNS, MTU."
+msgstr "网络为该配置分配的连接参数：地址、网关、DNS、MTU。"
+
+msgid "DNS servers of the profile."
+msgstr "该配置的 DNS 服务器。"
+
+msgid "SIM state: ready, or waiting for the PIN or PUK code."
+msgstr "SIM 状态：已就绪，或等待 PIN 或 PUK 码。"
+
+msgid "Modem clock. Most modems take the time from the network."
+msgstr "模块时钟。大多数模块从网络获取时间。"
+
+msgid "Radio function mode."
+msgstr "射频功能模式。"
+
+msgid "Reboots the modem. The connection drops for about a minute."
+msgstr "重启模块。连接会中断约一分钟。"
+
+msgid "Turns the radio off (flight mode). There is no connection until AT+CFUN=1."
+msgstr "关闭射频（飞行模式）。在 AT+CFUN=1 之前没有连接。"
+
+msgid "Minimum functionality: the radio and the SIM are off."
+msgstr "最小功能：射频和 SIM 均关闭。"
+
+msgid "Turns the radio on (full functionality)."
+msgstr "开启射频（全功能）。"
+
+msgid "Serving cell: network type, band, channel and signal levels."
+msgstr "服务小区：网络类型、频段、信道和信号电平。"
+
+msgid "Neighbour cells the modem hears; the modem picks among them when it changes cells."
+msgstr "模块能听到的邻区；切换小区时从中选择。"
+
+msgid "Access technology, operator code, band and channel."
+msgstr "接入技术、运营商代码、频段和信道。"
+
+msgid "Carrier aggregation: the primary carrier (PCC) and the added ones (SCC)."
+msgstr "载波聚合：主载波 (PCC) 和附加载波 (SCC)。"
+
+msgid "RSRP on each antenna branch; -140 and lower means the branch hears nothing."
+msgstr "各天线支路的 RSRP；-140 及以下表示该支路收不到信号。"
+
+msgid "Temperatures of the modem sensors, °C."
+msgstr "模块各传感器温度，°C。"
+
+msgid "USB data interface mode."
+msgstr "USB 数据接口模式。"
+
+msgid "Allowed bands as bit masks."
+msgstr "以位掩码表示的允许频段。"
+
+msgid "Lock to a specific cell: shows whether it is on."
+msgstr "锁定到特定小区：显示是否开启。"
+
+msgid "Active SIM slot."
+msgstr "当前 SIM 卡槽。"
+
+msgid "SIM card detection: whether a card is inserted."
+msgstr "SIM 卡检测：是否插入了卡。"
+
+msgid "Operator configuration profiles (MBN) in the modem; the active one is marked with 1."
+msgstr "模块中的运营商配置文件 (MBN)；当前使用的标记为 1。"
+
+msgid "Signal levels of the network in use."
+msgstr "当前网络的信号电平。"
+
+msgid "System information: service, roaming, SIM and network type."
+msgstr "系统信息：服务、漫游、SIM 和网络类型。"
+
+msgid "Signal quality: RSRP, RSRQ, RSSI and SINR."
+msgstr "信号质量：RSRP、RSRQ、RSSI 和 SINR。"
+
+msgid "Serving cell: cell ID, PCI, band and channel."
+msgstr "服务小区：小区 ID、PCI、频段和信道。"
+
+msgid "Carrier aggregation: the primary carrier and the added ones."
+msgstr "载波聚合：主载波和附加载波。"
+
+msgid "Cells the modem hears: PCI, channel and RSRP of each."
+msgstr "模块能听到的小区：各自的 PCI、信道和 RSRP。"
+
+msgid "Network type and service domain (calls, data)."
+msgstr "网络类型和服务域（通话、数据）。"
+
+msgid "Network mode preference."
+msgstr "网络模式偏好。"
+
+msgid "Uplink carrier aggregation (sending over several carriers)."
+msgstr "上行载波聚合（通过多个载波发送）。"
+
+msgid "Switches to the physical SIM. The modem re-registers on the network."
+msgstr "切换到实体 SIM。模块会重新注册网络。"
+
+msgid "Switches to the eSIM. The modem re-registers on the network."
+msgstr "切换到 eSIM。模块会重新注册网络。"
+
+msgid "Engineering information: cell, band and signal levels."
+msgstr "工程信息：小区、频段和信号电平。"
+
+msgid "Serving cell: network type, state, band and signal."
+msgstr "服务小区：网络类型、状态、频段和信号。"
+
+msgid "Modem temperature, °C."
+msgstr "模块温度，°C。"
+
+msgid "Radio status: cell, channel, signal levels and operator."
+msgstr "射频状态：小区、信道、信号电平和运营商。"
+
+msgid "Channel quality indicator (CQI) reported to the cell: 0-15, higher is better."
+msgstr "上报给小区的信道质量指示 (CQI)：0-15，越高越好。"
+
+msgid "Whether receiving on four antennas is turned off."
+msgstr "是否关闭了四天线接收。"
+
+msgid "Thermal mitigation level: how much the modem slows down to cool off."
+msgstr "热缓解等级：模块为降温而降速的程度。"
+
+msgid "Last GNSS position fix. The position itself is not repeated here."
+msgstr "最近一次 GNSS 定位。此处不重复显示位置本身。"
+
+msgid "Network mode and allowed bands."
+msgstr "网络模式和允许的频段。"
+
+msgid "Carrier aggregation: carriers, bandwidth, MIMO and modulation."
+msgstr "载波聚合：载波、带宽、MIMO 和调制。"
+
+msgid "Receive paths in use (main, AUX, MIMO)."
+msgstr "正在使用的接收通路（主、AUX、MIMO）。"
+
+msgid "5G cell and signal levels (the reply takes about 3 seconds)."
+msgstr "5G 小区和信号电平（回复约需 3 秒）。"
+
+msgid "Changes the USB composition: the modem reconnects with other ports and the connection drops."
+msgstr "更改 USB 组合：模块会以其他端口重新连接，连接会中断。"
+
+msgid "The reply has no data in the expected form: this modem may not support the command."
+msgstr "回复中没有预期格式的数据：此模块可能不支持该命令。"
+
+msgid "Explanation"
+msgstr "说明"
+
+msgid "Install updates"
+msgstr "安装更新"
+
+msgid "Update the APN database"
+msgstr "更新 APN 数据库"
+
+msgid "Updates of the app and the APN database"
+msgstr "应用和 APN 数据库更新"
+
+msgid "Available: 5gmodem %s and APN database %s"
+msgstr "可用：5gmodem %s 和 APN 数据库 %s"
+
+msgid "APN database: could not check"
+msgstr "APN 数据库：无法检查"
+
+msgid "Version %s is up to date"
+msgstr "版本 %s 已是最新"
+
+msgid "Could not check the app: %s"
+msgstr "无法检查应用：%s"
+
+msgid "APN database %s is available"
+msgstr "APN 数据库 %s 可用"
+
+msgid "Everything is up to date"
+msgstr "全部已是最新"
+
+msgid "APN database %s"
+msgstr "APN 数据库 %s"
+
+msgid "APN database %s installed"
+msgstr "APN 数据库 %s 已安装"
+
+msgid "The APN database was not updated: %s"
+msgstr "APN 数据库未更新：%s"
+
+msgid "APN in the modem"
+msgstr "调制解调器中的 APN"
+
+msgid "APN: Latin letters, digits, dots, hyphens"
+msgstr "APN：拉丁字母、数字、点、连字符"
+
+msgid "Now:"
+msgstr "当前："
+
+msgid "Reading…"
+msgstr "正在读取…"
+
+msgid "Saved. The stick is reconnecting."
+msgstr "已保存。上网卡正在重新连接。"
+
+msgid "Stick's own choice"
+msgstr "由上网卡自选"
+
+msgid "The stick did not return its APN settings."
+msgstr "上网卡未返回 APN 设置。"
+
+msgid "The stick keeps the APN in its own memory. \"Write\" saves it as the \"5gmodem\" profile, makes it the default and reconnects the stick; the connection drops for a few seconds."
+msgstr "上网卡把 APN 保存在自身内存中。写入会将其保存为“5gmodem”配置并设为默认，然后重新连接上网卡；连接会中断几秒。"
+
+msgid "The stick refused the APN (%s)"
+msgstr "上网卡拒绝了 APN（%s）"
+
+msgid "Write to the modem"
+msgstr "写入调制解调器"
+
+msgid "Writing and reconnecting the stick…"
+msgstr "正在写入并重新连接上网卡…"
+
+msgid "empty"
+msgstr "空"
+
+msgid "for this operator: %s"
+msgstr "此运营商：%s"
+
+msgid "profile %s"
+msgstr "配置 %s"
+
+msgid "the stick's own choice"
+msgstr "上网卡自选"
+
+msgid "Add host"
+msgstr "添加主机"
+
+msgid "Add service"
+msgstr "添加服务"
+
+msgid "Host or IP address"
+msgstr "主机或 IP 地址"
+
+msgid "Web server: parallel requests"
+msgstr "Web 服务器：并行请求数"
+
+msgid "How many requests the router web server (uhttpd) handles at once. OpenWrt ships 3. If pages load slowly, buttons or data appear late or freeze, set 10: it is safe on routers with 128 MB of RAM or more. This router has %d MB. The web server restarts after saving."
+msgstr "路由器 Web 服务器（uhttpd）同时处理的请求数。OpenWrt 默认值为 3。如果页面加载缓慢、按钮或数据显示延迟或卡住，请设为 10：对于内存 128 MB 及以上的路由器是安全的。本路由器内存 %d MB。保存后 Web 服务器将重启。"
+
+msgid "no reply"
+msgstr "无响应"
+
+msgid "Could not change the web server setting."
+msgstr "无法更改 Web 服务器设置。"
+
+msgid "GNSS antenna"
+msgstr "GNSS 天线"
+
+msgid "GNSS connector, passive antenna"
+msgstr "GNSS 接口，无源天线"
+
+msgid "GNSS connector, active antenna (power on the connector)"
+msgstr "GNSS 接口，有源天线（接口供电）"
+
+msgid "GNSS connector, active antenna, high gain"
+msgstr "GNSS 接口，有源天线，高增益"
+
+msgid "AUX (diversity) connector, passive antenna"
+msgstr "AUX（分集）接口，无源天线"
+
+msgid "GNSS antenna connector changed. The search starts over."
+msgstr "GNSS 天线接口已更改，重新开始搜索。"
+
+msgid "The connector the receiver listens on, stored in the modem. No satellites at all usually means the antenna sits on the other connector."
+msgstr "接收机接收信号所用的接口，设置保存在模块中。如果完全看不到卫星，通常是天线接在了另一个接口上。"
+
+msgid "Anonymous"
+msgstr "匿名"
+
+msgid "Masks IMEI, IMSI, ICCID, EID, serial and phone numbers, the public IP and MAC addresses of the router and coordinates. The first digits stay: they name the modem model and the operator."
+msgstr "隐藏 IMEI、IMSI、ICCID、EID、序列号和电话号码、路由器的公网 IP 和 MAC 地址以及坐标。保留开头几位数字：可据此看出模块型号和运营商。"
+
+msgid "Map style"
+msgstr "地图样式"
+
+msgid "The map shown on the GPS tab: pick a ready style or type an https:// address template of your own tile server with {z}, {x} and {y}. Empty - OpenStreetMap. The style can also be switched right under the map; that choice is kept in the browser."
+msgstr "GPS 标签页上的地图：选择现成样式，或输入自有瓦片服务器的 https:// 地址模板（含 {z}、{x}、{y}）。留空为 OpenStreetMap。也可以在地图下方直接切换样式，该选择保存在浏览器中。"
+
+msgid "Could not save the settings."
+msgstr "无法保存设置。"

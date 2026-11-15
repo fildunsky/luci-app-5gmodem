@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const text = fs.readFileSync(path.join(__dirname, '../../htdocs/luci-static/resources/view/modem5g/readsms.js'), 'utf8');
+const text = fs.readFileSync(path.join(__dirname, '../../htdocs/luci-static/resources/view/modem5g/sms.js'), 'utf8');
 const context = { smsSeen: new Set(), smsSeenFirst: false, sms_msg_pairs: () => [['new', 'old']] };
 vm.createContext(context);
 vm.runInContext(text.slice(text.indexOf('function sms_android_read('), text.indexOf('function sms_make_card(')), context);

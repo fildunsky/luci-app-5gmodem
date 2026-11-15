@@ -316,7 +316,7 @@ msgstr ""
 msgid "Delete from the modem after forwarding"
 msgstr ""
 
-msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the SMS tab too."
 msgstr ""
 
 msgid "MediaTek built-in modem (CCMNI)"
@@ -540,4 +540,1342 @@ msgid "Upload often sits at 1-2 Mbit/s until this is on. The choice is kept and 
 msgstr ""
 
 msgid "Upload is aggregated too: %s"
+msgstr ""
+
+msgid "%s km/h"
+msgstr ""
+
+msgid "%s m"
+msgstr ""
+
+msgid "2D"
+msgstr ""
+
+msgid "3D"
+msgstr ""
+
+msgid "2GIS"
+msgstr ""
+
+msgid "AT commands"
+msgstr ""
+
+msgid "Add the GNSS position, speed and satellites of the modem to the published file and to MQTT. Off by default: a stream of coordinates is a log of where the router has been. Each update asks the modem for the position."
+msgstr ""
+
+msgid "Address template of the map tiles with {z}, {x} and {y}. Empty - OpenStreetMap. Use your own server if OpenStreetMap does not open from your network."
+msgstr ""
+
+msgid "Altitude"
+msgstr ""
+
+msgid "An https:// address with {z}, {x} and {y}"
+msgstr ""
+
+msgid "Asking the modem…"
+msgstr ""
+
+msgid "Clear track"
+msgstr ""
+
+msgid "Cold start"
+msgstr ""
+
+msgid "Coordinates"
+msgstr ""
+
+msgid "Copied: %s"
+msgstr ""
+
+msgid "Copy coordinates"
+msgstr ""
+
+msgid "Could not load the map component."
+msgstr ""
+
+msgid "Course"
+msgstr ""
+
+msgid "Field reports: on some firmware the modem kept restarting in a loop after GNSS was turned off while it sat in a router. Turn it off only if you can reach the modem from a computer."
+msgstr ""
+
+msgid "Fix"
+msgstr ""
+
+msgid "GPS"
+msgstr ""
+
+msgid "Google Maps"
+msgstr ""
+
+msgid "HDOP (lower is more accurate)"
+msgstr ""
+
+msgid "Hide the map"
+msgstr ""
+
+msgid "Hot start"
+msgstr ""
+
+msgid "Include the position"
+msgstr ""
+
+msgid "Keep the position in the center"
+msgstr ""
+
+msgid "Load the map as soon as the position is known instead of waiting for the \"Show on map\" button. The map service then learns the area every time the tab is opened."
+msgstr ""
+
+msgid "Map"
+msgstr ""
+
+msgid "Map tiles"
+msgstr ""
+
+msgid "NMEA port %s"
+msgstr ""
+
+msgid "No GNSS receiver was found on this modem. Supported: Qualcomm modems with the QMI location service (also in MBIM mode), Quectel, SIMCom, Telit, MeiG, Fibocom (FM350 and Qualcomm-based), Foxconn/Dell (T77W968, T99W175, T99W373) and Sierra modems with a GNSS port. A receiver handled by ugps is shown too."
+msgstr ""
+
+msgid "On this modem the GNSS setting is stored in the modem and applied by its restart: the connection drops for about a minute."
+msgstr ""
+
+msgid "Open the map at once"
+msgstr ""
+
+msgid "OpenStreetMap"
+msgstr ""
+
+msgid "Position from the GNSS receiver built into the modem. The page asks the modem every few seconds while it is open; nothing runs in the background."
+msgstr ""
+
+msgid "Receiver"
+msgstr ""
+
+msgid "Restart the modem"
+msgstr ""
+
+msgid "Restart the search"
+msgstr ""
+
+msgid "Satellites (used / in view)"
+msgstr ""
+
+msgid "Show on map"
+msgstr ""
+
+msgid "Source"
+msgstr ""
+
+msgid "Speed"
+msgstr ""
+
+msgid "The \"GPS\" tab: position from the GNSS receiver of the modem and a map. It appears only for a modem with a receiver the app knows how to read."
+msgstr ""
+
+msgid "The map tiles are loaded by your browser from the map service, which learns the approximate area shown. The track is kept only while this page is open."
+msgstr ""
+
+msgid "The modem did not accept the command."
+msgstr ""
+
+msgid "The modem restarts to apply the setting."
+msgstr ""
+
+msgid "The receiver is searching for satellites again. A cold start can take several minutes under open sky."
+msgstr ""
+
+msgid "Time (UTC)"
+msgstr ""
+
+msgid "Turn GNSS off"
+msgstr ""
+
+msgid "Turn GNSS on"
+msgstr ""
+
+msgid "Warm start"
+msgstr ""
+
+msgid "Yandex Maps"
+msgstr ""
+
+msgid "blocked in the modem (GTGPSSWITCH=0)"
+msgstr ""
+
+msgid "searching for satellites"
+msgstr ""
+
+msgid "ugps service"
+msgstr ""
+
+msgid "QMI location service"
+msgstr ""
+
+msgid "A cold start takes several minutes under open sky."
+msgstr ""
+
+msgid "An http:// or https:// address without a query"
+msgstr ""
+
+msgid "Clock from GNSS"
+msgstr ""
+
+msgid "Cold"
+msgstr ""
+
+msgid "Coordinates are not determined yet"
+msgstr ""
+
+msgid "E"
+msgstr ""
+
+msgid "Fix %s"
+msgstr ""
+
+msgid "GNSS receiver"
+msgstr ""
+
+msgid "Latitude, longitude"
+msgstr ""
+
+msgid "Letters, digits, dot, dash and underscore, up to 64"
+msgstr ""
+
+msgid "Load the map"
+msgstr ""
+
+msgid "Load the map tiles as soon as the position is known. Off: the map waits for the \"Load the map\" button. The map service learns the area shown."
+msgstr ""
+
+msgid "Loading the map…"
+msgstr ""
+
+msgid "N"
+msgstr ""
+
+msgid "NE"
+msgstr ""
+
+msgid "NMEA over the network"
+msgstr ""
+
+msgid "NW"
+msgstr ""
+
+msgid "No coordinates"
+msgstr ""
+
+msgid "Open in"
+msgstr ""
+
+msgid "Phone location service (Android)"
+msgstr ""
+
+msgid "Readings"
+msgstr ""
+
+msgid "Receiver is off"
+msgstr ""
+
+msgid "S"
+msgstr ""
+
+msgid "SE"
+msgstr ""
+
+msgid "SW"
+msgstr ""
+
+msgid "Satellites"
+msgstr ""
+
+msgid "Satellites in view: %s, used: %s"
+msgstr ""
+
+msgid "Searching for satellites"
+msgstr ""
+
+msgid "Seconds between positions. The shortest is 30."
+msgstr ""
+
+msgid "Send the position to a Traccar server over the OsmAnd protocol, for example http://192.168.1.10:5055. Empty - off. The position leaves the router: everyone with access to that server sees where the router is. Nothing is sent without a fix."
+msgstr ""
+
+msgid "Set the router clock from the GNSS receiver when there is no NTP sync, for example with no internet after a boot. Never changes a clock that NTP has synced."
+msgstr ""
+
+msgid "Start mode"
+msgstr ""
+
+msgid "TCP port that streams the position as NMEA (GGA and RMC once a second) to gpsd, navigation apps or a car head unit, for example 10110. Empty - off. It listens on the LAN address only, without a password. Needs the socat or ncat package."
+msgstr ""
+
+msgid "The external USB receiver on %s needs no control; this page only shows its data."
+msgstr ""
+
+msgid "The identifier of this device on the Traccar server."
+msgstr ""
+
+msgid "The map appears after the receiver is turned on and gets a fix."
+msgstr ""
+
+msgid "The map is not loaded"
+msgstr ""
+
+msgid "The map opens at the modem position as soon as coordinates appear."
+msgstr ""
+
+msgid "The map service learns the area where the router is."
+msgstr ""
+
+msgid "The receiver is managed by the ugps service; this page only shows its data."
+msgstr ""
+
+msgid "This modem has no GNSS receiver that the app can read"
+msgstr ""
+
+msgid "Tiles are loaded by your browser from %s, which learns the area shown. The track is kept only while this page is open."
+msgstr ""
+
+msgid "Traccar device ID"
+msgstr ""
+
+msgid "Traccar interval"
+msgstr ""
+
+msgid "Traccar server"
+msgstr ""
+
+msgid "Turn the receiver on to get coordinates."
+msgstr ""
+
+msgid "Under open sky the first fix takes from 30 s to several minutes."
+msgstr ""
+
+msgid "W"
+msgstr ""
+
+msgid "Waiting for the first fix"
+msgstr ""
+
+msgid "above sea level"
+msgstr ""
+
+msgid "lower is more accurate"
+msgstr ""
+
+msgid "updated %s s ago"
+msgstr ""
+
+msgid "used / in view"
+msgstr ""
+
+msgid "%d of %d buttons configured"
+msgstr ""
+
+msgid "%d of %d on"
+msgstr ""
+
+msgid "%d parts"
+msgstr ""
+
+msgid "%s (by modem)"
+msgstr ""
+
+msgid "AT command console"
+msgstr ""
+
+msgid "Back"
+msgstr ""
+
+msgid "Base station"
+msgstr ""
+
+msgid "Collected every 10 s while this page is open"
+msgstr ""
+
+msgid "Collecting"
+msgstr ""
+
+
+msgid "Commands go through atcmd.sh: the port and the command form are checked on the router. The reply is awaited up to %d seconds."
+msgstr ""
+
+msgid "Connection"
+msgstr ""
+
+msgid "Conversations"
+msgstr ""
+
+msgid "Delete the conversation"
+msgstr ""
+
+msgid "Delete the conversation (%d messages)?"
+msgstr ""
+
+msgid "Drive not mounted"
+msgstr ""
+
+msgid "Active profile: %s"
+msgstr ""
+
+msgid "Feed"
+msgstr ""
+
+msgid "Forwarding"
+msgstr ""
+
+msgid "GPS tab"
+msgstr ""
+
+msgid "GSM-7: 160 characters per SMS, 153 per part"
+msgstr ""
+
+msgid "History is kept until the page is closed · ↑ recalls the previous command"
+msgstr ""
+
+msgid "How the app talks to the modem"
+msgstr ""
+
+msgid "How to use it"
+msgstr ""
+
+msgid "In queue: %d"
+msgstr ""
+
+msgid "Installing"
+msgstr ""
+
+msgid "It is sent in the background when the modem is free; you can close the page."
+msgstr ""
+
+msgid "My codes"
+msgstr ""
+
+msgid "New SMS appear here on their own: the page checks the modem every 15 seconds."
+msgstr ""
+
+msgid "No new messages"
+msgstr ""
+
+msgid "No profile is enabled"
+msgstr ""
+
+msgid "Not sent"
+msgstr ""
+
+msgid "Nothing found"
+msgstr ""
+
+msgid "Notifications"
+msgstr ""
+
+msgid "Phone storage: %s messages"
+msgstr ""
+
+msgid "Physical SIM is active"
+msgstr ""
+
+msgid "Pick a code from the list or type one below."
+msgstr ""
+
+msgid "Pick a template or type a command below."
+msgstr ""
+
+msgid "Port"
+msgstr ""
+
+msgid "Ports and interface"
+msgstr ""
+
+msgid "Profiles"
+msgstr ""
+
+msgid "Profiles: %d"
+msgstr ""
+
+msgid "Ready to send USSD codes"
+msgstr ""
+
+msgid "Retry"
+msgstr ""
+
+msgid "SMS can also be sent from a Telegram chat - set the bot up on the Forwarding tab."
+msgstr ""
+
+msgid "SMS only"
+msgstr ""
+
+msgid "Search by sender and text"
+msgstr ""
+
+msgid "Select a conversation on the left"
+msgstr ""
+
+msgid "Select several"
+msgstr ""
+
+msgid "Sending"
+msgstr ""
+
+msgid "Sending to contacts: %d, delay %s s"
+msgstr ""
+
+msgid "Session open"
+msgstr ""
+
+msgid "Shared with \"External IP\" - set it in the \"External IP\" section"
+msgstr ""
+
+msgid "Storage"
+msgstr ""
+
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Forwarding tab."
+msgstr ""
+
+msgid "The first points appear within 10-20 seconds. With the page closed, the signal is collected only when background collection is on."
+msgstr ""
+
+msgid "The message is queued."
+msgstr ""
+
+msgid "The modem does not answer USSD"
+msgstr ""
+
+msgid "The modem is in %s: USSD needs the voice channel"
+msgstr ""
+
+msgid "The modem is managed by ModemManager"
+msgstr ""
+
+msgid "The network registered this SIM for SMS only"
+msgstr ""
+
+msgid "The request can be sent, but most likely there will be no reply."
+msgstr ""
+
+msgid "The request goes through 3G and returns to %s"
+msgstr ""
+
+msgid "The sender is alphanumeric, you cannot reply to it. To write to a number, use \"New SMS\"."
+msgstr ""
+
+msgid "To e-mail"
+msgstr ""
+
+msgid "Traffic for %s"
+msgstr ""
+
+msgid "USSD codes"
+msgstr ""
+
+msgid "USSD unavailable"
+msgstr ""
+
+msgid "USSD works"
+msgstr ""
+
+msgid "Unicode: 70 characters per SMS, 67 per part"
+msgstr ""
+
+msgid "Up to date"
+msgstr ""
+
+msgid "Waiting for the active modem. If the selected modem is not the active one, switch to it in the modem bar."
+msgstr ""
+
+msgid "all automatic"
+msgstr ""
+
+msgid "alphanumeric sender"
+msgstr ""
+
+msgid "consent needed"
+msgstr ""
+
+msgid "eSIM active"
+msgstr ""
+
+msgid "eSIM management is unavailable"
+msgstr ""
+
+msgid "from modem %s"
+msgstr ""
+
+msgid "messages: %d"
+msgstr ""
+
+
+msgid "sent from this page"
+msgstr ""
+
+msgid "short number"
+msgstr ""
+
+msgid "today"
+msgstr ""
+
+msgid "via 3G"
+msgstr ""
+
+msgid "waiting for a reply"
+msgstr ""
+
+msgid "yesterday"
+msgstr ""
+
+msgid "Paused"
+msgstr ""
+
+msgid "Collection"
+msgstr ""
+
+msgid "Keep after reboot"
+msgstr ""
+
+
+msgid "Collect in background"
+msgstr ""
+
+msgid "Collect in background:"
+msgstr ""
+
+msgid "Deletes all collected charts and monthly traffic"
+msgstr ""
+
+msgid "Store in:"
+msgstr ""
+
+msgid "every 5 minutes"
+msgstr ""
+
+msgid "every minute"
+msgstr ""
+
+msgid "Refresh every"
+msgstr ""
+
+msgid "%s s"
+msgstr ""
+
+msgid "Asking GitHub for the latest release"
+msgstr ""
+
+msgid "Check again"
+msgstr ""
+
+msgid "Check the internet connection or pick another interface in \"Download through\" below."
+msgstr ""
+
+msgid "Checking for updates…"
+msgstr ""
+
+msgid "GitHub is not reachable"
+msgstr ""
+
+msgid "Install %s"
+msgstr ""
+
+msgid "Installed: %s"
+msgstr ""
+
+msgid "Installing %s…"
+msgstr ""
+
+msgid "Installing…"
+msgstr ""
+
+msgid "Not checked"
+msgstr ""
+
+msgid "Offline"
+msgstr ""
+
+msgid "Refreshing resources…"
+msgstr ""
+
+msgid "Signing out to apply it…"
+msgstr ""
+
+msgid "Try again"
+msgstr ""
+
+msgid "Update failed"
+msgstr ""
+
+msgid "Update now"
+msgstr ""
+
+msgid "Updates have not been checked yet"
+msgstr ""
+
+msgid "Updating…"
+msgstr ""
+
+msgid "Version %s"
+msgstr ""
+
+msgid "Version %s installed"
+msgstr ""
+
+msgid "Version %s is available"
+msgstr ""
+
+msgid "What's new in %s"
+msgstr ""
+
+msgid "checked at %s"
+msgstr ""
+
+msgid "released %s"
+msgstr ""
+
+msgid "not registered, not searching"
+msgstr ""
+
+msgid "registered, home network"
+msgstr ""
+
+msgid "not registered, searching for a network"
+msgstr ""
+
+msgid "registration denied by the network"
+msgstr ""
+
+msgid "unknown"
+msgstr ""
+
+msgid "registered, roaming"
+msgstr ""
+
+msgid "registered for SMS only, home network"
+msgstr ""
+
+msgid "registered for SMS only, roaming"
+msgstr ""
+
+msgid "emergency calls only"
+msgstr ""
+
+msgid "Signal level: CSQ %s ≈ %s dBm%s"
+msgstr ""
+
+msgid "Signal level: CSQ %s ≈ %s dBm (extended scale)"
+msgstr ""
+
+msgid "Signal level: unknown (99), the modem has not measured it"
+msgstr ""
+
+msgid "Bit error rate: not reported (normal for LTE and 5G)"
+msgstr ""
+
+msgid "Bit error rate: class %s of 7 (0 is best)"
+msgstr ""
+
+msgid "No measurements: 99 and 255 mean no data for that network type"
+msgstr ""
+
+msgid "automatic"
+msgstr ""
+
+msgid "manual"
+msgstr ""
+
+msgid "deregistered from the network"
+msgstr ""
+
+msgid "manual, automatic if that fails"
+msgstr ""
+
+msgid "Operator selection: %s"
+msgstr ""
+
+msgid "No operator: the modem is not registered"
+msgstr ""
+
+msgid "Network code (MCC MNC): %s %s"
+msgstr ""
+
+msgid "Operator: %s"
+msgstr ""
+
+msgid "Network type: %s"
+msgstr ""
+
+msgid "State: %s"
+msgstr ""
+
+msgid "Area code (LAC/TAC): %s, cell ID: %s"
+msgstr ""
+
+msgid "Cell ID: %s"
+msgstr ""
+
+msgid "Base station (eNB) %s, sector %s"
+msgstr ""
+
+msgid "Profile %s: APN \"%s\", %s"
+msgstr ""
+
+msgid "Profiles without an APN: %s (the network picks the default one)"
+msgstr ""
+
+msgid "Profile %s has an address: %s"
+msgstr ""
+
+msgid "No profile has an address yet"
+msgstr ""
+
+msgid "Attached to the packet service: mobile data is available"
+msgstr ""
+
+msgid "Not attached to the packet service: no mobile data"
+msgstr ""
+
+msgid "Active profiles: %s"
+msgstr ""
+
+msgid "No profile is active"
+msgstr ""
+
+msgid "The SIM is ready, no code is needed"
+msgstr ""
+
+msgid "The SIM waits for the PIN code"
+msgstr ""
+
+msgid "The SIM is blocked: the PUK code is needed"
+msgstr ""
+
+msgid "The SIM waits for the PIN2 code"
+msgstr ""
+
+msgid "The SIM waits for the PUK2 code"
+msgstr ""
+
+msgid "The modem is locked to another operator (network lock code needed)"
+msgstr ""
+
+msgid "The SIM is not ready yet"
+msgstr ""
+
+msgid "SIM state: %s"
+msgstr ""
+
+msgid "Modem date and time: %s"
+msgstr ""
+
+msgid "Time zone: UTC%s"
+msgstr ""
+
+msgid "Minimum functionality: the radio is off"
+msgstr ""
+
+msgid "Full functionality: the radio is on"
+msgstr ""
+
+msgid "Flight mode: the transmitter and receiver are off"
+msgstr ""
+
+msgid "Factory test mode"
+msgstr ""
+
+msgid "Offline mode: the radio is off"
+msgstr ""
+
+msgid "Mode %s"
+msgstr ""
+
+msgid "Connected to the cell (RRC connected): data is being exchanged"
+msgstr ""
+
+msgid "Idle (RRC idle): no traffic right now, the connection itself is kept"
+msgstr ""
+
+msgid "%s: %s digits"
+msgstr ""
+
+msgid "A number is stored on the SIM"
+msgstr ""
+
+msgid "No own number is stored on the SIM"
+msgstr ""
+
+msgid "The reply also shows the IMEI"
+msgstr ""
+
+msgid "registered, idle"
+msgstr ""
+
+msgid "connected, data is flowing"
+msgstr ""
+
+msgid "searching for a cell"
+msgstr ""
+
+msgid "limited service (emergency calls only)"
+msgstr ""
+
+msgid "Cell state: %s"
+msgstr ""
+
+msgid "5G NSA anchor:"
+msgstr ""
+
+msgid "5G NSA carrier:"
+msgstr ""
+
+msgid "No service"
+msgstr ""
+
+msgid "Network: %s, band %s, channel %s"
+msgstr ""
+
+msgid "Primary carrier: %s"
+msgstr ""
+
+msgid "Added carriers: %s"
+msgstr ""
+
+msgid "No added carriers: aggregation is not in use"
+msgstr ""
+
+msgid "Antenna branches: %s dBm; the signal is heard on %s of %s"
+msgstr ""
+
+msgid "Data interface: %s"
+msgstr ""
+
+msgid "Cell lock is off"
+msgstr ""
+
+msgid "Cell lock is on"
+msgstr ""
+
+msgid "Active SIM slot: %s"
+msgstr ""
+
+msgid "A SIM card is inserted"
+msgstr ""
+
+msgid "no service"
+msgstr ""
+
+msgid "limited service"
+msgstr ""
+
+msgid "normal service"
+msgstr ""
+
+msgid "limited regional service"
+msgstr ""
+
+msgid "power saving"
+msgstr ""
+
+msgid "Service: %s"
+msgstr ""
+
+msgid "calls only"
+msgstr ""
+
+msgid "data only"
+msgstr ""
+
+msgid "calls and data"
+msgstr ""
+
+msgid "camped on a cell"
+msgstr ""
+
+msgid "Network: %s"
+msgstr ""
+
+msgid "Cell %s, PCI %s, band %s, channel %s"
+msgstr ""
+
+msgid "Cells heard: %s; the strongest is PCI %s on channel %s, RSRP %s dBm"
+msgstr ""
+
+msgid "Network mode: %s"
+msgstr ""
+
+msgid "online"
+msgstr ""
+
+msgid "offline"
+msgstr ""
+
+msgid "band %s"
+msgstr ""
+
+msgid "Temperature: %s °C"
+msgstr ""
+
+msgid "The SIM is inserted and unlocked"
+msgstr ""
+
+msgid "The SIM is ready"
+msgstr ""
+
+msgid "LTE bands: %s"
+msgstr ""
+
+msgid "5G bands: %s"
+msgstr ""
+
+msgid "Modem identification: manufacturer, model and firmware version."
+msgstr ""
+
+msgid "Modem manufacturer."
+msgstr ""
+
+msgid "Modem model."
+msgstr ""
+
+msgid "Firmware version."
+msgstr ""
+
+msgid "Modem IMEI: the device number in the mobile network."
+msgstr ""
+
+msgid "SIM subscriber identity (IMSI): it identifies the subscription in the operator network."
+msgstr ""
+
+msgid "Serial number of the SIM card (ICCID), the one printed on the card."
+msgstr ""
+
+msgid "Own phone number stored on the SIM. Many operators do not store it, then the reply has no number."
+msgstr ""
+
+msgid "Selects the phone book for the next commands (\"ON\" holds the own numbers of the SIM)."
+msgstr ""
+
+msgid "Sets the character set for text in commands and replies."
+msgstr ""
+
+msgid "Writes an entry to the selected phone book."
+msgstr ""
+
+msgid "Model, firmware and hardware versions"
+msgstr ""
+
+msgid "Received signal strength (RSSI) and bit error rate: the oldest and roughest signal measure, 0-31."
+msgstr ""
+
+msgid "Extended signal quality: 2G, 3G and LTE levels in one reply."
+msgstr ""
+
+msgid "Current operator and how it was chosen."
+msgstr ""
+
+msgid "Registration for calls and SMS (circuit-switched network)."
+msgstr ""
+
+msgid "Registration in the 2G/3G packet (data) network."
+msgstr ""
+
+msgid "Registration in the LTE network."
+msgstr ""
+
+msgid "Registration in the 5G network (5G core; NSA mode shows up in +CEREG)."
+msgstr ""
+
+msgid "Radio connection state: connected or idle."
+msgstr ""
+
+msgid "Data connection profiles (PDP contexts): number, IP type and APN."
+msgstr ""
+
+msgid "Addresses the network gave to each data profile."
+msgstr ""
+
+msgid "Attach to the packet service (mobile data)."
+msgstr ""
+
+msgid "Which data profiles are active."
+msgstr ""
+
+msgid "Connection parameters the network gave to the profile: address, gateway, DNS, MTU."
+msgstr ""
+
+msgid "DNS servers of the profile."
+msgstr ""
+
+msgid "SIM state: ready, or waiting for the PIN or PUK code."
+msgstr ""
+
+msgid "Modem clock. Most modems take the time from the network."
+msgstr ""
+
+msgid "Radio function mode."
+msgstr ""
+
+msgid "Reboots the modem. The connection drops for about a minute."
+msgstr ""
+
+msgid "Turns the radio off (flight mode). There is no connection until AT+CFUN=1."
+msgstr ""
+
+msgid "Minimum functionality: the radio and the SIM are off."
+msgstr ""
+
+msgid "Turns the radio on (full functionality)."
+msgstr ""
+
+msgid "Serving cell: network type, band, channel and signal levels."
+msgstr ""
+
+msgid "Neighbour cells the modem hears; the modem picks among them when it changes cells."
+msgstr ""
+
+msgid "Access technology, operator code, band and channel."
+msgstr ""
+
+msgid "Carrier aggregation: the primary carrier (PCC) and the added ones (SCC)."
+msgstr ""
+
+msgid "RSRP on each antenna branch; -140 and lower means the branch hears nothing."
+msgstr ""
+
+msgid "Temperatures of the modem sensors, °C."
+msgstr ""
+
+msgid "USB data interface mode."
+msgstr ""
+
+msgid "Allowed bands as bit masks."
+msgstr ""
+
+msgid "Lock to a specific cell: shows whether it is on."
+msgstr ""
+
+msgid "Active SIM slot."
+msgstr ""
+
+msgid "SIM card detection: whether a card is inserted."
+msgstr ""
+
+msgid "Operator configuration profiles (MBN) in the modem; the active one is marked with 1."
+msgstr ""
+
+msgid "Signal levels of the network in use."
+msgstr ""
+
+msgid "System information: service, roaming, SIM and network type."
+msgstr ""
+
+msgid "Signal quality: RSRP, RSRQ, RSSI and SINR."
+msgstr ""
+
+msgid "Serving cell: cell ID, PCI, band and channel."
+msgstr ""
+
+msgid "Carrier aggregation: the primary carrier and the added ones."
+msgstr ""
+
+msgid "Cells the modem hears: PCI, channel and RSRP of each."
+msgstr ""
+
+msgid "Network type and service domain (calls, data)."
+msgstr ""
+
+msgid "Network mode preference."
+msgstr ""
+
+msgid "Uplink carrier aggregation (sending over several carriers)."
+msgstr ""
+
+msgid "Switches to the physical SIM. The modem re-registers on the network."
+msgstr ""
+
+msgid "Switches to the eSIM. The modem re-registers on the network."
+msgstr ""
+
+msgid "Engineering information: cell, band and signal levels."
+msgstr ""
+
+msgid "Serving cell: network type, state, band and signal."
+msgstr ""
+
+msgid "Modem temperature, °C."
+msgstr ""
+
+msgid "Radio status: cell, channel, signal levels and operator."
+msgstr ""
+
+msgid "Channel quality indicator (CQI) reported to the cell: 0-15, higher is better."
+msgstr ""
+
+msgid "Whether receiving on four antennas is turned off."
+msgstr ""
+
+msgid "Thermal mitigation level: how much the modem slows down to cool off."
+msgstr ""
+
+msgid "Last GNSS position fix. The position itself is not repeated here."
+msgstr ""
+
+msgid "Network mode and allowed bands."
+msgstr ""
+
+msgid "Carrier aggregation: carriers, bandwidth, MIMO and modulation."
+msgstr ""
+
+msgid "Receive paths in use (main, AUX, MIMO)."
+msgstr ""
+
+msgid "5G cell and signal levels (the reply takes about 3 seconds)."
+msgstr ""
+
+msgid "Changes the USB composition: the modem reconnects with other ports and the connection drops."
+msgstr ""
+
+msgid "The reply has no data in the expected form: this modem may not support the command."
+msgstr ""
+
+msgid "Explanation"
+msgstr ""
+
+msgid "Install updates"
+msgstr ""
+
+msgid "Update the APN database"
+msgstr ""
+
+msgid "Updates of the app and the APN database"
+msgstr ""
+
+msgid "Available: 5gmodem %s and APN database %s"
+msgstr ""
+
+msgid "APN database: could not check"
+msgstr ""
+
+msgid "Version %s is up to date"
+msgstr ""
+
+msgid "Could not check the app: %s"
+msgstr ""
+
+msgid "APN database %s is available"
+msgstr ""
+
+msgid "Everything is up to date"
+msgstr ""
+
+msgid "APN database %s"
+msgstr ""
+
+msgid "APN database %s installed"
+msgstr ""
+
+msgid "The APN database was not updated: %s"
+msgstr ""
+
+msgid "APN in the modem"
+msgstr ""
+
+msgid "APN: Latin letters, digits, dots, hyphens"
+msgstr ""
+
+msgid "Now:"
+msgstr ""
+
+msgid "Reading…"
+msgstr ""
+
+msgid "Saved. The stick is reconnecting."
+msgstr ""
+
+msgid "Stick's own choice"
+msgstr ""
+
+msgid "The stick did not return its APN settings."
+msgstr ""
+
+msgid "The stick keeps the APN in its own memory. \"Write\" saves it as the \"5gmodem\" profile, makes it the default and reconnects the stick; the connection drops for a few seconds."
+msgstr ""
+
+msgid "The stick refused the APN (%s)"
+msgstr ""
+
+msgid "Write to the modem"
+msgstr ""
+
+msgid "Writing and reconnecting the stick…"
+msgstr ""
+
+msgid "empty"
+msgstr ""
+
+msgid "for this operator: %s"
+msgstr ""
+
+msgid "profile %s"
+msgstr ""
+
+msgid "the stick's own choice"
+msgstr ""
+
+msgid "Add host"
+msgstr ""
+
+msgid "Add service"
+msgstr ""
+
+msgid "Host or IP address"
+msgstr ""
+
+msgid "Pick a preset or type any host / domain"
+msgstr ""
+
+msgid "Web server: parallel requests"
+msgstr ""
+
+msgid "How many requests the router web server (uhttpd) handles at once. OpenWrt ships 3. If pages load slowly, buttons or data appear late or freeze, set 10: it is safe on routers with 128 MB of RAM or more. This router has %d MB. The web server restarts after saving."
+msgstr ""
+
+msgid "no reply"
+msgstr ""
+
+msgid "Could not change the web server setting."
+msgstr ""
+
+msgid "GNSS antenna"
+msgstr ""
+
+msgid "GNSS connector, passive antenna"
+msgstr ""
+
+msgid "GNSS connector, active antenna (power on the connector)"
+msgstr ""
+
+msgid "GNSS connector, active antenna, high gain"
+msgstr ""
+
+msgid "AUX (diversity) connector, passive antenna"
+msgstr ""
+
+msgid "GNSS antenna connector changed. The search starts over."
+msgstr ""
+
+msgid "The connector the receiver listens on, stored in the modem. No satellites at all usually means the antenna sits on the other connector."
+msgstr ""
+
+msgid "Anonymous"
+msgstr ""
+
+msgid "Masks IMEI, IMSI, ICCID, EID, serial and phone numbers, the public IP and MAC addresses of the router and coordinates. The first digits stay: they name the modem model and the operator."
+msgstr ""
+
+msgid "Map style"
+msgstr ""
+
+msgid "The map shown on the GPS tab: pick a ready style or type an https:// address template of your own tile server with {z}, {x} and {y}. Empty - OpenStreetMap. The style can also be switched right under the map; that choice is kept in the browser."
+msgstr ""
+
+msgid "Could not save the settings."
 msgstr ""

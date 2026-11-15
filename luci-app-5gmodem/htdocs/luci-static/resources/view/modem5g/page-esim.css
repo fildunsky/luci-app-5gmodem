@@ -1,0 +1,94 @@
+/* eSIM page (5gesim.js): chip card in the Network-page layout, profile cards, collapsible
+   notifications and settings. Loaded by 5gesim.js; colours come from the --tg-* variables of modem.css. */
+.tg-esim {
+  --tg-esim-ok: #22a559;
+  --tg-esim-warn: #e0a100;
+  --tg-esim-bad: #e5484d;
+  --tg-esim-line: rgba(128,128,128,.28);
+}
+.tg-esim-ico { color: var(--tg-esim-ok); }
+.tg-esim-ico.off { color: var(--tg-muted); }
+.tg-esim-ico.warn { color: var(--tg-esim-warn); }
+.tg-esim-loc { overflow-wrap: anywhere; }
+.tg-esim-id { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; user-select: all; }
+
+.tg-esim-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; line-height: 1.3; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.tg-esim-pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.tg-esim-pill.ok { color: var(--tg-esim-ok); }
+.tg-esim-pill.warn { color: var(--tg-esim-warn); }
+.tg-esim-pill.off { color: var(--tg-muted); }
+.tg-esim-title .tg-esim-pillm { display: none; }
+
+.tg-esim .cbi-button { display: inline-flex; align-items: center; gap: 6px; }
+.tg-esim-i { display: inline-flex; }
+.tg-esim-i svg, .tg-esim-icobtn svg { display: block; }
+.tg-esim .cbi-button.tg-esim-icobtn { padding: 6px 8px; line-height: 0; margin: 0; }
+
+/* one column: notifications and settings sit under the Profiles block, not in a side column */
+.tg-esim-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.tg-esim-col { min-width: 0; }
+.tg-esim-grid .cbi-section { margin: 0 0 14px !important; }
+.tg-esim-side { display: flex; flex-direction: column; min-width: 0; }
+.tg-esim-msg .cbi-section-descr { margin: 0; }
+.tg-esim-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.tg-esim-alert { margin: 0 0 14px; }
+.tg-esim-alert p { margin: 0; }
+
+.tg-esim-list { display: grid; gap: 8px; }
+.tg-esim-prof { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--tg-esim-line); border-radius: 8px; }
+.tg-esim-prof.on { border-left: 3px solid var(--tg-esim-ok); }
+.tg-esim-pic { color: var(--tg-muted); display: grid; place-items: center; }
+.tg-esim-pic svg { display: block; }
+.tg-esim-pic img { display: block; width: 32px; height: 32px; object-fit: contain; }
+.tg-esim-prof.on .tg-esim-pic { color: var(--tg-esim-ok); }
+.tg-esim-pinfo { min-width: 0; }
+.tg-esim-pinfo b { font-size: 14px; overflow-wrap: anywhere; }
+.tg-esim-pname { font-weight: 400; color: var(--tg-muted); }
+.tg-esim-sub { font-size: 12px; color: var(--tg-muted); overflow-wrap: anywhere; }
+.tg-esim-act { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.tg-esim-act .cbi-button { margin: 0 !important; }
+#esim-profiles .tg-esim-act .btn { padding: 5px 11px; font-size: 13px; }
+#esim-profiles .tg-esim-act .btn.tg-esim-icobtn { padding: 6px 8px; }
+.tg-esim-empty { display: grid; gap: 6px; padding: 14px; border: 1px dashed var(--tg-esim-line); border-radius: 8px; font-size: 13px; color: var(--tg-muted); }
+.tg-esim-empty b { color: inherit; font-size: 14px; }
+
+.tg-esim .esim-dl.tg-esim-add { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: nowrap; }
+.tg-esim-add input#esim-code { flex: 1 1 auto; min-width: 6em; width: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tg-esim-add .cbi-button { margin: 0 !important; flex: 0 0 auto; }
+
+h3.tg-esim-coll { display: flex; align-items: center; gap: .35em; cursor: pointer; user-select: none; margin-bottom: 0; }
+h3.tg-esim-coll.open { margin-bottom: .6em; }
+.tg-esim-chev { display: inline-flex; transition: transform .15s ease; }
+.tg-esim-chev.open { transform: rotate(180deg); }
+.tg-esim-chev svg { display: block; }
+.tg-esim-sum { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--tg-muted); text-align: right; }
+.tg-esim-setrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tg-esim-setrow .cbi-button { margin: 0 !important; }
+.tg-esim .esim-set .cbi-value { margin-top: 0; }
+.tg-esim-notif .tg-esim-act { flex-wrap: nowrap; }
+
+/* download dialog: lpac steps as a checklist */
+.tg-esim-steps { display: grid; gap: 6px; font-size: 13px; margin-top: 10px; }
+.tg-esim-steps > div { display: flex; gap: 8px; align-items: center; }
+.tg-esim-steps .done { color: var(--tg-esim-ok); }
+.tg-esim-spin { display: inline-block; flex: 0 0 auto; width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: tg-esim-spin .9s linear infinite; }
+@keyframes tg-esim-spin { to { transform: rotate(360deg); } }
+.tg-esim-bar { height: 6px; border-radius: 5px; background: var(--tg-track); overflow: hidden; margin: 10px 0 0; }
+.tg-esim-barfill { height: 100%; border-radius: 5px; background: var(--tg-accent); transition: width .4s ease-out; }
+
+@media (max-width: 700px) {
+  .tg-esim-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .tg-esim-head .tginfo-right { margin-left: 0; flex: 1 1 100%; flex-direction: row; align-items: center; justify-content: flex-end; }
+  .tg-esim-head .tginfo-right #esim-pill { display: none; }
+  .tg-esim-title .tg-esim-pillm { display: inline-flex; }
+  .tg-esim-prof { grid-template-columns: 32px minmax(0, 1fr); }
+  .tg-esim-act { grid-column: 1 / -1; margin-top: 6px; }
+  .tg-esim-notif .tg-esim-act { flex-wrap: wrap; }
+  .tg-esim .esim-dl.tg-esim-add { flex-wrap: wrap; }
+  .tg-esim-add input#esim-code { flex: 1 1 200px; }
+  .tg-esim-add > .cbi-button-action { flex: 1 1 100%; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-esim-chev, .tg-esim-barfill { transition: none; }
+  .tg-esim-spin { animation: none; }
+}

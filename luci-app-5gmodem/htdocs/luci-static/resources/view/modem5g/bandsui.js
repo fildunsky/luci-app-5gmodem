@@ -5,6 +5,18 @@
 'require uci';
 'require view.modem5g.mutil as mutil';
 
+// Write actions wait for a tab switch still running on the router (modemswitch.sh switch takes
+// seconds): the scripts act on uci active_modem, which is the previous modem until it returns.
+// Every write also names the page modem (for=<usb path>, read when the action starts), so it
+// cannot land on another modem when active_modem is not the one shown. Only for scripts that
+// take for=: bands.sh here.
+function execW(bin, args) {
+	var p = window.__5gmSwitchP || Promise.resolve();
+	var path = (ctx && ctx.pagePath && ctx.pagePath()) || '';
+	var a = path ? (args || []).concat([ 'for=' + path ]) : args;
+	return p.then(function() { return fs.exec(bin, a); });
+}
+
 var ctx = null;
 
 var _bandsAfterBusy = false;
@@ -36,7 +48,7 @@ function _bandsOpStart(args, msg) {
 	ctx.setModemBusy(msg);
 	_bandsAfterBusy = true;
 	_bandsOpAt = Date.now();
-	L.resolveDefault(fs.exec('/usr/share/5gmodem/bands.sh', args), {}).then(function(res) {
+	L.resolveDefault(execW('/usr/share/5gmodem/bands.sh', args), {}).then(function(res) {
 		if (!res || typeof res.code !== 'number' || res.code === 0) { return; }
 		_bandsAfterBusy = false;
 		ctx.clearModemBusy(true);
@@ -458,7 +470,7 @@ function renderUlca(state, saved) {
 				'style': 'margin-left:.6em',
 				'click': ui.createHandlerFn(this, function() {
 					// only the saved choice goes: the modem has no command to turn it off
-					return L.resolveDefault(fs.exec('/usr/share/5gmodem/bands.sh', [ 'setulca', 'forget' ]), null).then(function() {
+					return L.resolveDefault(execW('/usr/share/5gmodem/bands.sh', [ 'setulca', 'forget' ]), null).then(function() {
 						if (note.parentNode) { note.parentNode.removeChild(note); }
 						if (stop.parentNode) { stop.parentNode.removeChild(stop); }
 					});
@@ -1014,7 +1026,7 @@ function applyBandsModemband(reset, confirmed) {
 	if (hasTwo && (reset || two.length)) { args.push('2g=' + (reset ? 'default' : two.join(' '))); }
 	if (args.length < 2) { return Promise.resolve(); }
 	var key = _applyKeyNow();
-	return fs.exec('/usr/share/5gmodem/bands.sh', args).then(function(res) {
+	return execW('/usr/share/5gmodem/bands.sh', args).then(function(res) {
 		var d = null;
 		try { d = JSON.parse(String((res && res.stdout) || '').trim()); } catch (e) { d = null; }
 		if (!d || !d.id) {
@@ -1058,12 +1070,12 @@ function applyBands() {
 		ui.addNotification(null, E('p', _('ModemManager does not manage this modem')), 'error');
 		return Promise.resolve();
 	}
-	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'mmsetbands', bandsOther.concat(sel).filter(Boolean).join('|'), String(ctx.getMmIdx()) ]).then(function(res) {
+	return execW('/usr/share/5gmodem/bands.sh', [ 'mmsetbands', bandsOther.concat(sel).filter(Boolean).join('|'), String(ctx.getMmIdx()) ]).then(function(res) {
 		if (res.code !== 0) {
 			ui.addNotification(null, E('p', [ _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '') ]), 'error');
 			return false;
 		}
-		return nrAt ? fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands5gnsa', nrSel.join(' ') ]) : true;
+		return nrAt ? execW('/usr/share/5gmodem/bands.sh', [ 'setbands5gnsa', nrSel.join(' ') ]) : true;
 	}).then(function(res2) {
 		if (res2 === false) { return; }
 		if (res2 !== true && res2.code !== 0) {
@@ -1097,7 +1109,7 @@ function setNetMode(allowed, preferred, label) {
 	var isAuto = (allowed == '2g|3g|4g|5g' && preferred == '5g');
 	var args = isAuto ? [ 'setmodemm', 'default' ]
 		: (preferred ? [ 'setmodemm', allowed, preferred ] : [ 'setmodemm', allowed ]);
-	return fs.exec('/usr/share/5gmodem/bands.sh', args).then(function(res) {
+	return execW('/usr/share/5gmodem/bands.sh', args).then(function(res) {
 		ui.hideModal();
 		if (res.code === 0 && /"error"/.test(String(res.stdout || ''))) { res.code = 1; }
 		if (res.code === 0) {
@@ -1140,7 +1152,7 @@ function setNetModeAT(id, label) {
 
 function applyNetModeAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
-	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function(res) {
+	return execW('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function(res) {
 		ui.hideModal();
 		if (res && typeof res.code === 'number' && res.code !== 0) {
 			ui.addNotification(null, E('p', [ _('Failed to set network mode') + ': ' + String(res.stdout || res.stderr || '').trim() ]), 'error');
@@ -1160,7 +1172,7 @@ function applyNetModeAT(id, label) {
 
 function setBands3gAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying 3G bands...')));
-	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function(res) {
+	return execW('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function(res) {
 		ui.hideModal();
 		if (res && typeof res.code === 'number' && res.code !== 0) {
 			ui.addNotification(null, E('p', [ _('Failed to set 3G bands') + ': ' + String(res.stdout || res.stderr || '').trim() ]), 'error');
@@ -1217,7 +1229,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30946,
+	API: 40000,
 	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },

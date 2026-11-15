@@ -16,6 +16,11 @@ ifup интерфейса активного модема (хук `/etc/hotplug.
 ни одного лишнего запроса к модему), а каждый внешний вызов `5gmodem.sh` — это
 полный форк опроса и очередь к AT-порту.
 
+Снимок метрик (`/tmp/5gmodem/metrics_<модем>.json` и `.stamp`) пишет и опрос
+стиков с веб-API (HiLink, ZTE, Tenda, ASR): до 3.9.47 он туда не попадал, и у
+таких стиков в `tele.json` были только пинг и трафик, а у внешних экранов не было
+ни бенда, ни уровней, ни IP, ни APN.
+
 Формат канонический: короткие имена полей, единица зашита в поле, числа числами — одинаково для всех потребителей.
 
 ## Поля
@@ -45,6 +50,8 @@ ifup интерфейса активного модема (хук `/etc/hotplug.
 | `cc` | строка | — | Код страны внешнего адреса (`RU`, `NL`) — появляется, когда включён «Внешний IP» |
 | `wan_ip`, `ext_ip`, `ext_ip6` | строка | — | Адреса — только при `tele.publish_ip=1` (по умолчанию их здесь нет, см. ниже) |
 | `phone` | строка | — | Номер SIM — только при `tele.publish_phone=1` (по умолчанию его здесь нет) |
+| `gps_fix` | int | — | GNSS: 0 — нет позиции, 2 — 2D, 3 — 3D. Только при `tele.publish_gps=1` |
+| `gps_lat`, `gps_lon`, `gps_alt`, `gps_speed`, `gps_course`, `gps_sats`, `gps_hdop` | число | °, °, м, км/ч, °, шт, — | Позиция приёмника модема — только при `tele.publish_gps=1` и `gps_fix` > 0, см. [gps.md](subsystems/gps.md) |
 
 Правила (из схемы, здесь они соблюдаются строго):
 
@@ -249,7 +256,7 @@ uci commit 5gmodem
 
 | Кто | Пишет | Куда |
 |---|---|---|
-| 5gmodem | `sig oper model rsrp rsrq sinr band ca mode temp therm temps bat chg dist tz ping rx tx sms cc` (+ адреса при `publish_ip=1`, `phone` при `publish_phone=1`) | `/tmp/5gmodem/tele.json` |
+| 5gmodem | `sig oper model rsrp rsrq sinr band ca mode temp therm temps bat chg dist tz ping rx tx sms cc` (+ адреса при `publish_ip=1`, `phone` при `publish_phone=1`, `gps_*` при `publish_gps=1`) | `/tmp/5gmodem/tele.json` |
 | Ваш агрегатор | всё остальное | свой файл |
 
 ## Чего читать не надо

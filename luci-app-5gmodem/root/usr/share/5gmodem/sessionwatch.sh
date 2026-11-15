@@ -368,7 +368,8 @@ EOF
 
 warm_active() {
 	_wb=$(uci -q get "$CFG.stats.bgpoll" 2>/dev/null)
-	case "$_wb" in 60|300) : ;; *) return 0 ;; esac
+	# unset = the default, every 5 minutes; "0" = switched off
+	case "$_wb" in 60|300) : ;; '') _wb=300 ;; *) return 0 ;; esac
 	[ "$(uci -q get "$CFG.@5gmodem[0].show_stats" 2>/dev/null)" = "0" ] && return 0
 	_wba=$(active_path)
 	[ -n "$_wba" ] || return 0
@@ -575,6 +576,7 @@ case "$1" in
 				is_iphone "${_ipw##*/}" && { usbmuxd_ensure >/dev/null 2>&1; break; }
 			done
 			"$RES/telemetry.sh" tick >/dev/null 2>&1
+			"$RES/gpsfeed.sh" tick >/dev/null 2>&1
 			"$RES/stapark.sh" tick >/dev/null 2>&1
 			"$RES/mobile.sh" tick >/dev/null 2>&1
 		done

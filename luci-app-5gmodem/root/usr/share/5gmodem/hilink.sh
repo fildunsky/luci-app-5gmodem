@@ -294,7 +294,10 @@ _zte_b64() {
 # $2: modem path, so that the web password is the one of this modem and not of the active one.
 _zte_login() {
 	_zl_f="$CACHE_DIR/ztestok_$(_sk "$1" "$2")"
-	if [ -s "$_zl_f" ] && [ -z "$(find "$_zl_f" -mmin +5 2>/dev/null)" ]; then
+	# "-" = the firmware keeps the session per client IP and sets no stok cookie
+	# (ZX297520 clones, "Demo-Webs"); it can expire sooner, so it is re-checked every minute.
+	_zl_age=5; [ "$(cat "$_zl_f" 2>/dev/null)" = "-" ] && _zl_age=1
+	if [ -s "$_zl_f" ] && [ -z "$(find "$_zl_f" -mmin +$_zl_age 2>/dev/null)" ]; then
 		cat "$_zl_f"; return 0
 	fi
 	_zl_bad="$_zl_f.fail"
@@ -309,6 +312,12 @@ _zte_login() {
 		-d "isTest=false&goformId=LOGIN&password=$(_zte_b64 "$(_zte_pass "$2")")" \
 		"http://$1/$(_zte_setpath "$1" "$2")" 2>/dev/null)
 	_zl_t=$(printf '%s' "$_zl_h" | sed -n 's/.*[Ss]et-[Cc]ookie: *stok=\([^;[:space:]]*\).*/\1/p' | head -1)
+	if [ -z "$_zl_t" ]; then
+		case "$_zl_h" in *'"result":"0"'*|*'"result":"4"'*) _zl_t="-" ;; esac
+	fi
+	# no HTTP answer at all (stick rebooting, web server stuck) is not a wrong password:
+	# no 15-minute back-off, or the levels would stay hidden long after the stick is back
+	[ -n "$_zl_t" ] || [ -n "$_zl_h" ] || return 1
 	if [ -n "$_zl_t" ]; then
 		rm -f "$_zl_bad"
 		printf '%s' "$_zl_t" > "$_zl_f"
@@ -345,8 +354,10 @@ _zte_setpath() { _zsp=$(_zte_paths "$1" "$2"); printf '%s' "${_zsp##* }"; }
 _zte_get() {
 	_zg_src=$(_hl_src "$1" "$3")
 	_zg_tok=$(cat "$CACHE_DIR/ztestok_$(_sk "$1" "$3")" 2>/dev/null)
+	[ "$_zg_tok" = "-" ] && _zg_tok=""
 	_zg_md='multi_data=1&'
 	case "${2%%&*}" in sms_data_total) _zg_md= ;; esac
+	case "$2" in *'&nomd') _zg_md=; set -- "$1" "${2%&nomd}" "$3" ;; esac
 	curl -s --max-time 6 ${_zg_src:+--interface "$_zg_src"} -A "$UA" \
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
@@ -925,7 +936,7 @@ zte_metrics_json() {
 	_HLP=$(_hl_path "$1")
 	_hl_ctx "$_HLP" || return 1
 	_a="$_HC_A"
-	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes,nv_rsrp,nv_rsrq,nv_sinr,nv_pci,nv_arfcn,mcc,mnc,tac_code"
+	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,cr_version,wan_apn,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes,nv_rsrp,nv_rsrq,nv_sinr,nv_pci,nv_arfcn,mcc,mnc,tac_code"
 	_r=$(_zte_get "$_a" "$_zm_cmd" "$_HLP")
 	case "$_r" in
 		*'"modem_main_state"'*|*'"ppp_status"'*) ;;
@@ -991,12 +1002,19 @@ zte_metrics_json() {
 	_imsi=$(_zj "$_r" sim_imsi)
 	_iccid=$(_zj "$_r" iccid)
 	_fw=$(_zj "$_r" wa_inner_version)
+	[ -n "$_fw" ] || _fw=$(_zj "$_r" cr_version)
 	_phone=$(_zj "$_r" msisdn)
 	_mfm=$(printf '%s' "$_fw" | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
 	[ -n "$_mfm" ] || _mfm=$(_zj "$_r" hardware_version | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
 	case "$_fw" in
 		*_OLAX_*) _model="Olax"; [ -n "$_mfm" ] || _mfm=$(printf '%s' "$_fw" | grep -oE '^[A-Z]{1,4}[0-9]+' | head -1) ;;
 	esac
+	# OEM clones without "MF" in the strings: the model is the head of hardware_version
+	# (GW510U-MB_B -> GW510-U, the name AT+CGMM reports).
+	if [ -z "$_mfm" ]; then
+		_mfm=$( { _zj "$_r" hardware_version; printf '%s\n' "$_fw"; } | grep -oE '^[A-Z]{2,}[0-9]{2,}[A-Z]*' | head -1)
+		case "$_mfm" in GW510U) _mfm="GW510-U" ;; esac
+	fi
 	[ -n "$_mfm" ] && _model="${_model:+$_model }$_mfm"
 	_zbat=$(_zj "$_r" battery_vol_percent | tr -cd '0-9')
 	_zchg=$(_zj "$_r" battery_charging | tr -cd '0-9')
@@ -1037,6 +1055,76 @@ ZC_EOF
 			fi ;;
 	esac
 	_pps=$(_zj "$_r" ppp_status)
+	# ZX297520 in debug mode (0581/0536): the web API of OEM clones (GW510-U) leaves the network
+	# type, operator, cell and RSRQ empty and reports ppp_disconnected on a working link.
+	# The AT port has them: +ZEMSCIQ: 1,<act>,<cellid>,<rac>,<tac>,"<plmn>",<pci>,<earfcn>,<band>,
+	# <rsrp+141>,<(rsrq+20)*2>,... (one command per request: the firmware runs only the first of a chain).
+	case "$(_vidpid_for "$_HLP")" in 19d2:0581|19d2:0536)
+		_zxp=$(uci -q get "$CFG.m_$(echo "$_HLP" | sed 's/[^A-Za-z0-9]/_/g').at_port")
+		_zxe=""; _zxc="$CACHE_DIR/zxat_$(_tk "$_HLP")"
+		[ -n "$_zxp" ] && [ -c "$_zxp" ] && _zxe=$(at_query "$_zxp" "AT+ZEMSCIQ=1" 4 3 2>/dev/null \
+			| tr -d '\r"' | sed -n 's/^+ZEMSCIQ: *1,//p' | head -1)
+		# The port is often busy (the alignment page polls every 2 s, SMS reads, other polls):
+		# then the last AT reading, up to 30 s old, stands in, instead of the card losing
+		# SINR, RSRQ and the cell for that round.
+		_zxold=""
+		if [ -z "$_zxe" ] && [ -s "$_zxc" ]; then
+			read -r _zxt _zxe _zxs _zxr _zxpp < "$_zxc"
+			case "$_zxt" in ''|*[!0-9]*) _zxe="" ;; *) [ $(( $(uptime_s) - _zxt )) -le 30 ] && _zxold=1 || _zxe="" ;; esac
+		fi
+		if [ -n "$_zxe" ]; then
+			IFS=, read -r _zx_act _zx_ci _zx_rac _zx_tac _zx_plmn _zx_pci _zx_arfcn _zx_band _zx_rsrp _zx_rsrq _zx_rest <<ZX_EOF
+$_zxe
+ZX_EOF
+			case "$_zx_band" in ''|*[!0-9]*|0) _zx_band="" ;; esac
+			if [ -n "$_zx_band" ]; then
+				case "$_ntype" in ''|*"No Service"*|*Limited*) _ntype="LTE" ;; esac
+				[ -n "$_zpband" ] || _zpband="B$_zx_band"
+				case "$_zx_ci" in ''|*[!0-9]*) ;; *)
+					[ "$_zx_ci" -gt 0 ] && { _cid="$_zx_ci"; _cid_hex=$(printf '%X' "$_zx_ci"); _zenb=$(( _zx_ci >> 8 )); } ;;
+				esac
+				case "$_zx_tac" in ''|*[!0-9]*) ;; *) [ "$_zx_tac" -gt 0 ] && _lac=$(printf '%X' "$_zx_tac") ;; esac
+				case "$_zx_pci" in ''|*[!0-9]*) ;; *) [ "$_zx_pci" -lt 504 ] && _zpci="$_zx_pci" ;; esac
+				case "$_zx_arfcn" in ''|*[!0-9]*) ;; *) _zearfcn="$_zx_arfcn" ;; esac
+				case "$_zx_rsrp" in ''|*[!0-9]*) ;; *) [ "$_zx_rsrp" -gt 0 ] && [ "$_zx_rsrp" -le 97 ] && _rsrp=$(( _zx_rsrp - 141 )) ;; esac
+				case "$_zx_rsrq" in ''|*[!0-9]*) ;; *) [ "$_zx_rsrq" -le 34 ] && _rsrq=$(awk -v v="$_zx_rsrq" 'BEGIN { printf "%.1f", v / 2 - 20 }') ;; esac
+				case "$_zx_plmn" in [0-9][0-9][0-9][0-9][0-9]|[0-9][0-9][0-9][0-9][0-9][0-9])
+					[ -n "$_mcc" ] || _mcc="${_zx_plmn%"${_zx_plmn#???}"}"
+					[ -n "$_mnc" ] || _mnc="${_zx_plmn#???}" ;;
+				esac
+				# network_provider may hold the bare PLMN ("25020"): resolve it to a name.
+				case "$_op" in *[!0-9]*) ;; *) _op="" ;; esac
+				if [ -z "$_op" ] && [ -n "$_mcc$_mnc" ]; then
+					_op=$(opname_pretty "$_mcc$_mnc" "")
+					_zob=$(opname_brand "$_imsi") && _op="$_zob"
+				fi
+				# +ZSINR / +ZRSSI print values as integer,tenth pairs: "+ZSINR: 28,5,27,7,..." = 28.5 dB first.
+				if [ -n "$_zxold" ]; then
+					[ -n "$_sinr" ] || { [ "$_zxs" = - ] || _sinr="$_zxs"; }
+					[ -n "$_rssi" ] || { [ "$_zxr" = - ] || _rssi="$_zxr"; }
+				fi
+				if [ -z "$_sinr" ] && [ -z "$_zxold" ]; then
+					_sinr=$(at_query "$_zxp" "AT+ZSINR" 4 3 2>/dev/null | tr -d '\r ' \
+						| sed -n 's/^+ZSINR:\(-\{0,1\}[0-9]\{1,2\}\),\([0-9]\),.*/\1.\2/p' | head -1)
+				fi
+				if [ -z "$_rssi" ] && [ -z "$_zxold" ]; then
+					_rssi=$(at_query "$_zxp" "AT+ZRSSI" 4 3 2>/dev/null | tr -d '\r ' \
+						| sed -n 's/^+ZRSSI:\(-[0-9]\{2,3\}\),[0-9],.*/\1/p' | head -1)
+				fi
+				_sp=$(sig_percent "$_ntype" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
+				[ -n "$_sp" ] && _pct="$_sp"
+				if [ "$_pps" != ppp_connected ] && [ -z "$_zxold" ]; then
+					at_query "$_zxp" "AT+CGACT?" 4 3 2>/dev/null | tr -d '\r ' | grep -q '^+CGACT:[0-9]*,1' \
+						&& _pps=ppp_connected
+				fi
+				[ -n "$_zxold" ] && [ "$_zxpp" = ppp_connected ] && _pps=ppp_connected
+				[ -n "$_zxold" ] || printf '%s %s %s %s %s\n' "$(uptime_s)" "$_zxe" "${_sinr:--}" "${_rssi:--}" "$_pps" > "$_zxc"
+				case "$_wanip" in ''|0.0.0.0)
+					[ "$_pps" = ppp_connected ] && _wanip=$(zx_wanip "$_HLP") ;;
+				esac
+			fi
+		fi ;;
+	esac
 	_reg=0
 	if [ "$_pps" = "ppp_connected" ]; then
 		if [ -n "$_mcc" ] && [ "$_mcc" = "$(_zj "$_r" hmcc)" ]; then _reg=1; else _reg=5; fi
@@ -1074,6 +1162,9 @@ ZC_EOF
 	printf '"pci":"%s","pband":"%s","enbid":"%s",' "$_zpci" "$_zpband" "$_zenb"
 	[ -n "$_zearfcn" ] && printf '"earfcn":"%s",' "$_zearfcn"
 	printf '"ipaddr":"%s",' "$_wanip"
+	case "$_ntype:$_lac" in *LTE*:[0-9A-Fa-f]*) _ztd=$(printf '%d' "0x$_lac" 2>/dev/null) && [ "$_ztd" -gt 0 ] && printf '"tac_dec":"%s",' "$_ztd" ;; esac
+	_zapn=$(_zj "$_r" wan_apn)
+	[ -n "$_zapn" ] && printf '"iface_apn":"%s",' "$(jsafe "$_zapn")"
 	printf '"csq":"%s",' "$_csq"
 	printf '"battery":"%s","battery_charging":"%s","hl_modes":"1",' "$_zbat" "$_zchg"
 	case "$(_vidpid_for "$_HLP")" in
@@ -1181,7 +1272,17 @@ yota_metrics_json() {
 
 _ng_at() {
 	command -v nc >/dev/null 2>&1 || return 1
-	{ printf 'ATE0\r\n%s\r\n' "$2"; sleep 2; } | timeout 6 nc "$1" 5510 2>/dev/null | tr -d '\r'
+	# no "timeout" applet in the stock busybox (and its nc has no -w): nc runs in the background
+	# and is killed after 6 s
+	mkdir -p /tmp/5gmodem 2>/dev/null
+	_na_o=$(mktemp /tmp/5gmodem/ng.XXXXXX 2>/dev/null) || return 1
+	{ printf 'ATE0\r\n%s\r\n' "$2"; sleep 2; } | nc "$1" 5510 > "$_na_o" 2>/dev/null &
+	_na_p=$!
+	_na_i=0
+	while kill -0 "$_na_p" 2>/dev/null && [ "$_na_i" -lt 6 ]; do sleep 1; _na_i=$((_na_i + 1)); done
+	kill "$_na_p" 2>/dev/null; wait "$_na_p" 2>/dev/null
+	tr -d '\r' < "$_na_o"
+	rm -f "$_na_o"
 }
 
 netgear_metrics_json() {
@@ -1627,10 +1728,18 @@ zte_sms_count() {
 	_zc_p=$(_hl_path "$1")
 	_zc_a=$(_addr_for "$_zc_p") || return 1
 	_zc_r=$(_zte_get "$_zc_a" "sms_capacity_info" "$_zc_p")
+	# Some ZX297520 firmwares (GW510-U) answer {"sms_capacity_info":""} with multi_data=1.
+	case "$_zc_r" in *'"sms_nv_total"'*) ;; *) _zc_r=$(_zte_get "$_zc_a" "sms_capacity_info&nomd" "$_zc_p") ;; esac
 	_zc_u=$(_zj "$_zc_r" sms_nv_rev_total)
 	_zc_m=$(_zj "$_zc_r" sms_nv_total)
-	printf '<LocalInbox>%s</LocalInbox><LocalMaxInbox>%s</LocalMaxInbox>\n' \
-		"${_zc_u:-0}" "${_zc_m:-100}"
+	_zc_s=ME
+	# zte_sms_list reads the SIM store when the modem store is empty: count what is shown
+	case "$_zc_u" in ''|0)
+		_zc_su=$(_zj "$_zc_r" sms_sim_rev_total)
+		case "$_zc_su" in ''|0) ;; *) _zc_u="$_zc_su"; _zc_m=$(_zj "$_zc_r" sms_sim_total); _zc_s=SM ;; esac ;;
+	esac
+	printf '<LocalInbox>%s</LocalInbox><LocalMaxInbox>%s</LocalMaxInbox><LocalStore>%s</LocalStore>\n' \
+		"${_zc_u:-0}" "${_zc_m:-100}" "$_zc_s"
 }
 
 _zte_ucs2hex() {
@@ -1697,12 +1806,80 @@ zte_sms_delete() {
 	_zx_p=$(_hl_path "$2")
 	_zx_a=$(_addr_for "$_zx_p") || { echo '{"success":false}'; return 1; }
 	_zte_login "$_zx_a" "$_zx_p" >/dev/null 2>&1
+	# $1: one id or a list "1;2;3", as the stick's own page sends it
 	_zx_r=$(_zte_set "$_zx_a" "goformId=DELETE_SMS&msg_id=$1;&notCallback=true" "" "$_zx_p")
 	case "$_zx_r" in
-		*success*) echo '{"success":true}' ;;
-		*) printf '{"success":false,"code":"%s"}\n' "$(_zj "$_zx_r" result)" ;;
+		*success*) ;;
+		*) printf '{"success":false,"code":"%s"}\n' "$(_zj "$_zx_r" result)"; return 1 ;;
 	esac
+	# The delete runs inside the stick after "success"; its page polls sms_cmd_status_info
+	# (answer sms_cmd_status_result: 3 done, 2 failed, 1 running) before the next command. Without the wait the next delete was
+	# refused while the previous one still ran.
+	_zx_n=0
+	while [ "$_zx_n" -lt 20 ]; do
+		case "$(_zj "$(_zte_get "$_zx_a" "sms_cmd_status_info&sms_cmd=6&nomd" "$_zx_p")" sms_cmd_status_result)" in
+			3) echo '{"success":true}'; return 0 ;;
+			2) echo '{"success":false,"code":"cmd"}'; return 1 ;;
+			'') break ;;	# firmware without the status field: nothing to wait for
+		esac
+		sleep 1; _zx_n=$((_zx_n + 1))
+	done
+	echo '{"success":true}'
 }
+# APN of a ZTE goform stick (APN_PROC_EX, as the stick's own page sends it). Profiles are
+# APN_configtmp0..19 "name($)apn($)user($)dial($)auth($)..($)..($)pdp($)..."; ours is named
+# "5gmodem" and reused, so repeated writes do not fill the stick's list.
+# $1: modem path. Prints {"mode","apn","profile","pdp","auto_apn"}.
+zte_apn_get() {
+	_za_p=$(_hl_path "$1")
+	_za_a=$(_addr_for "$_za_p") || { echo '{}'; return 1; }
+	_zte_login "$_za_a" "$_za_p" >/dev/null 2>&1
+	_za_r=$(_zte_get "$_za_a" "apn_mode,wan_apn,m_profile_name,pdp_type,ipv6_wan_apn,apn_auto_config" "$_za_p")
+	case "$_za_r" in *'"apn_mode"'*) ;; *) echo '{}'; return 1 ;; esac
+	_za_auto=$(_zj "$_za_r" apn_auto_config | awk -F'[(][$][)]' '{ print $2 }')
+	printf '{"mode":"%s","apn":"%s","profile":"%s","pdp":"%s","auto_apn":"%s"}\n' \
+		"$(jsafe "$(_zj "$_za_r" apn_mode)")" "$(jsafe "$(_zj "$_za_r" wan_apn)")" \
+		"$(jsafe "$(_zj "$_za_r" m_profile_name)")" "$(jsafe "$(_zj "$_za_r" pdp_type)")" "$(jsafe "$_za_auto")"
+}
+
+_zte_urlenc() { printf '%s' "$1" | sed 's/%/%25/g; s/&/%26/g; s/+/%2B/g; s/=/%3D/g; s/ /%20/g; s/;/%3B/g'; }
+
+# $1: APN ("" = the stick's own automatic choice), $2: IP|IPv4v6 (default IP), $3: modem path.
+zte_apn_set() {
+	_zs_apn="$1"; _zs_pdp="${2:-IP}"; _zs_p=$(_hl_path "$3")
+	case "$_zs_pdp" in IP|IPv4v6) ;; *) _zs_pdp=IP ;; esac
+	case "$_zs_apn" in *[!A-Za-z0-9._-]*) echo '{"success":false,"error":"bad apn"}'; return 1 ;; esac
+	_zs_a=$(_addr_for "$_zs_p") || { echo '{"success":false,"error":"no address"}'; return 1; }
+	_zte_login "$_zs_a" "$_zs_p" >/dev/null 2>&1
+	if [ -z "$_zs_apn" ]; then
+		_zs_r=$(_zte_post_auth "$_zs_a" "goformId=APN_PROC_EX&apn_mode=auto" "$_zs_p")
+	else
+		_zs_l=$(_zte_get "$_zs_a" "$(i=0; while [ $i -lt 20 ]; do printf 'APN_configtmp%d,' $i; i=$((i+1)); done)apn_num_preset" "$_zs_p")
+		# our profile if it is there, else the first empty slot after the preset ones
+		_zs_i=$(printf '%s' "$_zs_l" | awk -v RS=',' '
+			match($0, /"APN_configtmp[0-9]+":"[^"]*"/) {
+				n = $0; sub(/^.*APN_configtmp/, "", n); sub(/".*/, "", n); n += 0
+				v = $0; sub(/^[^:]*:"/, "", v); sub(/"$/, "", v)
+				if (v ~ /^5gmodem\(\$\)/ && mine == "") mine = n
+				if (v == "" && free == "") free = n
+			}
+			END { print (mine != "" ? mine : free) }')
+		[ -n "$_zs_i" ] || { echo '{"success":false,"error":"no free profile slot"}'; return 1; }
+		_zs_e=$(_zte_urlenc "$_zs_apn")
+		_zs_q="goformId=APN_PROC_EX&apn_action=save&apn_mode=manual&profile_name=5gmodem&wan_dial=*99%23&pdp_type=$_zs_pdp&pdp_select=auto&index=$_zs_i&wan_apn=$_zs_e&ppp_auth_mode=none&ppp_username=&ppp_passtmp="
+		[ "$_zs_pdp" = IPv4v6 ] && _zs_q="$_zs_q&dns_mode=auto&prefer_dns_manual=&standby_dns_manual=&ipv6_wan_apn=$_zs_e&ipv6_ppp_auth_mode=none&ipv6_ppp_username=&ipv6_ppp_passtmp="
+		_zs_r=$(_zte_post_auth "$_zs_a" "$_zs_q" "$_zs_p")
+		case "$_zs_r" in *success*) ;; *) printf '{"success":false,"error":"save refused"}\n'; return 1 ;; esac
+		_zs_r=$(_zte_post_auth "$_zs_a" "goformId=APN_PROC_EX&apn_mode=manual&apn_action=set_default&set_default_flag=1&pdp_type=$_zs_pdp&index=$_zs_i" "$_zs_p")
+	fi
+	case "$_zs_r" in *success*) ;; *) printf '{"success":false,"error":"refused"}\n'; return 1 ;; esac
+	# the new APN applies to the next data session: reconnect the stick's own dial-up
+	_zte_post_auth "$_zs_a" "goformId=DISCONNECT_NETWORK" "$_zs_p" >/dev/null 2>&1
+	sleep 3
+	_zte_post_auth "$_zs_a" "goformId=CONNECT_NETWORK" "$_zs_p" >/dev/null 2>&1
+	echo '{"success":true}'
+}
+
 _tenda_sms_conv() {
 	awk '
 		function fld(r, k,   v) {
@@ -2379,6 +2556,27 @@ mtk_temps() {
 	printf '%s' "$_mt_o"
 }
 
+# WAN address of a ZX297520 stick over ADB: some firmwares (GW510-U) keep wan_ipaddr at 0.0.0.0
+# in the web API and in nv, while the address sits on the wan1 interface. Cached for a minute.
+zx_wanip() {
+	_zw_s=$(cat "/sys/bus/usb/devices/$1/serial" 2>/dev/null)
+	[ -n "$_zw_s" ] || return 1
+	_zw_f="$CACHE_DIR/zxwan_$(_tk "$1")"
+	if [ -f "$_zw_f" ] && [ -z "$(find "$_zw_f" -mmin +1 2>/dev/null)" ]; then
+		cat "$_zw_f"; return 0
+	fi
+	command -v adb >/dev/null 2>&1 || return 1
+	_adb_foreign "$_zw_s" && return 1
+	case "$(_adb_to 4 devices)" in *"$_zw_s	device"*) ;; *) return 1 ;; esac
+	_zw_n=$(_adb_to 6 -s "$_zw_s" shell 'nv get default_wan_name' | tr -d '\r' | head -1)
+	case "$_zw_n" in ''|*[!A-Za-z0-9_.-]*) _zw_n=wan1 ;; esac
+	_zw_o=$(_adb_to 6 -s "$_zw_s" shell "ip -4 addr show $_zw_n" | tr -d '\r' \
+		| sed -n 's/^ *inet \([0-9.]*\)\/.*/\1/p' | head -1)
+	case "$_zw_o" in ''|0.0.0.0|*[!0-9.]*) : > "$_zw_f"; return 1 ;; esac
+	printf '%s' "$_zw_o" > "$_zw_f"
+	printf '%s' "$_zw_o"
+}
+
 zx_battery() {
 	_zb_d="/sys/bus/usb/devices/$1"
 	_zb_s=$(cat "$_zb_d/serial" 2>/dev/null)
@@ -2595,6 +2793,12 @@ case "$1" in
 	setbands2g)  hl_setbands2g "$2" "$3" ;;
 	supbands2g)  hl_supbands2g "$2" ;;
 	getmode)     hl_getmode "$2" ;;
+	zteapn)
+		case "$2" in
+			get) zte_apn_get "$3" ;;
+			set) zte_apn_set "$3" "$4" "$5" ;;
+			*) echo '{"error":"usage: zteapn get [path] | set <apn> <IP|IPv4v6> [path]"}'; exit 1 ;;
+		esac ;;
 	zgetmode)    zte_getmode "$2" ;;
 	mtkbands)    mtk_bands_json "$2" ;;
 	mtksetbands) mtk_setbands "$2" "$3" ;;

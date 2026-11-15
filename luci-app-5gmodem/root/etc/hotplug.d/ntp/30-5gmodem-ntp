@@ -1,0 +1,6 @@
+#!/bin/sh
+# busybox ntpd (sysntpd: -S /usr/sbin/ntpd-hotplug) reports step|stratum|periodic|unsync
+# with $stratum (16 = not synced). gpsfeed.sh sets the clock from GNSS only without a sync.
+[ -n "$ACTION" ] || exit 0
+mkdir -p /tmp/5gmodem 2>/dev/null
+printf '%s %s %s\n' "$ACTION" "$stratum" "$(cut -d. -f1 /proc/uptime)" > /tmp/5gmodem/ntp_state

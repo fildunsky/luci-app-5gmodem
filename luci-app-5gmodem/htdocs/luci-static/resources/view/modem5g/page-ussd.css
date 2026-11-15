@@ -1,0 +1,103 @@
+/* USSD tab (sendussd.js): header card like the Network page, the exchange with the network as a
+   chat on the left, code lists on the right, settings folded below. Loaded by sendussd.js once
+   (link#tg-page-ussd-css). Base classes (tginfo-*, tg-proto-badge, tg-collapse) live in modem.css.
+   See docs/subsystems/ussd.md. */
+.tg-ussd {
+  --tg-ussd-ok: #22a559;
+  --tg-ussd-warn: #e0a100;
+  --tg-ussd-bad: #e5484d;
+  --tg-ussd-in: rgba(128,128,128,.14);
+  --tg-ussd-line: rgba(128,128,128,.22);
+}
+
+/* header card */
+.tg-ussd-ico { color: var(--tg-accent); }
+.tg-ussd-ico.warn { color: var(--tg-ussd-warn); }
+.tg-ussd-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid currentColor; white-space: nowrap; line-height: 1.3; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.tg-ussd-pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.tg-ussd-pill.ok { color: var(--tg-ussd-ok); }
+.tg-ussd-pill.warn { color: var(--tg-ussd-warn); }
+.tg-ussd-pill.acc { color: var(--tg-accent); }
+.tg-ussd-title .tg-ussd-pillm { display: none; }
+.tg-ussd .cbi-button svg { display: block; flex: none; }
+.tg-ussd .cbi-button:has(> svg) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+.tg-ussd-alert { display: flex; gap: 9px; align-items: flex-start; }
+.tg-ussd-alert > .tg-ussd-i { flex: none; color: var(--tg-ussd-warn); margin-top: 1px; }
+.tg-ussd-alert > .tg-ussd-i svg { display: block; }
+
+/* layout */
+.tg-ussd-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; margin-bottom: 14px; }
+.tg-ussd-grid > .cbi-section,
+.tg-ussd-side > .cbi-section { margin: 0 !important; }
+.tg-ussd-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* chat */
+.tg-ussd .cbi-section.tg-ussd-chat { padding: 0 !important; overflow: hidden; display: flex; flex-direction: column; min-height: 470px; }
+.tg-ussd-body { flex: 1 1 auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; max-height: 62vh; overflow-y: auto; background: rgba(128,128,128,.05); }
+.tg-ussd-x { display: flex; flex-direction: column; gap: 8px; }
+.tg-ussd-req { align-self: flex-end; max-width: 86%; background: var(--tg-accent); color: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 5px 11px; border-radius: 12px; border-bottom-right-radius: 4px; font-size: 13.5px; overflow-wrap: anywhere; }
+.tg-ussd-ans { align-self: flex-start; max-width: 86%; background: var(--tg-ussd-in); padding: 8px 11px; border-radius: 12px; border-bottom-left-radius: 4px; font-size: 13.5px; line-height: 1.45; }
+.tg-ussd-ans.err { background: rgba(229,72,77,.10); border: 1px solid rgba(229,72,77,.4); }
+.tg-ussd-txt { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tg-ussd-raw { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--tg-muted); margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tg-ussd-meta { font-size: 11px; color: var(--tg-muted); margin-top: 3px; }
+.tg-ussd-meta a { color: var(--tg-accent); }
+.tg-ussd-stages { display: flex; flex-direction: column; gap: 2px; align-self: flex-start; }
+.tg-ussd-stages:empty { display: none; }
+.tg-ussd-stage { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tg-muted); padding: 2px; }
+.tg-ussd-stage.done { color: var(--tg-ussd-ok); }
+.tg-ussd-stage .tg-ussd-i svg { display: block; }
+.tg-ussd-spin { display: inline-block; flex: none; width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: tg-ussd-spin .9s linear infinite; }
+@keyframes tg-ussd-spin { to { transform: rotate(360deg); } }
+.tg-ussd-menu { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-start; }
+.tg-ussd .tg-ussd-menu .cbi-button { margin: 0; min-width: 2.6em; padding: 2px 10px; border-radius: 999px; border-color: var(--tg-accent); color: var(--tg-accent); background: transparent; font-weight: 600; height: auto; line-height: 1.6; }
+.tg-ussd-empty { margin: auto; text-align: center; color: var(--tg-muted); font-size: 13px; padding: 24px 8px; max-width: 34ch; }
+.tg-ussd-sess { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 7px 12px; background: rgba(0,149,255,.08); border-top: 1px solid var(--tg-ussd-line); font-size: 12.5px; }
+.tg-ussd-in { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--tg-ussd-line); align-items: center; }
+.tg-ussd-in .cbi-input-text { flex: 1 1 auto; min-width: 0; width: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.tg-ussd-in .cbi-button { margin: 0; flex: none; }
+.tg-ussd .tg-ussd-ico-btn { padding-left: 8px; padding-right: 8px; }
+.tg-ussd-opts { display: flex; gap: 6px 16px; flex-wrap: wrap; padding: 0 12px 10px; font-size: 12.5px; color: var(--tg-muted); }
+.tg-ussd-opts label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.tg-ussd-opts input[type="checkbox"] { margin: 0; flex: none; }
+
+/* code lists */
+.tg-ussd-seg { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--tg-ussd-line); border-radius: 7px; overflow: hidden; margin: 0 0 10px; }
+.tg-ussd-seg button { flex: 1 1 auto; font: inherit; font-size: 13px; padding: 5px 11px; border: 0; background: transparent; color: inherit; cursor: pointer; white-space: nowrap; }
+.tg-ussd-seg button + button { border-left: 1px solid var(--tg-ussd-line); }
+.tg-ussd-seg button.on { background: var(--tg-accent); color: #fff; font-weight: 600; }
+.tg-ussd-seg button:focus-visible { outline: 2px solid var(--tg-accent); outline-offset: -2px; }
+.tg-ussd-codes { display: grid; gap: 2px; margin: 0 -6px; max-height: 50vh; overflow-y: auto; }
+.tg-ussd-code { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 6px; border-radius: 6px; cursor: pointer; font-size: 13px; align-items: baseline; }
+.tg-ussd-code:hover, .tg-ussd-code:focus-visible { background: rgba(127,127,127,.10); outline: none; }
+.tg-ussd-code > span { overflow-wrap: anywhere; }
+.tg-ussd-code code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--tg-accent); white-space: nowrap; background: none; padding: 0; }
+.tg-ussd-none { color: var(--tg-muted); font-size: 13px; padding: 6px; }
+.tg-ussd-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.tg-ussd-actions .cbi-button { margin: 0; }
+.tg-ussd-pager { display: grid; gap: 4px; margin: 0 0 10px; }
+.tg-ussd-lbl { font-size: 12px; color: var(--tg-muted); }
+
+/* settings block */
+h3.tg-ussd-coll { display: flex; align-items: center; gap: .35em; cursor: pointer; user-select: none; }
+.tg-ussd-chev { display: inline-flex; transition: transform .15s ease; }
+.tg-ussd-chev svg { display: block; }
+.tg-ussd-coll-sum { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--tg-muted); }
+
+@media (max-width: 700px) {
+  .tg-ussd-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .tg-ussd-side { gap: 12px; }
+  .tg-ussd-head .tginfo-general { gap: .9em; flex-wrap: nowrap; }
+  .tg-ussd-head .tginfo-right { display: none; }
+  .tg-ussd-title .tg-ussd-pillm { display: inline-flex; }
+  .tg-ussd .cbi-section.tg-ussd-chat { min-height: 0; }
+  .tg-ussd-body { min-height: 180px; max-height: 55vh; }
+  .tg-ussd-codes { max-height: none; }
+  h3.tg-ussd-coll { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 .35em; }
+  .tg-ussd-coll-sum { grid-column: 2; margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-ussd-spin { animation: none; border-right-color: currentColor; opacity: .6; }
+  .tg-ussd-chev { transition: none; }
+}

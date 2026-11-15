@@ -1328,6 +1328,8 @@ sleep_tick_init() {
 	fi
 }
 
+# AT_QUERY_RAW=1: the whole exchange with the final OK / ERROR line (sms_tool -D); without it
+# sms_tool prints the echo and the data lines only, so success cannot be told from failure
 at_query() {
 	_aq_p="$1"; _aq_c="$2"; _aq_t="${3:-8}"
 	[ -n "$_aq_p" ] && [ -c "$_aq_p" ] || return 1
@@ -1359,7 +1361,7 @@ at_query() {
 		{
 			( sleep "$_aq_t" </dev/null & _aq_x=$!; trap 'kill $_aq_x; exit' TERM; wait $_aq_x; echo t ) &
 			echo $! > "$_aq_o.s"
-			( sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null </dev/null & _aq_x=$!
+			( sms_tool ${AT_QUERY_RAW:+-D} -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null </dev/null & _aq_x=$!
 			  trap 'kill $_aq_x; exit' TERM; wait $_aq_x; echo d ) &
 			echo $! > "$_aq_o.p"
 		} 2>/dev/null 7>&- 8>&- 9>&- | read -r _aq_r
@@ -1368,7 +1370,7 @@ at_query() {
 		[ -n "$_aq_pid" ] && kill -0 "$_aq_pid" 2>/dev/null && kill "$_aq_pid" 2>/dev/null
 		rm -f "$_aq_o.s" "$_aq_o.p"
 	else
-		sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 7>&- 8>&- 9>&- &
+		sms_tool ${AT_QUERY_RAW:+-D} -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 7>&- 8>&- 9>&- &
 		_aq_pid=$!
 		# the sleep is killed with the watchdog: a bare "sleep; kill" left it running for the whole timeout
 		( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_aq_t" & _aq_s=$!
@@ -1522,8 +1524,14 @@ set_sms_storage() {
 	return 0
 }
 
+# curl config line: value in double quotes with \ and " escaped (for "curl -K -": keeps secrets out of argv)
+curl_kq() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+# The local HTTP proxy port of clash/mihomo: the mixed-port or port written in its config.yaml,
+# else what the running core reports. Only when the core has no HTTP port at all and does not
+# accept LAN clients (allow-lan false) a mixed port is opened through its API until it restarts.
 net_proxy_port() {
-	_np_p=$(sed -n 's/^\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
+	_np_p=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
 		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 	case "$_np_p" in ''|0) ;; *) printf '%s' "$_np_p"; return 0 ;; esac
 	command -v curl >/dev/null 2>&1 || return 1
@@ -1531,19 +1539,23 @@ net_proxy_port() {
 		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 	_np_capi() {
 		if [ -n "$_np_s" ]; then
-			curl -s -m 3 -H "Authorization: Bearer $_np_s" "$@" 2>/dev/null
+			printf 'header = "Authorization: Bearer %s"\n' "$(curl_kq "$_np_s")" | curl -s -m 3 -K - "$@" 2>/dev/null
 		else
 			curl -s -m 3 "$@" 2>/dev/null
 		fi
 	}
-	_np_r=$(_np_capi "http://127.0.0.1:9090/configs" | jsonfilter -e '@["mixed-port"]' 2>/dev/null)
-	case "$_np_r" in ''|*[!0-9]*) return 1 ;; esac
-	if [ "$_np_r" = "0" ]; then
-		_np_capi -X PATCH "http://127.0.0.1:9090/configs" -d '{"mixed-port":7895}' -o /dev/null || return 1
-		_np_r=7895
-		logger -t 5gmodem "net: direct path is blocked - opened clash mixed-port 7895 (local API, 127.0.0.1 only)"
-	fi
-	printf '%s' "$_np_r"
+	_np_j=$(_np_capi "http://127.0.0.1:9090/configs")
+	for _np_k in mixed-port port; do
+		_np_r=$(printf '%s' "$_np_j" | jsonfilter -e "@[\"$_np_k\"]" 2>/dev/null)
+		case "$_np_r" in ''|0|*[!0-9]*) ;; *) printf '%s' "$_np_r"; return 0 ;; esac
+	done
+	# no HTTP port anywhere; the API answered at all?
+	[ -n "$(printf '%s' "$_np_j" | jsonfilter -e '@["mixed-port"]' 2>/dev/null)" ] || return 1
+	# never open a port the LAN could use as an open proxy
+	[ "$(printf '%s' "$_np_j" | jsonfilter -e '@["allow-lan"]' 2>/dev/null)" = false ] || return 1
+	_np_capi -X PATCH "http://127.0.0.1:9090/configs" -d '{"mixed-port":7895}' -o /dev/null || return 1
+	logger -t 5gmodem "net: direct path is blocked and clash has no HTTP port in its config - opened mixed-port 7895 (allow-lan is off: 127.0.0.1 only, until clash restarts)"
+	printf '7895'
 }
 
 # Ways around a blocked direct path, best first, one curl option set per line:
