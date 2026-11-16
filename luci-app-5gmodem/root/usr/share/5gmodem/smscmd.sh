@@ -102,12 +102,25 @@ _num10() {
 	printf '%s' "$_n"
 }
 
+# Two numbers are the same subscriber when their tails match: the national part is 10 digits in
+# some countries and 9 in others, and the sender may come with a country code or a trunk prefix
+# while the list holds the short form. The compared tail is the shorter number, 10 digits at
+# most; numbers under 7 digits (short codes) must match exactly.
+_num_same() {
+	[ -n "$1" ] && [ -n "$2" ] || return 1
+	_ns_n=${#1}
+	[ "${#2}" -lt "$_ns_n" ] && _ns_n=${#2}
+	[ "$_ns_n" -gt 10 ] && _ns_n=10
+	[ "$_ns_n" -ge 7 ] || { [ "$1" = "$2" ]; return; }
+	[ "$(printf '%s' "$1" | cut -c$(( ${#1} - _ns_n + 1 ))-)" = "$(printf '%s' "$2" | cut -c$(( ${#2} - _ns_n + 1 ))-)" ]
+}
+
 _allowed() {
 	[ "$CMD_WL" = "1" ] || return 0
-	_a=$(_num10 "$1")
+	_a=$(printf '%s' "$1" | tr -cd '0-9')
 	[ -n "$_a" ] || return 1
 	for _w in $(uci -q get "$CFG.sms.cmd_phone" 2>/dev/null); do
-		[ "$(_num10 "$_w")" = "$_a" ] && return 0
+		_num_same "$_a" "$(printf '%s' "$_w" | tr -cd '0-9')" && return 0
 	done
 	return 1
 }

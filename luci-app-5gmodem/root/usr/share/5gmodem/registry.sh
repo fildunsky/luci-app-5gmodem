@@ -53,6 +53,20 @@ EOF
 	done <<EOF
 $(_jq -e "@[@.path=\"$_r_p\"].tty[*]" -e "@[@.path=\"$_r_p\"].wdm[*]" -e "@[@.path=\"$_r_p\"].net[*]")
 EOF
+	# A PCIe modem without an AT port of its own: the same module usually shows its AT ports
+	# over USB too. "assoc_usb" names that USB path, its serial ports serve this modem.
+	if [ -z "$_r_tty" ] && [ -e "/sys/bus/pci/devices/${_r_p##*/}" ]; then
+		_r_au=$(uci5g_get "$_r_s" assoc_usb)
+		case "$_r_au" in
+			''|*[!0-9.-]*) ;;
+			*)
+				for _r_l in /sys/bus/usb/devices/"$_r_au":*/ttyUSB* /sys/bus/usb/devices/"$_r_au":*/tty/ttyUSB* \
+				            /sys/bus/usb/devices/"$_r_au":*/tty/ttyACM*; do
+					[ -e "$_r_l" ] || continue
+					[ -c "/dev/${_r_l##*/}" ] && _r_tty="$_r_tty/dev/${_r_l##*/} "
+				done ;;
+		esac
+	fi
 	_r_if=$(uci5g_get "$_r_s" network)
 	_r_proto=""
 	[ -n "$_r_if" ] && _r_proto=$(ucinet_get "$_r_if" proto)

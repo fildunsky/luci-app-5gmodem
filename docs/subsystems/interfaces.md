@@ -455,3 +455,39 @@ and automatic protocol registration/startup continue through the existing flow.
 
 Adapted from interface-preservation work in a fork; its persistent stopped
 state and recovery policy changes are not included.
+
+## PCIe modems on generic MHI
+
+A PCIe modem on the kernel's `mhi-pci-generic` driver has its control ports and its data netdev
+under different MHI channels, and one controller can offer two data paths:
+
+| Data driver / channel | Control port | Data netdev | Protocol here |
+| --- | --- | --- | --- |
+| `mhi_net` / `IP_HW0` | WWAN port of type QMI | `mhi_hwip*`, raw IP | `qmiraw` (`qmi` when that handler is absent) |
+| `mhi_wwan_mbim` / `IP_HW0_MBIM` | WWAN port of type MBIM | native WWAN link | `mbim` |
+
+`pci_data_netdev`, `pci_data_proto` and `pci_ctl_node` in `lib.sh` read this from sysfs:
+
+- the data netdev is the single one under the PCI device; `IP_SW0` (the software side channel)
+  is never a candidate, a QMI mux parent gives way to its child, and several independent
+  endpoints are not guessed;
+- the protocol follows the driver bound to that endpoint. An MBIM control port alone does not
+  mean an MBIM data channel exists, so the old rule (first control port, MBIM by default) picked
+  a port that could not carry the data call;
+- `mkiface.sh` then takes the control port of the same type for the interface.
+
+`qmiraw.sh` resolves the netdev the same way when its control device is a WWAN port (the stock
+`qmi` handler looks only under the control port and reports "The interface could not be found"),
+and needs no `raw_ip` attribute there.
+
+`listmodems.sh` classifies WWAN ports by their `type`: AT is a serial port, MBIM and QMI are
+control channels; diagnostic and flashing ports (QCDM, FIREHOSE, FASTBOOT) are neither. It also
+records the data netdev for the PCI node.
+
+A module without a PCIe AT port usually shows AT ports over USB as well. The modem section
+option `assoc_usb` (a USB path such as `2-1`, set with `uci set 5gmodem.<section>.assoc_usb=2-1`)
+gives those serial ports to the PCIe modem in `registry.sh`. There is no page control for it,
+and the USB device is still listed as a modem of its own; do not dial both.
+
+Vendor MHI drivers (`mhi_netdev`, `mhi_uci_q`) are not recognised by these helpers and keep the
+previous behaviour. None of this was run on hardware.

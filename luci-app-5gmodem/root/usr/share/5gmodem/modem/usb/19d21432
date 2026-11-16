@@ -50,6 +50,49 @@ case "$MODE_NUM" in
 			T=$(echo "$O" | awk -F[,:] '/^\+ZCAINFO/ {print $10}' | xargs)
 			[ -n "$T" ] && S1EARFCN="$T"
 		fi
+
+		# +ZCAINFO shows one secondary carrier at most. In QMI mode the modem's own control
+		# channel lists the primary and every activated secondary, so it replaces the AT answer.
+		_zq_wdm=""
+		_zq_path=$(tty_usbpath "$DEVICE" 2>/dev/null)
+		if [ -n "$_zq_path" ] && command -v uqmi >/dev/null 2>&1; then
+			for _zq_s in /sys/bus/usb/devices/"$_zq_path":*/usbmisc/cdc-wdm*; do
+				[ -e "$_zq_s" ] || continue
+				case "$(readlink -f "${_zq_s%/usbmisc/*}/driver" 2>/dev/null)" in
+					*/qmi_wwan) _zq_wdm="/dev/${_zq_s##*/}"; break ;;
+				esac
+			done
+		fi
+		_zq_ca=""
+		[ -n "$_zq_wdm" ] && _zq_ca=$(uqmi -s -d "$_zq_wdm" -t 3000 --get-lte-cphy-ca-info 2>/dev/null)
+		_zq_b=$(printf '%s\n' "$_zq_ca" | jsonfilter -e '@.primary.band' 2>/dev/null)
+		if [ -n "$_zq_b" ]; then
+			_zq_w=$(printf '%s\n' "$_zq_ca" | jsonfilter -e '@.primary.bandwidth' 2>/dev/null)
+			PBAND="$(band4g "$_zq_b" "")${_zq_w:+ @$_zq_w MHz}"
+			MODE="LTE $(band4g "$_zq_b")"
+			# uqmi calls the physical cell id "cell_id"
+			T=$(printf '%s\n' "$_zq_ca" | jsonfilter -e '@.primary.cell_id' 2>/dev/null)
+			[ -n "$T" ] && PCI="$T"
+			T=$(printf '%s\n' "$_zq_ca" | jsonfilter -e '@.primary.channel' 2>/dev/null)
+			[ -n "$T" ] && EARFCN="$T"
+			S1BAND="-"; S1PCI="-"; S1EARFCN="-"
+			_zq_mode=""; _zq_n=0
+			for _zq_i in 1 2 3 4; do
+				[ "$(printf '%s\n' "$_zq_ca" | jsonfilter -e "@.secondary_${_zq_i}.state" 2>/dev/null)" = activated ] || continue
+				_zq_b=$(printf '%s\n' "$_zq_ca" | jsonfilter -e "@.secondary_${_zq_i}.band" 2>/dev/null)
+				[ -n "$_zq_b" ] || continue
+				_zq_w=$(printf '%s\n' "$_zq_ca" | jsonfilter -e "@.secondary_${_zq_i}.bandwidth" 2>/dev/null)
+				_zq_p=$(printf '%s\n' "$_zq_ca" | jsonfilter -e "@.secondary_${_zq_i}.cell_id" 2>/dev/null)
+				_zq_c=$(printf '%s\n' "$_zq_ca" | jsonfilter -e "@.secondary_${_zq_i}.channel" 2>/dev/null)
+				# activated carriers fill S1, S2... without gaps
+				_zq_n=$((_zq_n + 1))
+				eval "S${_zq_n}BAND=\"\$(band4g \"\$_zq_b\" \"\")\${_zq_w:+ @\$_zq_w MHz}\""
+				[ -n "$_zq_p" ] && eval "S${_zq_n}PCI=\$_zq_p"
+				[ -n "$_zq_c" ] && eval "S${_zq_n}EARFCN=\$_zq_c"
+				_zq_mode="$_zq_mode / $(band4g "$_zq_b")"
+			done
+			[ -n "$_zq_mode" ] && MODE="${MODE/LTE/LTE_A}$_zq_mode"
+		fi
 		;;
 esac
 

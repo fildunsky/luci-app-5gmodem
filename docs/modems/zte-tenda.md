@@ -12,7 +12,7 @@ ZTE sticks and Mi-Fi devices (MF79 family, MF8xx, Tenda MF6) without AT ports ar
 | 19d2:* with the Tenda API (Tenda MF6) | Tenda Mi-Fi | `hilink.sh` `tenda_metrics_json` | `goform/getModules?modules=deviceInfo,connectStatus,batteryInfo,networkConfig` |
 | 19d2:1485 | MF286D, MF289F | `modem/usb/19d21485` | `at+zrssi;+zcellinfo?;+zcainfo?`, `ati`, `AT+GMR` |
 | 19d2:1489 | MF286R (ASR) | `modem/usb/19d21489` | `at+zrssi;+zcellinfo?;+zcainfo?`, `AT*MRD_IMEI?`, `AT*ICCID?` |
-| 19d2:1432 | MF286, MF286A | `modem/usb/19d21432` | `at+zrssi;+zcellinfo?;+zcainfo?` |
+| 19d2:1432 | MF286, MF286A, MF287+ | `modem/usb/19d21432` | `at+zrssi;+zcellinfo?;+zcainfo?`; in QMI mode the carriers come from `uqmi --get-lte-cphy-ca-info` (`+ZCAINFO` shows one secondary at most) |
 | 19d2:1275 | P685M, ZM8630A | `modem/usb/19d21275` | `at+zrssi;+zcellinfo?;+zcainfo?` |
 | 19d2:0189 | MF28D, MF290 | `modem/usb/19d20189` | `at+zrssi?;+zcellinfo?` |
 | 19d2:0167 | MF821 | `modem/usb/19d20167` (sources `15081001`) | `at+zcellinfo?` |

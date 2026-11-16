@@ -448,6 +448,19 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 	fi
 fi
 
+# PCIe on generic MHI: protocol by the bound data endpoint, control port of the same type
+MKI_PCI_PROTO=""
+if [ -n "$AMP" ] && [ -e "/sys/bus/pci/devices/${AMP##*/}" ]; then
+	MKI_PCI_PROTO=$(pci_data_proto "$AMP")
+	if [ -n "$MKI_PCI_PROTO" ]; then
+		_mki_pn=$(pci_ctl_node "$AMP" "$MKI_PCI_PROTO")
+		if [ -n "$_mki_pn" ] && [ "$_mki_pn" != "$WANTWDM" ]; then
+			logger -t 5gmodem-mkiface "PCIe $AMP: data endpoint $(pci_data_netdev "$AMP") is $MKI_PCI_PROTO - control port $_mki_pn (was ${WANTWDM:-none})"
+			WANTWDM="$_mki_pn"
+		fi
+	fi
+fi
+
 DEV=""; DRV=""
 if [ -n "$WANTWDM" ] && [ -c "$WANTWDM" ]; then
 	DEV="$WANTWDM"
@@ -479,6 +492,15 @@ case "$REQ" in
 			cdc_mbim) PROTO="mbim" ;;
 			qmi_wwan|qmi_wwan_[qfs]) PROTO="qmi" ;;
 			*)        PROTO="mbim" ;;
+		esac
+		case "$MKI_PCI_PROTO" in
+			mbim) PROTO="mbim" ;;
+			qmi)
+				# mhi_net is raw IP without an address by DHCP: the stock qmi handler cannot
+				# even find its netdev, qmiraw takes the address from QMI
+				PROTO="qmi"
+				[ -f /lib/netifd/proto/qmiraw.sh ] && PROTO="qmiraw"
+				logger -t 5gmodem "mkiface: PCIe $AMP - QMI over generic MHI: proto=$PROTO" ;;
 		esac
 		_mki_vp=""
 		[ -n "$AMP" ] && [ -f "/sys/bus/usb/devices/$AMP/idVendor" ] && \

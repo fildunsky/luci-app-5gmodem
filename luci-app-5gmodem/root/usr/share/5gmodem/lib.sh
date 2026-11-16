@@ -98,6 +98,69 @@ usb_path_present() {
 	[ -e "/sys/bus/usb/devices/$1" ] || [ -e "/sys/bus/pci/devices/${1##*/}" ] || soc_modem_node "$1" >/dev/null
 }
 
+# PCIe modems on the kernel's generic MHI driver. One controller can carry two data paths:
+# mhi_net (channel IP_HW0, raw IP, driven over QMI) or mhi_wwan_mbim (IP_HW0_MBIM, driven over
+# MBIM). The protocol follows the data endpoint that is really bound, not the order of the control
+# ports: an MBIM control port alone does not mean there is an MBIM data channel.
+# See docs/subsystems/interfaces.md#pcie-modems-on-generic-mhi.
+_pci_root() {
+	[ -n "$1" ] || return 1
+	_pr=$(readlink -f "${PCI_SYSFS:-/sys}/bus/pci/devices/${1##*/}" 2>/dev/null)
+	[ -n "$_pr" ] && [ -d "$_pr" ] && printf '%s' "$_pr"
+}
+
+# pci_data_netdev <pci address>: the single data netdev of the modem. IP_SW0 is the software
+# side channel next to IP_HW0 and never carries the data call; a QMI mux parent is skipped in
+# favour of its child. Several independent endpoints are ambiguous: nothing is printed.
+pci_data_netdev() {
+	_pdn_r=$(_pci_root "$1") || return 1
+	_pdn_l=$(find "$_pdn_r" -name net -type d 2>/dev/null | while IFS= read -r _pdn_d; do
+		for _pdn_e in "$_pdn_d"/*; do
+			[ -e "$_pdn_e" ] || continue
+			[ -d "$_pdn_e/net" ] && continue
+			case "$_pdn_e" in */mhi*_IP_SW*/net/*) continue ;; esac
+			printf '%s\n' "${_pdn_e##*/}"
+		done
+	done | sort -u)
+	[ -n "$_pdn_l" ] || return 1
+	[ "$(printf '%s\n' "$_pdn_l" | grep -c .)" = 1 ] || return 1
+	case "$_pdn_l" in *[!A-Za-z0-9_.:-]*) return 1 ;; esac
+	printf '%s' "$_pdn_l"
+}
+
+# pci_data_proto <pci address>: "qmi" or "mbim" by the bound data endpoint, empty when unknown
+pci_data_proto() {
+	_pdp_r=$(_pci_root "$1") || return 1
+	_pdp_n=$(pci_data_netdev "$1")
+	if [ -n "$_pdp_n" ]; then
+		case "$(basename "$(readlink -f "${PCI_SYSFS:-/sys}/class/net/$_pdp_n/device/driver" 2>/dev/null)" 2>/dev/null)" in
+			mhi_net) echo qmi; return 0 ;;
+			mhi_wwan_mbim) echo mbim; return 0 ;;
+		esac
+	fi
+	# a native WWAN link may hang off the controller, not off its channel
+	for _pdp_c in "$_pdp_r"/mhi*/mhi*_IP_HW0_MBIM; do
+		[ -e "$_pdp_c" ] || continue
+		[ "$(basename "$(readlink -f "$_pdp_c/driver" 2>/dev/null)" 2>/dev/null)" = mhi_wwan_mbim ] && { echo mbim; return 0; }
+	done
+	return 1
+}
+
+# pci_ctl_node <pci address> <qmi|mbim|at>: the control port of that type under the same device
+pci_ctl_node() {
+	_pcn_r=$(_pci_root "$1") || return 1
+	for _pcn_p in "${PCI_SYSFS:-/sys}"/class/wwan/*; do
+		[ -e "$_pcn_p/device" ] || continue
+		case "$(readlink -f "$_pcn_p/device" 2>/dev/null)/" in "$_pcn_r"/*) ;; *) continue ;; esac
+		_pcn_t=$(cat "$_pcn_p/type" 2>/dev/null | tr 'A-Z' 'a-z')
+		[ -n "$_pcn_t" ] || case "${_pcn_p##*/}" in
+			*mbim*) _pcn_t=mbim ;; *qmi*) _pcn_t=qmi ;; *at*) _pcn_t=at ;;
+		esac
+		[ "$_pcn_t" = "$2" ] && { printf '/dev/%s' "${_pcn_p##*/}"; return 0; }
+	done
+	return 1
+}
+
 mtk_soc_modem() {
 	[ -d /sys/kernel/ccci ] || return 1
 	[ -S /dev/socket/rild-atci ] || { [ ! -d /dev/socket ] && [ -c /dev/ttyC0 ]; }

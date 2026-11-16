@@ -693,6 +693,12 @@ heal() {
 		[ "$H_HEAL" = "1" ] || continue
 		_h_auto=$(printf '%s' "$_HDUMP" | jsonfilter \
 			-e "@.interface[@.interface=\"$_h_if\"].autostart" 2>/dev/null)
+		if [ -z "$_h_auto" ]; then
+			# not in the netifd dump at all (a disabled interface is not listed): the user
+			# switched it off, healing must not bring it back
+			[ "$(uci -q get "network.$_h_if.auto")" = "0" ] && continue
+			[ "$(uci -q get "network.$_h_if.disabled")" = "1" ] && continue
+		fi
 		if [ "$_h_auto" = "false" ]; then
 			[ "$(uci -q get "network.$_h_if.auto")" = "0" ] && continue
 			[ "$(uci -q get "network.$_h_if.disabled")" = "1" ] && continue

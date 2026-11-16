@@ -101,11 +101,25 @@ for _wpt in /sys/class/wwan/*; do
 		NCNT=$((NCNT + 1)); idx=$NCNT
 		NODES="$NODES $_wpci"
 	fi
-	case "${_wpt##*/}" in
-		*at*) PORTREC="${PORTREC}${idx} tty ${_wnode}${NL}" ;;
-		*)    PORTREC="${PORTREC}${idx} wdm ${_wnode}${NL}" ;;
+	# by the port type: AT is a tty, MBIM/QMI are control channels; diagnostic and flashing
+	# ports (QCDM, FIREHOSE, FASTBOOT, XMMRPC...) are neither and used to be taken as one
+	_wtype=$(cat "$_wpt/type" 2>/dev/null | tr 'a-z' 'A-Z')
+	case "$_wtype:${_wpt##*/}" in
+		AT:*|:*at*)            PORTREC="${PORTREC}${idx} tty ${_wnode}${NL}" ;;
+		MBIM:*|QMI:*|:*)       PORTREC="${PORTREC}${idx} wdm ${_wnode}${NL}" ;;
 	esac
 done
+
+# PCIe modems: the data netdev sits under another MHI channel than the control ports
+if command -v pci_data_netdev >/dev/null 2>&1; then
+	_pi=0
+	for _pnode in $NODES; do
+		_pi=$((_pi + 1))
+		[ -e "/sys/bus/pci/devices/${_pnode##*/}" ] || continue
+		_pnet=$(pci_data_netdev "${_pnode##*/}")
+		[ -n "$_pnet" ] && PORTREC="${PORTREC}${_pi} net ${_pnet}${NL}"
+	done
+fi
 
 if [ -e /dev/ttyMTK0 ] && command -v soc_modem_node >/dev/null 2>&1 && soc_modem_node ccci >/dev/null; then
 	NCNT=$((NCNT + 1))

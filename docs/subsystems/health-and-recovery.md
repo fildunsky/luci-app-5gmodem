@@ -361,3 +361,9 @@ A HiLink modem has no AT channel, so it is rebooted through its own API. Without
 - Targets are sanitized to `[A-Za-z0-9.:-]`, because they go to a shell verb as one argument.
 - The `once` call after save is wrapped in `L.resolveDefault`. The round is blocking and longer than the 20 s XHR limit with three uplinks, and an unhandled reject showed an error over the page (Sep 2026 audit).
 - Autosave debounces 500 ms (checkbox + select = one backend call) and listens to `change`, `widget-change` (luci-base widgets) and `cbi-dynlist-change` (DynamicList).
+
+## Interfaces the user switched off
+
+Healing skips an interface with `auto=0` or `disabled=1`. This holds both when netifd reports
+`autostart: false` and when the interface is missing from the netifd dump altogether (a disabled
+interface is not listed there).

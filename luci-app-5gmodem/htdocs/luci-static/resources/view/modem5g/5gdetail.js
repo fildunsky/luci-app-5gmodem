@@ -260,7 +260,7 @@ function switchSimSlot(id, label, type, ev) {
 		var notification = E('p', ok ? _('SIM slot switched: %s').format(label) : _('SIM slot switch failed'));
 		if (ui.addTimeLimitedNotification) { ui.addTimeLimitedNotification(null, notification, 6000, ok ? 'info' : 'error'); }
 		else { ui.addNotification(null, notification, ok ? 'info' : 'error'); }
-		if (ok) { pollSlotUntilSwitched(id, [ 3000, 8000, 15000, 25000, 40001, 60000, 90000 ]); }
+		if (ok) { pollSlotUntilSwitched(id, [ 3000, 8000, 15000, 25000, 40002, 60000, 90000 ]); }
 	}).catch(function() { if (type === 'android') { clearModemBusy(true); } else { ui.hideModal(); } });
 }
 
@@ -2945,7 +2945,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40001, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40002, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

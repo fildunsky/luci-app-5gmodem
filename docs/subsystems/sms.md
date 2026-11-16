@@ -263,3 +263,11 @@ The ordinary read-lock timeout fallback above is intentional and preserved: a fa
 ## HiLink SMS with debug AT ports
 
 `hl_sms_web` in `lib.sh` decides SMS transport independently of `hl_web_metrics`. Huawei modems registered as `kind=hilink` keep the HTTP inbox, sent folder, counts, send and delete operations when debug composition exposes an AT metrics port. Their CPMS setup is also skipped: HTTP SMS storage is managed by the modem's API. Other serial-capable vendors retain their AT default unless an existing special web profile or an explicit HiLink/IP SMS port selects HTTP. Port defaults are loaded before the transport decision, and `smsopt` accepts valid IPv4/HiLink selections only for an active HiLink modem. Changing the selected SMS transport does not require a reboot or clearing the metrics AT port.
+
+## Allowed senders of SMS commands
+
+`smscmd.sh` compares the sender with the `cmd_phone` list by the tail of the number
+(`_num_same`): the compared length is the shorter of the two numbers, 10 digits at most. So a
+number stored without the country code or with a trunk prefix matches the international form in
+countries with 10-digit and with 9-digit national numbers alike. Numbers under 7 digits (short
+codes) must match exactly.
