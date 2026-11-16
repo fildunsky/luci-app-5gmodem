@@ -7465,3 +7465,9 @@ msgstr "Peta pada tab GPS: pilih gaya siap pakai atau ketik templat alamat https
 
 msgid "Could not save the settings."
 msgstr "Tidak dapat menyimpan pengaturan."
+
+msgid "Bridge mode (IP pass-through)"
+msgstr "Mode jembatan (IP pass-through)"
+
+msgid "The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes."
+msgstr "Modem memberikan alamat operator kepada router, bukan alamat privatnya sendiri, sehingga tidak ada NAT ganda. Pengaturan disimpan di modem; koneksi dibuat ulang saat pengaturan diubah."

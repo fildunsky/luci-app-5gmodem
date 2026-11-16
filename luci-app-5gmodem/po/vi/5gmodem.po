@@ -7465,3 +7465,9 @@ msgstr "Bản đồ trên tab GPS: chọn một kiểu có sẵn hoặc nhập m
 
 msgid "Could not save the settings."
 msgstr "Không thể lưu cài đặt."
+
+msgid "Bridge mode (IP pass-through)"
+msgstr "Chế độ cầu nối (IP pass-through)"
+
+msgid "The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes."
+msgstr "Modem cấp cho router địa chỉ của nhà mạng thay vì địa chỉ riêng của nó, nên không có NAT kép. Cài đặt được lưu trong modem; kết nối được thiết lập lại khi thay đổi."

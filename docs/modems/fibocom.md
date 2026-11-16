@@ -15,7 +15,7 @@ See also `docs/FM350-reference.md` for the FM350 AT command reference.
 | 2cb7:000b | L850/L860 in `AT+GTUSBMODE=11`: 3x CDC-ACM + 3x CDC-NCM under the Fibocom VID | `2cb7000b` (sources `8087095a`) | proto `fibocom` (XMM branch) | same as 8087:095a |
 | 2cb7:0007 | L850-GL MBIM composition | `2cb70007` | MBIM | `at+xlec?;+rsrp?;+rsrq?;+xmci=1`, `AT+XCCINFO`, `at@errc:...` |
 | 2cb7:0104 | FM150-AE / FG150 / NL952 | `2cb70104` | QMI/MBIM | `at+gtccinfo?;+gtcainfo?`, `AT+MTSM=1` |
-| 2cb7:0a04-0a07 | FG621-EA / FM650 | `2cb70a05` | QMI/MBIM/ECM | `AT+GTCCINFO?;+GTCAINFO?`, `AT+MTSM=1` |
+| 2cb7:0a04-0a07 | FG621-EA / FM650 / FG652 (Unisoc) | `2cb70a05` | proto `fibocom` (GTRNDIS branch) in ECM/NCM/RNDIS | `AT+GTCCINFO?;+GTCAINFO?`, `AT+MTSM=1` |
 | 2cb7:0110 | NL668-EAU (MBIM) | `2cb70110` (sources `15081001`) | MBIM | `AT+GTCCINFO?` |
 
 The 2cb7:0104 and 2cb7:0a05 profiles pick the network-card protocol from the driver of this modem's own interfaces only. An empty `BASE` (port gone mid-poll) used to `grep ""` every interface of the router, and a path prefix without a trailing `/` (`1-1`) also matched the neighbour on `1-1.2`.
@@ -105,6 +105,36 @@ Issue #68 had two fibocom parents using `eth4`: a parked interface for the previ
 
 - It does not deactivate the PDP context. Releasing it on every reconfigure broke the session on each priority switch, and the bearer costs nothing while the interface is down. A real disconnect happens on USB re-enumeration or through modem controls.
 - It does not call `proto_init_update "*" 0` + `proto_send_update` as `qmi.sh`/`mbim.sh` do. netifd calls teardown after it has already moved to `S_TEARDOWN`, and `proto_ext_update_link` (netifd `proto-ext.c`) then returns `UBUS_STATUS_PERMISSION_DENIED`. That logged `Command failed: ubus call network.interface notify_proto ... (Permission denied)` on every drop. `proto_notify_error` uses another handler and still gets through.
+
+## Unisoc modules: GTRNDIS
+
+The Unisoc-based modules (2cb7:0a04-0a07) in ECM, NCM or RNDIS mode expose a network card and
+AT ports, no cdc-wdm. The module is a small router of its own: the operator address from
+`+CGPADDR` lives inside it, and the host gets an address from the module's DHCP server. Putting
+the operator address on the netdev (what the handler does for FM350 and XMM) gives an interface
+that has an address and passes no traffic: packets leave, nothing comes back.
+
+For this family `proto_fibocom_setup` therefore:
+
+- sets context 1 (`AT+CGDCONT=1`), then `AT+GTRNDIS=0,1` and `AT+GTRNDIS=1,1`, and waits until
+  `AT+GTRNDIS?` reports state 1; a live call with the same APN is reused;
+- starts `udhcpc` on the netdev as the interface's own process with the stock
+  `/lib/netifd/dhcp.script`: it reports the address, gateway and DNS to netifd, renews the lease
+  and takes a new address when the module hands one out;
+- with a dual-stack or IPv6 context (PDP type of context 1 contains `V6`) adds the same
+  `<iface>_6` dhcpv6 child interface as for the other modems of this protocol; whether the module
+  announces a prefix on the netdev depends on its firmware;
+- does not start the address watcher (`fiboipwatch.sh`), and `sessionwatch.sh` checks
+  `AT+GTRNDIS?` instead of comparing `+CGPADDR` with the interface address.
+
+Bridge mode: the interface option `ippass` (`0`/`1`, the "Bridge mode (IP pass-through)" switch
+on the Modem tab, `setopt.sh ippass <path> 0|1`) is written to the module with `AT+GTIPPASS`
+before the data call, and only when the module reports another value. With it the module's DHCP
+server hands out the operator address. The setting is persistent in the module; without the
+option the handler never touches it.
+
+The sequence follows the vendor AT manual (`+GTRNDIS`, `+GTIPPASS`) and a stock router script for
+this family. Not verified on hardware here.
 
 ## FM350-GL (0e8d:7127) metrics profile
 

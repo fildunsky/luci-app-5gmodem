@@ -242,7 +242,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40000, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40001, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1323,7 +1323,32 @@ return view.extend({
 			return (sc && uci.get('5gmodem', sc, 'network'))
 			       || uci.get('5gmodem', '@5gmodem[0]', 'network') || '';
 		})();
-		if (ipwIf && roamProto === 'fibocom') {
+		// Unisoc-based Fibocom modules: the module routes by itself, so the address watcher does not
+		// apply; instead they can hand the operator address straight to the router (bridge)
+		var uniMod = /^2cb7:0a0[4-7]$/.test(activeVp);
+		if (ipwIf && roamProto === 'fibocom' && uniMod) {
+		o = s.taboption('net', form.Flag, '_ippass', _('Bridge mode (IP pass-through)'),
+			_('The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes.'));
+		o.default = '0';
+		o.rmempty = false;
+		o.load = function() {
+			return uci.get('network', ipwIf, 'ippass') === '1' ? '1' : '0';
+		};
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
+			var v = (value === '1') ? '1' : '0';
+			var cur = uci.get('network', ipwIf, 'ippass');
+			// never ticked and still off: leave the modem's own setting alone
+			if (cur === v || (cur == null && v === '0')) { return; }
+			uci.set('network', ipwIf, 'ippass', v);
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'ippass', String(p), v ]).catch(function() {});
+		};
+		o.remove = function() {};
+		}
+
+		if (ipwIf && roamProto === 'fibocom' && !uniMod) {
 		o = s.taboption('net', form.Flag, '_ipwatch', _('Follow network address changes'),
 			_('Checks the data session every few seconds. When the operator drops the session or assigns a new address (for example, a forced reconnect every few hours), the interface reconnects and takes the new address.'));
 		o.default = '0';
@@ -1784,7 +1809,7 @@ return view.extend({
 				E('pre', { 'id': 'preout', 'class': 'tg-code-body' }, [])
 			])
 		], !(window.matchMedia && window.matchMedia(PHONE_MQ).matches));
-		var _instant = { '_web_pass': 1, '_roaming': 1, '_ipwatch': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
+		var _instant = { '_web_pass': 1, '_roaming': 1, '_ipwatch': 1, '_ippass': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
 		var _instLast = {};
 		(s.children || []).forEach(function(o) {
 			if (!o || !_instant[o.option]) { return; }

@@ -164,7 +164,21 @@ profiles)
 apply-profile)
 	ssc_present "$2" || { echo '{"error":"not_installed"}'; exit 1; }
 	ssc_valid_name "$2" "$3" || { echo '{"error":"invalid_profile"}'; exit 1; }
-	mkdir /tmp/5gmodem-profile-lock 2>/dev/null || { echo '{"error":"busy"}'; exit 1; }
+	# a killed job leaves the lock behind: take it over when its owner is gone
+	if ! mkdir /tmp/5gmodem-profile-lock 2>/dev/null; then
+		LOCKPID=$(cat /tmp/5gmodem-profile-lock/pid 2>/dev/null)
+		case "$LOCKPID" in
+			''|*[!0-9]*)
+				# no owner recorded yet: stale only when the lock is at least two minutes old
+				[ -n "$(find /tmp/5gmodem-profile-lock -maxdepth 0 -mmin +1 2>/dev/null)" ] \
+					|| { echo '{"error":"busy"}'; exit 1; } ;;
+			*)
+				! grep -q _profile-job "/proc/$LOCKPID/cmdline" 2>/dev/null \
+					|| { echo '{"error":"busy"}'; exit 1; } ;;
+		esac
+		rm -rf /tmp/5gmodem-profile-lock
+		mkdir /tmp/5gmodem-profile-lock 2>/dev/null || { echo '{"error":"busy"}'; exit 1; }
+	fi
 	rm -f /tmp/5gmodem-profile-result.json
 	if command -v setsid >/dev/null 2>&1; then
 		setsid /bin/sh "$0" _profile-job "$2" "$3" >/dev/null 2>&1 </dev/null &
@@ -175,7 +189,8 @@ apply-profile)
 	sleep 1
 	;;
 _profile-job)
-	trap 'rmdir /tmp/5gmodem-profile-lock 2>/dev/null' EXIT
+	trap 'rm -rf /tmp/5gmodem-profile-lock' EXIT
+	echo $$ > /tmp/5gmodem-profile-lock/pid 2>/dev/null
 	trap 'exit 1' HUP INT TERM
 	RESULT=$("$0" _apply-profile "$2" "$3")
 	[ -n "$RESULT" ] || RESULT='{"error":"apply_failed"}'

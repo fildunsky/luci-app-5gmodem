@@ -2415,6 +2415,16 @@ if [ -z "$PHONE" ] && command -v mmcli >/dev/null 2>&1; then
 fi
 
 [ -n "$(echo $MODEL)" ] || MODEL=""
+# A late answer to somebody else's command (an SMS storage query, say) read as the model name:
+# such a line must not reach the page, the name comes from the modem record instead.
+case "$MODEL" in
+	AT[+^\$]*|at[+^\$]*|*' AT+'*|+[A-Z][A-Z]*:*|*' +'[A-Z][A-Z]*:*)
+		[ -f /tmp/5gmodem/model_echo.logged ] || {
+			logger -t 5gmodem "model \"$MODEL\" looks like an AT echo - ignored"
+			: > /tmp/5gmodem/model_echo.logged 2>/dev/null
+		}
+		MODEL="" ;;
+esac
 if [ -z "$MODEL" ] && [ -n "$_POLL_AM" ]; then
 	[ -n "$_own_rec" ] || _own_rec=$("$RES/listmodems.sh" 2>/dev/null)
 	MODEL=$(printf '%s' "$_own_rec" \

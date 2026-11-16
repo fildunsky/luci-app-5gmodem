@@ -42,6 +42,20 @@ data_set() {
 _mm_idx() {
 	command -v mmcli >/dev/null 2>&1 || return 1
 	_mx_l=$(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$')
+	# the modem shown on the page first: with two modems "the only one under ModemManager"
+	# may be the other one
+	_mx_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	if [ -n "$_mx_p" ]; then
+		for _mx_m in $_mx_l; do
+			_mx_k=$(mmcli -m "$_mx_m" -K 2>/dev/null)
+			for _mx_d in $(printf '%s\n' "$_mx_k" | sed -n -e 's/^modem\.generic\.device *: *//p' -e 's/^modem\.generic\.physdev *: *//p'); do
+				case "$_mx_d" in */"$_mx_p") printf '%s' "$_mx_m"; return 0 ;; esac
+			done
+		done
+		# not found by path: the single modem counts only when the page modem runs under ModemManager
+		_mx_i=$(_iface) || return 1
+		proto_in mm "$(uci -q get "network.$_mx_i.proto")" || return 1
+	fi
 	[ "$(printf '%s\n' "$_mx_l" | grep -c .)" = 1 ] || return 1
 	printf '%s' "$_mx_l"
 }

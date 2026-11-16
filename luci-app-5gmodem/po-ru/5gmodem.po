@@ -7750,3 +7750,9 @@ msgstr "Карта на вкладке GPS: выберите готовый ст
 
 msgid "Could not save the settings."
 msgstr "Не удалось сохранить настройки."
+
+msgid "Bridge mode (IP pass-through)"
+msgstr "Режим моста (IP pass-through)"
+
+msgid "The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes."
+msgstr "Модем отдаёт роутеру адрес оператора вместо своего частного, двойного NAT нет. Настройка хранится в модеме; при изменении соединение устанавливается заново."

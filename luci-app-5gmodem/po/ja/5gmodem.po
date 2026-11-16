@@ -7465,3 +7465,9 @@ msgstr "GPSタブに表示する地図：用意されたスタイルを選ぶか
 
 msgid "Could not save the settings."
 msgstr "設定を保存できませんでした。"
+
+msgid "Bridge mode (IP pass-through)"
+msgstr "ブリッジモード (IP パススルー)"
+
+msgid "The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes."
+msgstr "モデムは自身のプライベートアドレスではなく、通信事業者のアドレスをルーターに渡すため、二重 NAT になりません。設定はモデムに保存され、変更すると接続し直します。"

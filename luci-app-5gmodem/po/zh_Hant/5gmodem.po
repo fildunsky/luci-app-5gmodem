@@ -7465,3 +7465,9 @@ msgstr "GPS 分頁上的地圖：選擇現成樣式，或輸入自有圖磚伺�
 
 msgid "Could not save the settings."
 msgstr "無法儲存設定。"
+
+msgid "Bridge mode (IP pass-through)"
+msgstr "橋接模式（IP 直通）"
+
+msgid "The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes."
+msgstr "數據機把電信業者分配的位址直接交給路由器，而不是它自己的私有位址，因此沒有雙重 NAT。此設定儲存在數據機中；變更後會重新建立連線。"

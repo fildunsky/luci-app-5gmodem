@@ -725,7 +725,9 @@ _send_one() {
 		logger -t 5gmodem "smsbridge: MM send failed within ${_so_tmm}s, trying the AT port"
 		if "$RES/smspdu.sh" needucs2 "$_so_txt"; then
 			_send_pdu "$_so_port" "$_so_to" "$_so_txt" 2>/dev/null
-			return $?
+			_so_pdurc=$?
+			[ "$_so_pdurc" = 5 ] && [ "$4" != slow ] && _so_pdurc=1
+			return "$_so_pdurc"
 		fi
 		_sms_run "$_so_tat" $(_smstool_at) -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null
 		return $?
@@ -735,6 +737,11 @@ _send_one() {
 	[ "$_so_pdurc" = 0 ] && return 0
 	# part of a long message is already out: no second attempt with the whole text
 	[ "$_so_pdurc" = 4 ] && return 4
+	# busy port: the queue waits for the next run instead of spending an attempt
+	if [ "$_so_pdurc" = 5 ]; then
+		[ "$4" = slow ] && return 5
+		_so_pdurc=1
+	fi
 	_sms_tdtech "$_so_port" && return "$_so_pdurc"
 	if ! "$RES/smspdu.sh" needucs2 "$_so_txt"; then
 		_sms_run "$_so_tat" $(_smstool_at) -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null
@@ -825,6 +832,11 @@ _q_send_one() {
 	fi
 
 	_qs_now=$(date +%s 2>/dev/null); case "$_qs_now" in ''|*[!0-9]*) _qs_now=0 ;; esac
+	# queued before the clock was set: the age would look like decades after the time sync
+	if [ "$_qs_born" -gt 0 ] && [ "$_qs_born" -lt 1700000000 ] && [ "$_qs_now" -gt 1700000000 ]; then
+		_qs_born=$_qs_now
+		sed -i "s/^born=.*/born=$_qs_now/" "$_qs_f" 2>/dev/null
+	fi
 	if [ "$_qs_tries" -ge "$SMSQ_MAX_TRIES" ] \
 	   || { [ "$_qs_born" -gt 0 ] && [ "$_qs_now" -gt 0 ] && [ $((_qs_now - _qs_born)) -gt "$SMSQ_MAX_AGE" ]; }; then
 		logger -t 5gmodem "smsbridge: message for \"$_qs_to\" never went out after $_qs_tries attempts - dropping it from the queue"
@@ -843,6 +855,7 @@ _q_send_one() {
 		logger -t 5gmodem "smsbridge: queued SMS result is unknown; automatic retries stopped, saved as ${_qs_f%.sms}.unknown"
 		return 4
 	fi
+	[ "$_qs_rc" = 5 ] && return 3
 
 	if [ "$_qs_rc" != 0 ] && [ "$(uci -q get "$CFG.sms.send_inhibit_mm")" = "1" ] \
 	   && _port_is_mm "$_qs_port" && command -v mmcli >/dev/null 2>&1; then
@@ -883,7 +896,8 @@ _send_pdu() {
 		logger -t 5gmodem "smsbridge: $_sp_port is under ModemManager - PDU path skipped"
 		return 3
 	fi
-	at_lock "$_sp_port" 15 || return 1
+	# 5: the port is busy, nothing was sent
+	at_lock "$_sp_port" 15 || return 5
 	_sp_cmd="${SMS_PDU_CMD:-CMGS}"
 	_sp_parts=$("$RES/smspdu.sh" encode "$2" "$3" 2>/dev/null)
 	[ -n "$_sp_parts" ] || { echo "pdu encode failed" >&2; return 1; }
@@ -2022,6 +2036,7 @@ case "$BOX" in
 			case "$?" in
 				0) break ;;
 				2) continue ;;   # dropped (corrupt, too old, out of tries): not an attempt
+				3) break ;;      # the port is busy: not an attempt either, next run
 			esac
 			_qr_bad=$((_qr_bad + 1))
 			[ "$_qr_bad" -ge 2 ] && break

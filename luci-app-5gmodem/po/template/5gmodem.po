@@ -1879,3 +1879,9 @@ msgstr ""
 
 msgid "Could not save the settings."
 msgstr ""
+
+msgid "Bridge mode (IP pass-through)"
+msgstr ""
+
+msgid "The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes."
+msgstr ""

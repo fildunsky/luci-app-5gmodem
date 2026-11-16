@@ -257,6 +257,17 @@ check_one() {
 
 	[ -n "$_port" ] && [ -c "$_port" ] || return 0
 
+	# Unisoc-based Fibocom in ECM/NCM/RNDIS: the interface holds the module's own DHCP address, so
+	# it never equals +CGPADDR. The data call state is in AT+GTRNDIS? instead.
+	case "$(cat "/sys/bus/usb/devices/$_path/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_path/idProduct" 2>/dev/null)" in
+		2cb7:0a04|2cb7:0a05|2cb7:0a06|2cb7:0a07)
+			command -v at_lock >/dev/null 2>&1 && { at_lock "$_port" 10 || return 0; }
+			_gs=$(at_query "$_port" "AT+GTRNDIS?" 8 | tr -d '\r' | sed -n 's/.*+GTRNDIS: *\([0-9]\).*/\1/p' | head -1)
+			command -v at_unlock >/dev/null 2>&1 && at_unlock 2>/dev/null
+			[ "$_gs" = 0 ] && _revive "$_if" "data call went down (GTRNDIS 0)"
+			return 0 ;;
+	esac
+
 	command -v at_lock >/dev/null 2>&1 && { at_lock "$_port" 10 || return 0; }
 	_mip=$(_modem_ip "$_port")
 	_act=0; _ctx_active "$_port" && _act=1

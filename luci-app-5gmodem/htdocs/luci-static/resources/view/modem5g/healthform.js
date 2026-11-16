@@ -8,7 +8,7 @@ var NBIN = '/usr/share/5gmodem/netpri.sh';
 var PBIN = '/usr/share/5gmodem/stapark.sh';
 
 return baseclass.extend({
-	API: 40000,
+	API: 40001,
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(fs.exec_direct(HBIN, [ 'getconf' ]), '{}'),
@@ -182,7 +182,13 @@ return baseclass.extend({
 				'ok_n=' + n(wOk, 5),
 				'manual=' + (wMan ? L.toArray(wMan.getValue()).join(' ') : String(c.manual || '')),
 				'power_script=' + (/^\/[A-Za-z0-9\/._-]+$/.test((wPs.getValue() || '').trim()) ? (wPs.getValue() || '').trim() : '')
-			]).then(function() {
+			]).then(function(res) {
+				// setconf refuses a bad value with a non-zero code: nothing was stored
+				if (res && res.code) {
+					var why = '';
+					try { why = JSON.parse(res.stdout || '{}').error || ''; } catch (e) {}
+					throw new Error(_('Could not save the settings.') + (why ? ' (' + why + ')' : ''));
+				}
 				return Promise.all(healSel.map(function(h) {
 					return fs.exec(HBIN, [ 'setheal', h.iface, h.w.getValue() ]);
 				}));

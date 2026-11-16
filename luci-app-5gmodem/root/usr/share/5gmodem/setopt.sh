@@ -35,6 +35,19 @@ ipwatch)
 	ubus call network reload >/dev/null 2>&1
 	ifup "$_ifn" >/dev/null 2>&1
 	;;
+ippass)
+	# bridge (IP pass-through) of Unisoc-based Fibocom modules; applied by the proto on redial
+	[ -n "$2" ] || exit 1
+	_sec=$(_sec_for_path "$2")
+	_ifn=$(uci -q get "5gmodem.$_sec.network")
+	[ -n "$_ifn" ] || _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
+	[ -n "$_ifn" ] || exit 1
+	note_foreign_uci network "setopt ippass"
+	uci -q set "network.$_ifn.ippass=$(_norm01 "$3")"
+	uci -q commit network
+	ubus call network reload >/dev/null 2>&1
+	ifup "$_ifn" >/dev/null 2>&1
+	;;
 atdebug)
 	[ -n "$2" ] || exit 1
 	_sec=$(_sec_for_path "$2")
