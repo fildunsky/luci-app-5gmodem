@@ -7756,3 +7756,21 @@ msgstr "Режим моста (IP pass-through)"
 
 msgid "The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes."
 msgstr "Модем отдаёт роутеру адрес оператора вместо своего частного, двойного NAT нет. Настройка хранится в модеме; при изменении соединение устанавливается заново."
+
+msgid "Any cell from the Neighbour cells table can be locked with the lock button in its row."
+msgstr "Закрепиться можно за любой сотой из таблицы «Соседние соты»: кнопка с замком в её строке."
+
+msgid "Locked to this cell. Click to unlock"
+msgstr "Привязка к этой соте. Нажмите, чтобы снять"
+
+msgid "The modem is still on EARFCN %s, PCI %s: the lock has not taken effect. The cell may be out of reach."
+msgstr "Модем всё ещё на EARFCN %s, PCI %s: привязка не сработала. Возможно, сота вне досягаемости."
+
+msgid "Lock cell"
+msgstr "Закрепить"
+
+msgid "Unlock cell"
+msgstr "Открепить"
+
+msgid "Lock"
+msgstr "Лок"

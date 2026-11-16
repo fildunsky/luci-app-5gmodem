@@ -49,7 +49,7 @@ class UpdateAssetUrl(unittest.TestCase):
                 f'wget() {{ {d / "bin" / "wget"} "$@"; }}',  # busybox ash prefers its own wget applet
                 'net_proxy_port() { echo 7890; }',
                 'net_alt_paths() { echo "-x http://127.0.0.1:7890"; }',
-                function('net_fetch', 'lib.sh'),
+                function('_nf_wget', 'lib.sh'), function('net_fetch', 'lib.sh'),
                 f'net_fetch 120 https://api.example/assets/1 "{target}" {'"' + header + '"' if header else ''}; echo "rc=$?"',
             ])
             r = shell(src, env)

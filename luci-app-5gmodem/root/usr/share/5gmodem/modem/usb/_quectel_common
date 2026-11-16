@@ -208,6 +208,7 @@ _qc_scc_lte() {
 		[ -n "$T" ] && _qc_s $IDX EARFCN "$T"
 		T=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $7}')
 		[ -n "$T" ] && _qc_s $IDX PCI "$T"
+		_qc_scclev $IDX "$LINE"
 
 		IDX=$((IDX + 1))
 	done
@@ -373,6 +374,20 @@ _sccsig() {
 		3) S3RSRP="$2"; S3RSRQ="$3"; S3RSSI="$4"; S3SINR="$5";;
 		4) S4RSRP="$2"; S4RSRQ="$3"; S4RSSI="$4"; S4SINR="$5";;
 	esac
+}
+
+# LTE SCC levels: "SCC",earfcn,bw,"LTE BAND x",state,pci,rsrp,rsrq,rssi,sinr[,ul...]
+_qc_scclev() {
+	_oIFS=$IFS; IFS=' '
+	set -- "$1" $(printf '%s' "$2" | tr -d '\r' | awk -F[,:] '{
+		for (i = 8; i <= 11; i++) printf "%s ", ($i == "" ? "-" : $i)
+	}')
+	IFS=$_oIFS
+	_sccnum _S_RSRP "$2" -160 -30
+	_sccnum _S_RSRQ "$3" -40 0
+	_sccnum _S_RSSI "$4" -160 -10
+	_sccnum _S_SINR "$5" -30 50
+	_sccsig "$1" "$_S_RSRP" "$_S_RSRQ" "$_S_RSSI" "$_S_SINR"
 }
 
 _q5_core() {
@@ -599,23 +614,7 @@ _q5_core() {
 					T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $7}' | xargs)
 					[ -n "$T5" ] && _qc_s $IDX PCI "$T5"
 
-					if _q5_on scclev; then
-						T5=$(echo "$LINE" | tr -d '\r' | awk -F[,:] '{
-							for (i = 8; i <= 11; i++) printf "%s%s", ($i == "" ? "-" : $i), (i < 11 ? " " : "\n")
-						}')
-						_oIFS=$IFS; IFS=' '; set -- $T5; IFS=$_oIFS
-						_sccnum _S_RSRP "$1" -160 -30
-						_sccnum _S_RSRQ "$2" -40 0
-						_sccnum _S_RSSI "$3" -160 -10
-						_sccnum _S_SINR "$4" -30 50
-						_sccsig "$IDX" "$_S_RSRP" "$_S_RSRQ" "$_S_RSSI" "$_S_SINR"
-					else
-						T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $10}' | xargs)
-
-						T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $8}' | xargs)
-
-						T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $9}' | xargs)
-					fi
+					_qc_scclev "$IDX" "$LINE"
 					;;
 				*"NR5G BAND"*)
 					B=$(echo $T | sed 's/"NR5G BAND \(.*\)"/\1/')

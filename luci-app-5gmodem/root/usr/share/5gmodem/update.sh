@@ -18,6 +18,51 @@ STEP=/tmp/5gmodem/update.step
 
 mkdir -p "$TMP" 2>/dev/null
 
+# apk downloads package lists with an external "wget" found through PATH. This stand-in sends
+# them through the device chosen under "Download through" (curl --interface) and puts a hard
+# limit on uclient-fetch, whose -T covers reads only: a connection that never opens hangs it.
+apk_net() {
+	_an_d="$TMP/pmfetch"
+	mkdir -p "$_an_d" 2>/dev/null
+	cat > "$_an_d/wget" <<'SHIM'
+#!/bin/sh
+# apk asks: wget -q -T <sec> <url> -O <file|->
+t=60; o=-; u=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-T) t="$2"; shift ;;
+		-O) o="$2"; shift ;;
+		-*) ;;
+		*) u="$1" ;;
+	esac
+	shift
+done
+case "$t" in ''|*[!0-9]*) t=60 ;; esac
+[ -n "$u" ] || exit 1
+if [ -n "$PM_FETCH_DEV" ] && [ -d "/sys/class/net/$PM_FETCH_DEV" ] && command -v curl >/dev/null 2>&1; then
+	f="${TMPDIR:-/tmp}/pmfetch.$$"
+	if curl -fsSL --connect-timeout 8 -m $((t * 5)) --interface "$PM_FETCH_DEV" -o "$f" "$u" 2>/dev/null; then
+		if [ "$o" = - ]; then cat "$f"; rc=$?; rm -f "$f"; else mv -f "$f" "$o"; rc=$?; fi
+		exit $rc
+	fi
+	rm -f "$f"
+	logger -t 5gmodem "update: package list through $PM_FETCH_DEV failed - trying the default route"
+fi
+[ -n "$PM_REAL_WGET" ] || exit 1
+"$PM_REAL_WGET" -q -T "$t" -O "$o" "$u" &
+p=$!
+( sleep $((t + 30)); kill "$p" ) >/dev/null 2>&1 </dev/null &
+k=$!
+wait "$p"; rc=$?
+kill "$k" 2>/dev/null
+exit $rc
+SHIM
+	chmod 755 "$_an_d/wget"
+	_an_dev=$(uci -q get 5gmodem.@5gmodem[0].fetch_dev)
+	case "$_an_dev" in *[!A-Za-z0-9._@-]*) _an_dev="" ;; esac
+	PM_REAL_WGET=$(command -v wget) PM_FETCH_DEV="$_an_dev" PATH="$_an_d:$PATH" apk "$@"
+}
+
 json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\r' | tr '\n\t' '  '; }
 
 pkgman() {
@@ -43,6 +88,22 @@ installed_version() {
 	apk)  apk info -v 2>/dev/null | sed -n "s/^$PKG-\([0-9][0-9.]*\)-r[0-9].*/\1/p" | head -n1 ;;
 	opkg) opkg list-installed "$PKG" 2>/dev/null | sed -n "s/^$PKG - \([0-9][0-9.]*\).*/\1/p" | head -n1 ;;
 	esac
+}
+
+# version of the installed full or lite package straight from the apk/opkg database ("" if none)
+fast_version() {
+	_fv_db=""
+	for _fv_db in "${UPD_APK_DB:-/lib/apk/db/installed}" "${UPD_OPKG_DB:-/usr/lib/opkg/status}"; do
+		[ -r "$_fv_db" ] || continue
+		awk -v a="$PKG_FULL" -v b="$PKG_LITE" '
+			/^(P:|Package: )/ { sub(/^(P:|Package: )/, ""); p = $0; next }
+			/^(V:|Version: )/ && (p == a || p == b) {
+				sub(/^(V:|Version: )/, ""); sub(/-r[0-9]+$/, ""); sub(/-[0-9]+$/, "")
+				if ($0 ~ /^[0-9][0-9.]*$/) { print; exit }
+			}
+			/^$/ { p = "" }' "$_fv_db"
+		return
+	done
 }
 
 api_json() {
@@ -79,9 +140,15 @@ fsize() { [ -f "$1" ] && wc -c < "$1" 2>/dev/null | tr -d ' ' || echo 0; }
 
 case "$1" in
 version)
-	PM=$(pkgman)
-	PKG=$(detect_pkg "$PM")
-	printf '{"current":"%s"}\n' "$(json_esc "$(installed_version "$PM")")"
+	# asked by the Settings page on every open: the package database is read directly (two apk
+	# runs took ~4 s on a busy MIPS router); the package manager is the fallback
+	CUR=$(fast_version)
+	if [ -z "$CUR" ]; then
+		PM=$(pkgman)
+		PKG=$(detect_pkg "$PM")
+		CUR=$(installed_version "$PM")
+	fi
+	printf '{"current":"%s"}\n' "$(json_esc "$CUR")"
 	;;
 
 check)
@@ -143,13 +210,18 @@ install)
 				/^  [^ ]/ { n = "" }' "$LOG" 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/ $//'
 		}
 		apk_install() {
-			apk add --allow-untrusted "$F" >"$LOG" 2>&1 && return 0
+			# The file alone is enough when its dependencies are installed: no package lists, so
+			# no network. Without this apk fetched every list first, and on a link where only a
+			# VPN gets out the install hung at "unpacking" for minutes.
+			apk add --no-network --allow-untrusted "$F" >"$LOG" 2>&1 && return 0
+			grep -q 'unable to select packages' "$LOG" 2>/dev/null || return 1
+			logger -t 5gmodem "update: the package needs something not installed - fetching package lists"
+			echo deps > "$STEP"
+			apk_net add --allow-untrusted "$F" >"$LOG" 2>&1 && return 0
 			grep -q 'unable to select packages' "$LOG" 2>/dev/null || return 1
 			[ -z "$(apk_world_blockers)" ] || return 1
-			logger -t 5gmodem "update: apk could not resolve dependencies - refreshing package lists and retrying"
-			echo deps > "$STEP"
-			apk update >/dev/null 2>&1
-			apk add --allow-untrusted "$F" >"$LOG" 2>&1
+			apk_net update >/dev/null 2>&1
+			apk_net add --allow-untrusted "$F" >"$LOG" 2>&1
 		}
 		do_install() {
 			TARGET=""

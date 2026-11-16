@@ -260,7 +260,7 @@ function switchSimSlot(id, label, type, ev) {
 		var notification = E('p', ok ? _('SIM slot switched: %s').format(label) : _('SIM slot switch failed'));
 		if (ui.addTimeLimitedNotification) { ui.addTimeLimitedNotification(null, notification, 6000, ok ? 'info' : 'error'); }
 		else { ui.addNotification(null, notification, ok ? 'info' : 'error'); }
-		if (ok) { pollSlotUntilSwitched(id, [ 3000, 8000, 15000, 25000, 40003, 60000, 90000 ]); }
+		if (ok) { pollSlotUntilSwitched(id, [ 3000, 8000, 15000, 25000, 40000, 60000, 90000 ]); }
 	}).catch(function() { if (type === 'android') { clearModemBusy(true); } else { ui.hideModal(); } });
 }
 
@@ -536,6 +536,7 @@ function renderNeighbors(json) {
 	if (!list.length) {
 		if (json && json.backend === 'android') { wrap.style.display = 'none'; return; }
 		if (wrap.getAttribute('data-hadata') !== '1') { wrap.style.display = 'none'; }
+		else { nbLockNote(json); }
 		return;
 	}
 	wrap.style.display = '';
@@ -573,26 +574,69 @@ function renderNeighbors(json) {
 		paintMetricCell(td[6], 'rssi', c.rssi, null, undefined, c.rsrq);
 		if (td[7]) { nbLockCell(td[7], c, serving); }
 	}
+	nbLockNote(json);
+}
+
+function _nbSame(lk, ear, pci) {
+	return !!lk && String(lk.ear) === String(ear) && (lk.pci == null || String(lk.pci) === String(pci));
+}
+
+// One place for the lock: state, Unlock, and a warning when the modem stays on another cell.
+function nbLockNote(json) {
+	var wrap = document.getElementById('nb-comp');
+	if (!wrap) { return; }
+	var box = document.getElementById('nb-locknote');
+	if (!box) { box = E('div', { 'id': 'nb-locknote', 'style': 'margin-top:.4em' }); wrap.appendChild(box); }
+	var lk = bandsui.lockedCell ? bandsui.lockedCell() : null;
+	var busy = bandsui.opActive && bandsui.opActive();
+	if (!lk || busy) { box.style.display = 'none'; box.removeAttribute('data-sig'); return; }
+	var se = String((json || {}).earfcn || ''), sp = String((json || {}).pci || '');
+	var known = se && se !== '-' && sp && sp !== '-';
+	var off = known && !_nbSame(lk, se, sp);
+	var sig = [ lk.ear, lk.pci, off ? se + '/' + sp : '' ].join('|');
+	box.style.display = '';
+	if (box.getAttribute('data-sig') === sig) { return; }
+	box.setAttribute('data-sig', sig);
+	var kids = [
+		E('span', { 'style': 'margin-right:.6em' }, [ lk.pci != null
+			? _('Locked to cell: EARFCN %s, PCI %s').format(lk.ear, lk.pci)
+			: _('Locked to frequency: EARFCN %s').format(lk.ear) ]),
+		E('button', {
+			'class': 'btn cbi-button cbi-button-negative',
+			'style': 'padding:1px 9px',
+			'title': _('Locked to this cell. Click to unlock'),
+			'click': function(ev) { ev.preventDefault(); bandsui.unlockCell(); }
+		}, [ _('Unlock cell') ])
+	];
+	if (off) {
+		kids.push(E('div', { 'class': 'tg-nb-lockwarn' }, [
+			_('The modem is still on EARFCN %s, PCI %s: the lock has not taken effect. The cell may be out of reach.').format(se, sp)
+		]));
+	}
+	dom.content(box, kids);
 }
 
 function nbLockCell(td, c, serving) {
 	var ear = c.earfcn, pci = c.pci;
-	var can = bandsui.cellLockWritable && bandsui.cellLockWritable()
-		&& !serving && ear && ear !== '-' && pci != null && pci !== '' && pci !== '-';
-	if (!can) {
+	var ok = ear && ear !== '-' && pci != null && pci !== '' && pci !== '-';
+	var here = ok && _nbSame(bandsui.lockedCell && bandsui.lockedCell(), ear, pci);
+	var can = ok && bandsui.cellLockWritable && bandsui.cellLockWritable();
+	if (!can && !here) {
 		if (td.getAttribute('data-lk')) { td.removeAttribute('data-lk'); dom.content(td, ''); }
 		return;
 	}
-	var key = ear + ':' + pci;
+	var key = ear + ':' + pci + (here ? ':on' : '');
 	if (td.getAttribute('data-lk') === key) { return; }
 	td.setAttribute('data-lk', key);
 	var btn = E('button', {
-		'class': 'btn cbi-button cbi-button-action',
-		'style': 'padding:1px 9px;display:inline-flex;align-items:center;justify-content:center',
-		'title': _('Lock to this cell (EARFCN %s, PCI %s)').format(ear, pci),
-		'click': function(ev) { ev.preventDefault(); bandsui.lockCell(ear, pci); }
+		'class': 'btn cbi-button ' + (here ? 'cbi-button-negative' : 'cbi-button-action'),
+		'style': 'padding:1px 9px;display:inline-flex;align-items:center;justify-content:center;gap:.35em;white-space:nowrap',
+		'title': here ? _('Locked to this cell. Click to unlock')
+			: _('Lock to this cell (EARFCN %s, PCI %s)').format(ear, pci),
+		'click': function(ev) { ev.preventDefault(); if (here) { bandsui.unlockCell(); } else { bandsui.lockCell(ear, pci); } }
 	});
-	btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block"><rect x="5" y="11" width="14" height="10" rx="1"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"></path></svg>';
+	btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;flex:none"><rect x="5" y="11" width="14" height="10" rx="1"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>';
+	btn.appendChild(E('span', {}, [ here ? _('Unlock cell') : _('Lock cell') ]));
 	dom.content(td, btn);
 }
 
@@ -2945,7 +2989,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40003, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40004, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -3451,7 +3495,7 @@ simDialog: baseclass.extend({
 							E('th', { 'class': 'th' }, [ gl('RSRP') ]),
 							E('th', { 'class': 'th' }, [ gl('RSRQ') ]),
 							E('th', { 'class': 'th' }, [ gl('RSSI') ]),
-							E('th', { 'class': 'th' }, [ '' ]),
+							E('th', { 'class': 'th', 'title': _('Cell lock') }, [ _('Lock') ]),
 						])
 					])
 				]),

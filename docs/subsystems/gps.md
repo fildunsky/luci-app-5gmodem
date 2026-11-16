@@ -302,9 +302,12 @@ fetches the file as text, runs it with `new Function('exports', 'module', src)` 
 `noConflict()` in the same synchronous step, then puts LuCI's `L` back. A `<script>` tag would leave
 a window between the script and its `onload` in which LuCI timers could see Leaflet as `L`.
 
-The map box is always on the page. Before the first fix it shows a grid and a message, and no tile
-is requested. With `gps_map_auto=1` (the default) Leaflet starts at the first fix; with `0` the box
-shows "Load the map" instead. If `leaflet.js` cannot be loaded, the box says so and offers the same
+The page renders first, like the Network page: the header, the map box, the reading tiles (dashes)
+and the Receiver block are drawn before the first `status` answer, and the layout is replaced by the
+"no receiver" block only when that answer says so. Receiver buttons appear once the state is known.
+With `gps_map_auto=1` (the default) Leaflet starts with the page at the world view (zoom 2, which
+tells the tile server nothing about the router) and zooms to the position once, at the first fix;
+with `0` the box shows a message and no tile is requested until "Load the map". If `leaflet.js` cannot be loaded, the box says so and offers the same
 button; the rest of the page works without it. "Keep the position in the center" and "Clear track"
 are a Leaflet control on the map (`leaflet-bar tg-gps-ctl`); dragging the map turns following off.
 On a dark theme (light page text, the same test as `isDarkUI` in `netpri.js`) the tile layer is

@@ -250,3 +250,4 @@
 .tg-sms .tg-sms-selbar .cbi-button { flex: none; margin: 0 !important; padding: 0 6px !important; white-space: nowrap; font-size: 13px; }
 /* the icons cost ~20px per button, the counter needs that room; the labels are plain enough */
 .tg-sms .tg-sms-selbar .cbi-button > .tg-sms-i { display: none !important; }
+.tg-sms-item.tg-sms-skel { cursor: default; } .tg-sms-item.tg-sms-skel:hover { background: none; }

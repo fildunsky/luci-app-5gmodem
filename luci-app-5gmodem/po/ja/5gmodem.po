@@ -7471,3 +7471,21 @@ msgstr "ブリッジモード (IP パススルー)"
 
 msgid "The modem gives the router the operator address instead of its own private one, so there is no double NAT. The setting is stored in the modem; the connection is re-established when it changes."
 msgstr "モデムは自身のプライベートアドレスではなく、通信事業者のアドレスをルーターに渡すため、二重 NAT になりません。設定はモデムに保存され、変更すると接続し直します。"
+
+msgid "Any cell from the Neighbour cells table can be locked with the lock button in its row."
+msgstr "「周辺セル」表のどのセルも、その行の鍵ボタンでロックできます。"
+
+msgid "Locked to this cell. Click to unlock"
+msgstr "このセルにロック中。クリックで解除"
+
+msgid "The modem is still on EARFCN %s, PCI %s: the lock has not taken effect. The cell may be out of reach."
+msgstr "モデムはまだ EARFCN %s、PCI %s にいます：ロックが反映されていません。セルが圏外の可能性があります。"
+
+msgid "Lock cell"
+msgstr "固定"
+
+msgid "Unlock cell"
+msgstr "固定解除"
+
+msgid "Lock"
+msgstr "ロック"

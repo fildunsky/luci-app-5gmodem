@@ -383,18 +383,20 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40003, [ editors, modemtabs, mutil, atexplain ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40004, [ editors, modemtabs, mutil, atexplain ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
 		window._sendatLmPort = '';
+		// one round to the router: the modem list is asked together with the files, not after them
+		var lmP = L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh', []), '[]');
 		return Promise.all([
 			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/atcmmds.user'), null),
 			L.resolveDefault(fs.list('/etc/5gmodem/modem/atcmmds'), []),
 			uci.load('5gmodem'),
 			L.resolveDefault(uci.load('defmodems'))
 		]).then(function(res) {
-			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh', []), '[]').then(function(out) {
+			return lmP.then(function(out) {
 				try {
 					var act = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
 					(JSON.parse(out) || []).forEach(function(m) {

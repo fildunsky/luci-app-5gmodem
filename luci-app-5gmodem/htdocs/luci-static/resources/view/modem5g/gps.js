@@ -154,7 +154,7 @@ var SRC_CHIP = { at: 'AT', nmea: 'NMEA', qmi: 'QMI', ugps: 'ugps', mm: 'MM', usb
 
 return view.extend({
 	load: function() {
-		return fresh.check(40003, [ modemtabs, mutil ]).then(function() {
+		return fresh.check(40004, [ modemtabs, mutil ]).then(function() {
 			return L.resolveDefault(uci.load('5gmodem'));
 		});
 	},
@@ -318,7 +318,7 @@ return view.extend({
 			E('div', { 'class': 'tg-gps-rxnote', 'style': 'margin-top:6px' }, _('A cold start takes several minutes under open sky.'))
 		]);
 		rx.restart = E('button', { 'class': 'cbi-button', 'style': 'display:none' }, _('Restart the search'));
-		rx.power = E('button', { 'class': 'cbi-button tg-gps-pw' }, _('Turn GNSS on'));
+		rx.power = E('button', { 'class': 'cbi-button tg-gps-pw', 'style': 'display:none' }, _('Turn GNSS on'));
 		rx.rebootNote = E('div', { 'class': 'tg-gps-rxnote', 'style': 'display:none' },
 			_('On this modem the GNSS setting is stored in the modem and applied by its restart: the connection drops for about a minute.'));
 		// Telit: the connector the receiver listens on (gps.sh antport); hidden for other modems
@@ -370,7 +370,9 @@ return view.extend({
 		}
 
 		var side = E('div', { 'class': 'tg-gps-side' }, [ readings, rxManaged, rxPassive ]);
-		var main = E('div', { 'style': 'display:none' }, [ E('div', { 'class': 'tg-gps-grid' }, [ mapSec, side ]) ]);
+		// drawn at once with dashes and placeholders (as the Network page); hidden only when the
+		// first answer says the modem has no receiver
+		var main = E('div', {}, [ E('div', { 'class': 'tg-gps-grid' }, [ mapSec, side ]) ]);
 
 		/* ---------- unsupported ---------- */
 		var unsIco = E('div', { 'class': 'tginfo-signal tg-gps-ico off' });
@@ -449,6 +451,7 @@ return view.extend({
 			if (st.mapState === kind) { return; }
 			st.mapState = kind;
 			var m = {
+				ask: [ 'sat', _('Asking the modem…'), '' ],
 				wait: [ 'sat', _('Waiting for the first fix'), _('The map opens at the modem position as soon as coordinates appear.') ],
 				off: [ 'sat', _('Receiver is off'), _('The map appears after the receiver is turned on and gets a fix.') ],
 				manual: [ 'eye', _('The map is not loaded'), _('The map service learns the area where the router is.') ],
@@ -494,7 +497,8 @@ return view.extend({
 				var j = st.last || {};
 				var has = j.lat !== null && j.lat !== undefined && j.lat !== '';
 				st.map = lf.map(mp.lf, { 'zoomControl': true, 'crs': styleOf(mapKey).crs === 3395 ? lf.CRS.EPSG3395 : lf.CRS.EPSG3857 })
-					.setView(has ? [ +j.lat, +j.lon ] : [ 0, 0 ], has ? 16 : 2);
+					.setView(has ? [ +j.lat, +j.lon ] : [ 20, 0 ], has ? 16 : 2);
+				st.centered = has;
 				// no "Leaflet" link and flag in the corner; the tile provider credit stays
 				if (st.map.attributionControl) { st.map.attributionControl.setPrefix(false); }
 				setMapStyle(mapKey, false);
@@ -543,7 +547,9 @@ return view.extend({
 			if (!st.marker) {
 				st.marker = lf.circleMarker(ll, { 'radius': 8, 'color': '#fff', 'weight': 2, 'fillColor': '#e53935', 'fillOpacity': 1 }).addTo(st.map);
 			} else { st.marker.setLatLng(ll); st.marker.bringToFront(); }
-			if (st.follow) { st.map.panTo(ll); }
+			// opened before the fix at the world view: the first fix zooms in once
+			if (!st.centered) { st.centered = true; st.map.setView(ll, 16); }
+			else if (st.follow) { st.map.panTo(ll); }
 		}
 
 		/* ---------- rendering ---------- */
@@ -642,9 +648,11 @@ return view.extend({
 					if (st.track.length > TRACK_MAX) { st.track.splice(0, st.track.length - TRACK_MAX); }
 				}
 			}
-			// No tile requests before the first fix; after a failed load only the button retries.
-			if (!st.map && st.mapState !== 'loading' && !(fixed && st.mapState === 'fail')) {
-				if (fixed && st.mapWanted) { openMap(); }
+			// "Load the map automatically" opens it with the page (the world view tells the tile
+			// server nothing); otherwise no tile requests until the button. After a failed load
+			// only the button retries.
+			if (!st.map && st.mapState !== 'loading' && st.mapState !== 'fail') {
+				if (st.mapWanted) { openMap(); }
 				else { mapMsg(fixed ? 'manual' : off ? 'off' : 'wait'); }
 			}
 			drawMap();
@@ -703,7 +711,7 @@ return view.extend({
 
 		window.__5gmInPlaceSwitch = function(path) {
 			pageModemPath = String(path || '');
-			st.track = []; st.last = null;
+			st.track = []; st.last = null; st.centered = false;
 			if (st.map) {
 				if (st.marker) { st.map.removeLayer(st.marker); st.marker = null; }
 				if (st.ring) { st.map.removeLayer(st.ring); st.ring = null; }
@@ -788,6 +796,7 @@ return view.extend({
 			if (!document.hidden && document.body.contains(root)) { paintAge(); }
 		}, 1000);
 		modemtabs.attach();
+		if (st.mapWanted) { window.setTimeout(openMap, 0); } else { mapMsg('ask'); }
 		window.setTimeout(tick, 0);
 		return root;
 	},

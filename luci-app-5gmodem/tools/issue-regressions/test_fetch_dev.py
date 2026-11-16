@@ -26,7 +26,7 @@ class FetchDev(unittest.TestCase):
     def run_fetch(self, dev='lo', bound='ok', wget='ok', curl='1'):
         with tempfile.TemporaryDirectory() as d:
             src = (f'D={d}; DEV="{dev}"; BOUND={bound}; WGET={wget}; CURL={curl}\n' + STUBS +
-                   function('net_fetch', 'lib.sh') + '\nnet_fetch 5 https://example.invalid/x\n')
+                   function('_nf_wget', 'lib.sh') + '\n' + function('net_fetch', 'lib.sh') + '\nnet_fetch 5 https://example.invalid/x\n')
             r = shell(src)
             log = (Path(d) / 'log').read_text() if (Path(d) / 'log').exists() else ''
             return r.stdout, log

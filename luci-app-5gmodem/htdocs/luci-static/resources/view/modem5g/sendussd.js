@@ -763,7 +763,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40003, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40004, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -783,19 +783,25 @@ return view.extend({
 		loadPageCss();
 		var self = this;
 		var main = this.renderMain(loadResults);
-		return smssettings.panel('ussd').then(function(panel) {
-			// The panel is a <details> around the settings form; the form goes into a folding block
-			// like the ones on the Network page.
+		// The settings block is drawn at once with placeholders; the form (it loads port lists from
+		// the router) goes in when ready, so it never holds the page back. The panel is a <details>
+		// around the settings form; the form goes into a folding block like on the Network page.
+		var tp = self.ussdTransport();
+		var on3g = uci.get('5gmodem', tp.section, 'ussd_3g') || uci.get('5gmodem', 'sms', 'ussd_3g');
+		var sum = [ '3G: ' + ((on3g == '1') ? _('on') : _('off')) ];
+		if (tp.mm) { sum.push('ModemManager'); }
+		var holder = E('div', {}, [ E('span', { 'class': 'tg-skel blk', 'style': 'width:60%;margin:10px 0' }),
+			E('span', { 'class': 'tg-skel blk', 'style': 'width:40%;margin:10px 0' }) ]);
+		var sec = collapsibleSection('ussdset', _('USSD settings'), [ holder ], sum.join(' · '));
+		main.appendChild(sec);
+		smssettings.panel('ussd').then(function(panel) {
 			var form = (panel && panel.tagName === 'DETAILS') ? panel.lastElementChild : panel;
 			if (form && form.nodeType === 1) {
-				var tp = self.ussdTransport();
-				var on3g = uci.get('5gmodem', tp.section, 'ussd_3g') || uci.get('5gmodem', 'sms', 'ussd_3g');
-				var sum = [ '3G: ' + ((on3g == '1') ? _('on') : _('off')) ];
-				if (tp.mm) { sum.push('ModemManager'); }
-				main.appendChild(collapsibleSection('ussdset', _('USSD settings'), [ form ], sum.join(' · ')));
-			}
-			return main;
-		});
+				while (holder.firstChild) { holder.removeChild(holder.firstChild); }
+				holder.appendChild(form);
+			} else if (sec.parentNode) { sec.parentNode.removeChild(sec); }
+		}, function() { if (sec.parentNode) { sec.parentNode.removeChild(sec); } });
+		return main;
 	},
 
 	renderHead: function(st, tp) {

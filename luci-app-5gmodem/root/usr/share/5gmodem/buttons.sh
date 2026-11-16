@@ -191,12 +191,14 @@ detect)
 services)
 	printf '{"services":['
 	_f=1
+	# no subshell per script: three forks for each of ~80 init scripts took over a second
 	for _sv in /etc/init.d/*; do
 		[ -f "$_sv" ] && [ -x "$_sv" ] || continue
-		_n=$(basename "$_sv")
+		_n=${_sv##*/}
+		case "$_n" in *[!A-Za-z0-9._+-]*|'') continue ;; esac
 		[ "$_f" = 1 ] || printf ','
 		_f=0
-		printf '"%s"' "$(printf '%s' "$_n" | _json_esc)"
+		printf '"%s"' "$_n"
 	done
 	printf ']}\n'
 	;;

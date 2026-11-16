@@ -1,0 +1,3 @@
+## field report, issue #82 (LTE B40+B40, SCC levels were not shown)
++QCAINFO: "PCC",39146,100,"LTE BAND 40",1,3,-68,-11,-35,13
++QCAINFO: "SCC",38750,100,"LTE BAND 40",2,60,-79,-19,-39,12,0,-,-

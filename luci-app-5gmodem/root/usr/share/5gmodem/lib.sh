@@ -1659,6 +1659,19 @@ net_alt_paths() {
 	done
 }
 
+# wget (uclient-fetch) with a hard limit: its --timeout covers reads only, and a connection that
+# never opens (a whitelist link that drops packets) kept it, and the caller, waiting for good.
+_nf_wget() {
+	_nw_t="$1"; shift
+	wget "$@" &
+	_nw_p=$!
+	( sleep "$_nw_t"; kill "$_nw_p" ) >/dev/null 2>&1 </dev/null &
+	_nw_k=$!
+	wait "$_nw_p"; _nw_rc=$?
+	kill "$_nw_k" 2>/dev/null
+	return $_nw_rc
+}
+
 net_fetch() {
 	# $4: one optional request header, e.g. "Accept: application/octet-stream"
 	_nf_t="$1"; _nf_u="$2"; _nf_o="$3"; _nf_h="$4"
@@ -1677,22 +1690,22 @@ net_fetch() {
 		logger -t 5gmodem "net: fetch through $_nf_d failed - trying the default route"
 	fi
 	if [ -n "$_nf_o" ]; then
-		wget -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
+		_nf_wget $((_nf_t + 20)) -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
 		rm -f "$_nf_o" 2>/dev/null
 	else
-		_nf_b=$(wget -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
+		_nf_b=$(_nf_wget $((_nf_t + 20)) -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
 		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
 	fi
 	if ! command -v curl >/dev/null 2>&1; then
 		_nf_p=$(net_proxy_port) && [ -n "$_nf_p" ] || return 1
 		logger -t 5gmodem "net: direct fetch failed - retrying via local proxy 127.0.0.1:$_nf_p"
 		if [ -n "$_nf_o" ]; then
-			http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
-				wget -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
+			( export http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p"
+			  _nf_wget $((_nf_t + 20)) -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null ) && [ -s "$_nf_o" ] && return 0
 			rm -f "$_nf_o" 2>/dev/null; return 1
 		fi
-		_nf_b=$(http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
-			wget -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
+		_nf_b=$(export http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p"
+			_nf_wget $((_nf_t + 20)) -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
 		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
 		return 1
 	fi

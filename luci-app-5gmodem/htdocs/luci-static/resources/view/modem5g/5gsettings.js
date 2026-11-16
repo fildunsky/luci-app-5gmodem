@@ -252,6 +252,12 @@ function verLink(v) {
 
 function updIdle() {
 	updPill('off', _('Not checked'));
+	// render first: the installed versions are still on their way
+	if (upd.loading) {
+		updLines([ E('span', { 'class': 'tg-skel', 'style': 'width:9em' }) ], [ E('span', { 'class': 'tg-skel', 'style': 'width:14em' }) ]);
+		btnState('upd-act', 'check', 'refresh');
+		return;
+	}
 	// the APN database date sits next to the version: the card has no separate APN line
 	updLines([].concat(verLine(_('Version %s'), upd.cur), apn.cur ? [ ' · ' + _('APN database %s').format(apnVer(apn.cur)) ] : []),
 		_('Updates have not been checked yet'));
@@ -536,8 +542,12 @@ function failInstall(msg, detail, target) {
 		if (cur) { finishUpdate(cur); return; }
 		updProgress(null);
 		updPill('bad', _('Error'));
-		updLines(_('Update failed'), msg);
-		updDetail([ upd.apnNote || '', msg.length > 70 ? msg : '', detail || '' ].filter(function(s) { return s; }).join('\n\n'));
+		// a long reason goes to the standard notification at the top of the page, not under the
+		// card's footer where it was easy to miss
+		var long = msg.length > 70;
+		updLines(_('Update failed'), long ? '' : msg);
+		if (long) { ui.addNotification(null, E('p', [ msg ]), 'warning'); }
+		updDetail([ upd.apnNote || '', detail || '' ].filter(function(s) { return s; }).join('\n\n'));
 		btnState('upd-act', 'install', 'down', { primary: true, text: installLabel(String(target || updTarget).replace(/^v/i, '')) });
 	});
 }
@@ -621,7 +631,18 @@ function fetchDevCell() {
 		if (!sid) { return; }
 		if (sel.value) { uci.set('5gmodem', sid, 'fetch_dev', sel.value); }
 		else { uci.unset('5gmodem', sid, 'fetch_dev'); }
-		uci.save().then(commitPending).catch(function() {});
+		// committed at once: nothing waits for "Save & Apply", and the header counter is refreshed
+		// so it does not suggest otherwise
+		uci.save().then(commitPending).then(function() {
+			if (ui.changes && ui.changes.init) { return ui.changes.init(); }
+		}).then(function() {
+			if (hint.style.display === '' && hint.textContent && hint.getAttribute('data-ok') !== '1') { return; }
+			hint.setAttribute('data-ok', '1');
+			hint.className = 'tg-set-hint';
+			hint.textContent = _('Saved');
+			hint.style.display = '';
+			window.setTimeout(function() { if (hint.getAttribute('data-ok') === '1') { hint.style.display = 'none'; } }, 2500);
+		}).catch(function() {});
 	});
 	return E('div', { 'class': 'tg-set-cell tg-set-inline' }, [
 		E('label', { 'class': 'tg-set-lbl', 'for': 'upd-dev' }, _('Download through')),
@@ -965,36 +986,39 @@ function wlList(cfg, persist) {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40003, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40004, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
-		return Promise.all([
-			L.resolveDefault(uci.load('5gmodem')),
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/buttons.sh', [ 'services' ]), '{}'),
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/notmodem.sh', [ 'scan' ]), '[]'),
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/update.sh', [ 'version' ]), '{}'),
-			L.resolveDefault(fs.exec_direct(APNBIN, [ 'version' ]), '{}'),
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/setopt.sh', [ 'webreq' ]), '{}')
-		]);
+		// render first: only the settings are waited for; the installed versions, the service list,
+		// the USB device list and the web server setting fill the drawn page (lateData in render)
+		return L.resolveDefault(uci.load('5gmodem'));
 	},
 
 	render: function(res) {
 		modemtabs.attach();
+		// filled after render (lateData): until then the lists show what the config already names
 		var services = [];
-		try { services = (JSON.parse((res && res[1]) || '{}').services) || []; } catch (e) {}
-		var usbDevs = [];
-		try { usbDevs = JSON.parse((res && res[2]) || '[]') || []; } catch (e) {}
 
 		// Update card in the Network-page layout: icon, three fixed lines (caption / state / detail)
 		// with the one action button under them, the pill on the right; release notes under the
 		// status; "download through" and the APN database version in the foot row; long errors
 		// at the very bottom. Every state fills the same
 		// slots, so nothing moves while checking or installing.
-		var verOut = {}, apnOut = {};
-		try { verOut = JSON.parse((res && res[3]) || '{}') || {}; } catch (e) {}
-		try { apnOut = JSON.parse((res && res[4]) || '{}') || {}; } catch (e) {}
-		upd.cur = String(verOut.current || '');
+		upd.loading = true;
+		Promise.all([ L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/update.sh', [ 'version' ]), '{}'),
+		              L.resolveDefault(fs.exec_direct(APNBIN, [ 'version' ]), '{}') ]).then(function(v) {
+			var verOut = {}, apnOut = {};
+			try { verOut = JSON.parse(v[0] || '{}') || {}; } catch (e) {}
+			try { apnOut = JSON.parse(v[1] || '{}') || {}; } catch (e) {}
+			upd.loading = false;
+			// a check or an install started meanwhile owns the card and its versions
+			var b = byId('upd-act');
+			var idle = !b || (b.getAttribute('data-k') || 'check') === 'check';
+			if (!upd.cur) { upd.cur = String(verOut.current || ''); }
+			if (!apn.cur) { apn.cur = String(apnOut.version || ''); apn.count = apnOut.count || 0; }
+			if (idle) { updIdle(); }
+		});
 		// the gear turns inside its own fixed square, so it spins around its centre
 		var updGear = E('span', { 'class': 'tg-set-gear' });
 		updGear.innerHTML = svg('gear', 36);
@@ -1003,8 +1027,6 @@ return view.extend({
 			return E('span', { 'id': id, 'class': 'tg-set-pill off' + (id === 'upd-pillm' ? ' tg-set-pillm' : '') },
 				[ E('i'), E('span', {}, '') ]);
 		};
-		apn.cur = String(apnOut.version || '');
-		apn.count = apnOut.count || 0;
 		var updBtn = slotBtn('upd-act', {
 			check: _('Check for updates'), checking: _('Checking…'), again: _('Check again'),
 			retry: _('Try again'), install: installLabel('3.10.100'), installall: _('Install updates'),
@@ -1317,7 +1339,13 @@ return view.extend({
 		});
 		o.depends('widget_status', '1');
 
-		var svcOpts = (services.length ? services : [ 'ssclash' ]).map(function(s) { return [ s, SVC_NICE[s] || s ]; });
+		var svcOpts = [];
+		var svcSet = function(list) {
+			svcOpts.length = 0;
+			(list.length ? list : [ 'ssclash' ]).forEach(function(s) { svcOpts.push([ s, SVC_NICE[s] || s ]); });
+		};
+		svcSet((uci.sections('5gmodem', 'svcwidget') || []).map(function(x) { return x.service; }).filter(Boolean));
+		var svcList = null;
 		o = wlOption('_svclist', _('Service monitor'), function() {
 			var l, addBtn;
 			var freeSvc = function() {
@@ -1367,6 +1395,19 @@ return view.extend({
 			});
 			updAdd();
 			l.box = E('div', { 'class': 'tg-wl' }, [ l.node, addBtn ]);
+			// the full service list arrives after render: open selects get the missing entries
+			l.refreshOpts = function() {
+				l.rows.forEach(function(r) {
+					if (!r.svc) { return; }
+					var have = {};
+					Array.prototype.forEach.call(r.svc.options, function(op) { have[op.value] = true; });
+					svcOpts.forEach(function(o2) {
+						if (!have[o2[0]]) { r.svc.appendChild(E('option', { 'value': o2[0] }, o2[1])); }
+					});
+				});
+				updAdd();
+			};
+			svcList = l;
 			return l;
 		});
 		o.depends('widget_services', '1');
@@ -1662,18 +1703,21 @@ return view.extend({
 		o.depends({ netonly: '1', '!reverse': true });
 
 		// uhttpd max_requests lives in /etc/config/uhttpd, not in 5gmodem: read and written through setopt.sh
+		// asked after render (lateData): the row waits hidden and is dropped when uhttpd is not used
 		var webReq = {};
-		try { webReq = JSON.parse((res && res[5]) || '{}') || {}; } catch (e) {}
-		if (webReq.value) {
-			o = exp.option(form.Value, '_webreq', _('Web server: parallel requests'),
-				_('How many requests the router web server (uhttpd) handles at once. OpenWrt ships 3. If pages load slowly, buttons or data appear late or freeze, set 10: it is safe on routers with 128 MB of RAM or more. This router has %d MB. The web server restarts after saving.').format(webReq.mem_mb || 0));
+		var webReqText = function(mb) {
+			return _('How many requests the router web server (uhttpd) handles at once. OpenWrt ships 3. If pages load slowly, buttons or data appear late or freeze, set 10: it is safe on routers with 128 MB of RAM or more. This router has %d MB. The web server restarts after saving.').format(mb || 0);
+		};
+		var webReqOpt;
+		{
+			o = webReqOpt = exp.option(form.Value, '_webreq', _('Web server: parallel requests'), webReqText(0));
 			o.datatype = 'and(uinteger,range(1,50))';
 			o.placeholder = '3';
 			o.rmempty = false;
-			o.cfgvalue = function() { return String(webReq.value); };
+			o.cfgvalue = function() { return webReq.value ? String(webReq.value) : ''; };
 			var webReqSet = function(v) {
 				v = String(v);
-				if (v === String(webReq.value)) { return; }
+				if (!webReq.value || v === String(webReq.value)) { return; }
 				return fs.exec('/usr/share/5gmodem/setopt.sh', [ 'webreq', v ]).then(function(res) {
 					if (res && res.code === 0) { webReq.value = v; return; }
 					ui.addNotification(null, E('p', {}, _('Could not change the web server setting.')), 'error');
@@ -1681,6 +1725,11 @@ return view.extend({
 			};
 			o.write = function(sid, v) { return webReqSet(v); };
 			o.remove = function() { return webReqSet('3'); };
+			// once the answer says uhttpd is not used, a re-render of the map leaves the row out
+			o.render = function() {
+				if (webReq.done && !webReq.value) { return E([]); }
+				return form.Value.prototype.render.apply(this, arguments);
+			};
 		}
 
 		o = exp.option(form.Flag, 'mwan3_metrics', _('mwan3-compatible metrics'),
@@ -1688,9 +1737,9 @@ return view.extend({
 		o.default = '0';
 		o.rmempty = false;
 
-		var bl = usbDevs.filter(function(d) {
+		var blFilter = function(usbDevs) { return usbDevs.filter(function(d) {
 			return d.known !== '1' || d.why === 'ignored' || d.why === 'forced' || d.absent === '1';
-		});
+		}); };
 		var devLabel = function(d) {
 			var parts = [];
 			if (d.product) { parts.push(d.product); }
@@ -1718,7 +1767,10 @@ return view.extend({
 		var blBoxes = [];
 		var blSeen = {};
 		var blItems = [];
-		bl.forEach(function(d) {
+		var blBody = E('div', {}, [ E('span', { 'class': 'tg-skel blk', 'style': 'width:70%;margin:6px 0' }),
+			E('span', { 'class': 'tg-skel blk', 'style': 'width:50%;margin:6px 0' }) ]);
+		var blFill = function(usbDevs) {
+		blFilter(usbDevs).forEach(function(d) {
 			if (blSeen[d.vidpid]) { return; }
 			blSeen[d.vidpid] = true;
 			var w = new ui.Checkbox(d.skip === '1' ? '1' : '0',
@@ -1730,8 +1782,9 @@ return view.extend({
 				'click': function() { wn.querySelector('input').click(); }
 			}, [ devLabel(d) ]) ]));
 		});
-		var blBody = E('div', {}, blItems.length ? blItems
+		dom.content(blBody, blItems.length ? blItems
 			: [ E('em', {}, _('No doubtful devices: everything found on the bus is in the modem database.')) ]);
+		};
 		var blT = null;
 		blBody.addEventListener('widget-change', function() {
 			if (blT) { window.clearTimeout(blT); }
@@ -1933,6 +1986,44 @@ return view.extend({
 				if (ev.target.closest && ev.target.closest('.cbi-button-add, .cbi-button-remove')) { autoSave(true); }
 			});
 			window.setTimeout(refreshPreviews, 0);
+
+			// render first: the router-side lists fill the drawn form. A value that arrives late is
+			// not a user edit, so the autosave signature is moved along with it while the form is
+			// unchanged.
+			var webRow = formNode.querySelector('[id$="-_webreq"]');
+			if (webRow) { webRow.style.display = 'none'; }
+			var lateFill = function(fn) {
+				var clean = _asSig === formSig();
+				fn();
+				if (clean) { _asSig = formSig(); }
+			};
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/buttons.sh', [ 'services' ]), '{}').then(function(out) {
+				var list = [];
+				try { list = (JSON.parse(out || '{}').services) || []; } catch (e) {}
+				if (!list.length) { return; }
+				lateFill(function() { svcSet(list); if (svcList && svcList.refreshOpts) { svcList.refreshOpts(); } });
+			});
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/notmodem.sh', [ 'scan' ]), '[]').then(function(out) {
+				var devs = [];
+				try { devs = JSON.parse(out || '[]') || []; } catch (e) {}
+				lateFill(function() { blFill(devs); });
+			});
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/setopt.sh', [ 'webreq' ]), '{}').then(function(out) {
+				var w = {};
+				try { w = JSON.parse(out || '{}') || {}; } catch (e) {}
+				webReq.value = w.value; webReq.mem_mb = w.mem_mb; webReq.done = true;
+				webReqOpt.description = webReqText(w.mem_mb);
+				var row = formNode.querySelector('[id$="-_webreq"]');
+				if (!row || !w.value) { return; }
+				lateFill(function() {
+					var inp = row.querySelector('input');
+					if (inp && !inp.value) { inp.value = String(w.value); }
+					var d = row.querySelector('.cbi-value-description');
+					if (d) { d.textContent = webReqText(w.mem_mb); }
+					row.style.display = '';
+				});
+			});
+
 			anim.root = E('div', { 'class': 'tg-set' }, [
 				E('div', { 'class': 'cbi-map' }, [ updateBlock ]),
 				tabMenu,

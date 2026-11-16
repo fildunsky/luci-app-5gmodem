@@ -733,24 +733,36 @@ function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40003, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40004, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
+		// render first: only the settings are waited for; the read marks and the phone book
+		// arrive while the page is already drawn (the list waits for the marks, see renderMain)
+		this._seenP = L.resolveDefault(sms_seen_load(), null);
+		this._bookP = L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/phonebook.user'), null);
 		return Promise.all([
 			uci.load('5gmodem'),
-			L.resolveDefault(uci.load('defmodems')),
-			sms_seen_load(),
-			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/phonebook.user'), null)
+			L.resolveDefault(uci.load('defmodems'))
 		]);
 	},
 
 	render: function(data) {
 		var self = this;
 		var main = this.renderMain(data);
-		return smssettings.tabbedPanel().then(function(panel) {
-			return E([], [ main, self.renderSettings(panel) ]);
-		}, function() { return main; });
+		// the settings form loads its own lists from the router: the block is drawn at once with
+		// placeholders and the form goes in when ready, so it never holds the page back
+		var holder = E('div', {}, [ E('span', { 'class': 'tg-skel blk', 'style': 'width:60%;margin:10px 0' }),
+			E('span', { 'class': 'tg-skel blk', 'style': 'width:40%;margin:10px 0' }) ]);
+		var sec = self.renderSettings(holder);
+		smssettings.tabbedPanel().then(function(panel) {
+			while (holder.firstChild) { holder.removeChild(holder.firstChild); }
+			holder.appendChild(panel);
+		}, function() {
+			var blk = holder.closest ? holder.closest('.tg-sms-set') : null;
+			if (blk && blk.parentNode) { blk.parentNode.removeChild(blk); }
+		});
+		return E([], [ main, sec ]);
 	},
 
 	/* ---------- settings: one collapsible block with LuCI form tabs ---------- */
@@ -800,7 +812,8 @@ return view.extend({
 				smsBook.push({ name: name, code: code });
 			});
 		};
-		loadBook(data && data[3]);
+		loadBook(null);
+		Promise.resolve(self._bookP).then(function(text) { if (text) { loadBook(text); renderAll(); } });
 		var bookName = function(raw) {
 			if (!sms_is_number(raw)) { return ''; }
 			var k = sms_dlg_key(raw);
@@ -1294,7 +1307,16 @@ return view.extend({
 
 		function emptyBox(kind) {
 			if (kind === 'loading') {
-				return E('div', { 'class': 'tg-sms-empty', 'id': 'smsEmpty', 'data-state': 'loading' }, E('div', {}, [ E('span', { 'class': 'spinning' }, [ _('Loading messages…') ]) ]));
+				// placeholder rows in the shape of the list, not a spinner in an empty box
+				var rows = [ 0, 1, 2, 3, 4 ].map(function(i) {
+					return E('div', { 'class': 'tg-sms-item tg-sms-skel', 'aria-hidden': 'true' }, [
+						E('div', { 'class': 'tg-sms-av tg-skel' }),
+						E('span', { 'class': 'tg-skel', 'style': 'width:' + [ 42, 55, 35, 48, 60 ][i] + '%' }),
+						E('span', { 'class': 'tg-skel', 'style': 'width:2.6em' }),
+						E('span', { 'class': 'tg-skel', 'style': 'grid-column:2 / span 2;width:' + [ 80, 65, 72, 58, 76 ][i] + '%' })
+					]);
+				});
+				return E('div', { 'id': 'smsEmpty', 'data-state': 'loading', 'role': 'status', 'aria-label': _('Loading messages…') }, rows);
 			}
 			if (kind === 'error') {
 				return E('div', { 'class': 'tg-sms-empty', 'id': 'smsEmpty', 'data-state': 'error' }, E('div', {}, [ icon('warn', 28),
@@ -1765,7 +1787,9 @@ return view.extend({
 			window.setTimeout(openNew, 0);
 		}
 		modemtabs.attach();
-		window.setTimeout(function() { doRefresh(true, true); }, 0);
+		// the list needs the read marks to tell new messages apart; the placeholders show meanwhile
+		S.loading = true; renderAll();
+		Promise.resolve(self._seenP).then(function() { doRefresh(true, true); });
 		// not while a deletion runs: a stick busy deleting answers the list with nothing, and the
 		// page showed "No messages" until the job ended; finish() refreshes anyway
 		poll.add(function() { return (document.hidden || S.deleting) ? Promise.resolve() : doRefresh(false); }, 15);

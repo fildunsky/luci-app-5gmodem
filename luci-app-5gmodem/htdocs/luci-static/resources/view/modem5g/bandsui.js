@@ -44,17 +44,19 @@ function _bandsOpActive() {
 }
 
 function _bandsOpStart(args, msg) {
-	if (_bandsOpActive()) { return; }
+	if (_bandsOpActive()) { return false; }
 	ctx.setModemBusy(msg);
 	_bandsAfterBusy = true;
 	_bandsOpAt = Date.now();
 	L.resolveDefault(execW('/usr/share/5gmodem/bands.sh', args), {}).then(function(res) {
 		if (!res || typeof res.code !== 'number' || res.code === 0) { return; }
 		_bandsAfterBusy = false;
+		if (args[0] === 'setcelllock') { _lockMem = null; }
 		ctx.clearModemBusy(true);
 		var why = String(res.stdout || res.stderr || '').trim();
 		ui.addNotification(null, E('p', [ _('Failed to set network mode') + (why ? ': ' + why : '') ]), 'error');
 	});
+	return true;
 }
 
 var BAND_KIND = { 'bands-lte': 'lte', 'bands-nr': 'nr', 'bands-3g': 'umts', 'bands-2g': 'gsm' };
@@ -529,9 +531,31 @@ function render5gMode(state) {
 }
 
 var _cellLockWritable = false;
+// Lock state for the Neighbour cells table: the last bands answer, else what this page just
+// sent (the bands block may be collapsed and never reload), else the uci stamp bands.sh keeps.
+var _cellLockState = null;
+var _lockMem = null;
 
 function _runBands(args, msg) {
-	_bandsOpStart(args, msg);
+	return _bandsOpStart(args, msg);
+}
+
+function _parseLock(s) {
+	var p = String(s || '').split(' ');
+	if (p[0] === 'cell' && p[1]) { return { ear: p[1], pci: p[2] }; }
+	if (p[0] === 'arfcn' && p[1]) { return { ear: p[1], pci: null }; }
+	return null;
+}
+
+function lockedCell() {
+	if (_lockMem !== null) { return _lockMem || null; }
+	if (_cellLockState !== null) { return _parseLock(_cellLockState); }
+	var st = '';
+	try {
+		var ap = (ctx.pagePath && ctx.pagePath()) || uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+		st = ap ? (uci.get('5gmodem', 'm_' + ap.replace(/[^A-Za-z0-9]/g, '_'), 'celllock') || '') : '';
+	} catch (e) {}
+	return _parseLock(st);
 }
 
 function lockCell(ear, pci) {
@@ -539,13 +563,24 @@ function lockCell(ear, pci) {
 		ui.addNotification(null, E('p', _('Cell EARFCN/PCI unknown yet - try again in a few seconds')), 'warning');
 		return;
 	}
-	_runBands([ 'setcelllock', 'cell', String(ear), String(pci) ],
-		_('Locking to cell EARFCN %s, PCI %s - the modem re-registers...').format(ear, pci));
+	if (_runBands([ 'setcelllock', 'cell', String(ear), String(pci) ],
+		_('Locking to cell EARFCN %s, PCI %s - the modem re-registers...').format(ear, pci))) {
+		_lockMem = { ear: String(ear), pci: String(pci) };
+	}
+}
+
+function unlockCell() {
+	if (_runBands([ 'setcelllock', 'off' ],
+		_('Removing the lock - the modem restarts, connection drops for a while...'))) {
+		_lockMem = false;
+	}
 }
 
 function renderCellLock(state) {
 	var _clp = String(state || '').split(' ');
 	_cellLockWritable = !!state && state !== 'Unsupported' && _clp[_clp.length - 1] !== 'readonly';
+	_cellLockState = state || null;
+	if (state && !_bandsOpActive()) { _lockMem = null; }
 	var row = document.getElementById('celllockn');
 	var cell = document.getElementById('celllock-cell');
 	if (!row || !cell) { return; }
@@ -577,15 +612,10 @@ function renderCellLock(state) {
 		return;
 	}
 
-	var run = _runBands;
-
 	if (locked || unlockable) {
 		cell.appendChild(E('button', {
 			'class': 'btn cbi-button cbi-button-reset',
-			'click': ui.createHandlerFn(this, function() {
-				return run([ 'setcelllock', 'off' ],
-					_('Removing the lock - the modem restarts, connection drops for a while...'));
-			})
+			'click': ui.createHandlerFn(this, function() { unlockCell(); })
 		}, [ (locked ? _('Unlock') : _('Reset cell lock')) ]));
 	}
 	if (!locked) {
@@ -601,8 +631,7 @@ function renderCellLock(state) {
 								_('Serving cell is unknown yet - try again in a few seconds')), 'warning');
 							return;
 						}
-						return run([ 'setcelllock', 'cell', String(ear), String(pci) ],
-							_('Locking to cell EARFCN %s, PCI %s - the modem re-registers...').format(ear, pci));
+						lockCell(ear, pci);
 					});
 			})
 		}, [ _('Lock to current cell') ]));
@@ -621,6 +650,9 @@ function renderCellLock(state) {
 			'style': 'opacity:.65; font-size:90%; margin-left:.6em'
 		}, _('(after modem restart the lock stays in effect, but the modem reports it as off)')));
 	}
+	cell.appendChild(E('div', {
+		'style': 'opacity:.65; font-size:90%; margin-top:.3em'
+	}, _('Any cell from the Neighbour cells table can be locked with the lock button in its row.')));
 	cell.appendChild(_cellLockCaNote());
 }
 
@@ -1229,7 +1261,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 40003,
+	API: 40004,
 	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
@@ -1244,6 +1276,9 @@ return baseclass.extend({
 	renderCellLock: function(st) { return renderCellLock(st); },
 	cellLockWritable: function() { return _cellLockWritable; },
 	lockCell: function(e, p) { return lockCell(e, p); },
+	unlockCell: function() { return unlockCell(); },
+	lockedCell: function() { return lockedCell(); },
+	opActive: function() { return _bandsOpActive(); },
 	render5gMode: function(st) { return render5gMode(st); },
 	renderCaEnabled: function(st) { return renderCaEnabled(st); },
 	onModemBusyCleared: onModemBusyCleared,
@@ -1269,6 +1304,6 @@ return baseclass.extend({
 		});
 		window.__hwSig = null;
 		window.setTimeout(loadBands, 300);
-		render5gMode(null); renderCaEnabled(null); renderCellLock(null);
+		render5gMode(null); renderCaEnabled(null); renderCellLock(null); _lockMem = null;
 	}
 });

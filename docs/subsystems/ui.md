@@ -66,6 +66,31 @@ The LuCI menu tree is cached in `/tmp/luci-indexcache.<hash>.json`. The hash is 
 - Alignment is hidden when `align_enabled` is empty. Statistics is shown when its flag is empty, because collection is on by default. The settings page calls the refresh hook after saving, so no reload is needed.
 - Tab visibility is computed after the first render. Calls made in the same tick share one ubus batch, and the page would otherwise wait for the slowest script.
 
+## Render first
+
+A page shows its whole layout at once and fills it in: `load()` waits only for what the layout
+itself is built from (uci, cached files, the API check), and anything that asks the router to do
+work (AT, scans, package manager, settings forms with port lists) runs after `render()`. Values
+not known yet are dashes or `.tg-skel` placeholder bars (`modem.css`, a shimmer that stops under
+`prefers-reduced-motion`). On a busy router every CGI call can take seconds, and a `load()` that
+waited for them kept the page on LuCI's "Loading view…" for 15-20 s.
+
+- SMS: the read marks and the phone book load after render; the list shows placeholder rows until
+  the first `status`/`recv` and waits for the read marks so new messages are marked right. The
+  settings block is drawn with placeholders and gets the form when `tabbedPanel()` resolves.
+- USSD: the same for its settings block (`smssettings.panel('ussd')`).
+- GPS: the map box, reading tiles and Receiver block are there before the first `status`
+  (see [gps.md](gps.md)).
+- Buttons: the header is drawn with placeholders; the button, LED and service lists fill it.
+- Settings: `load()` waits only for uci. After the form is rendered, the installed app and APN
+  database versions fill the update card (`update.sh version` reads the apk/opkg database directly
+  instead of two package manager runs), the service list (`buttons.sh services`, no subshell per
+  init script) extends the service monitor selects, the USB device list replaces the placeholders
+  of the device blacklist, and the uhttpd row appears with its value (and stays out when uhttpd is
+  not used). A value that arrives late is not a user edit: the autosave signature (`formSig`) is
+  moved along with it when the form was unchanged.
+- AT: the modem list is asked in parallel with the command files instead of after them.
+
 ## Busy overlay
 
 `modemtabs.setBusy(selector, msg[, safetyMs[, progressSec]])` and `clearBusy()` cover a block while the modem re-enumerates (30–60 s). It is used by the Network page and by eSIM. `progressSec` shows a progress bar styled like the metric bars. It fills by expected time, stops at 97%, and completes to 100% when `clearBusy` is called. Spinner and progress bar are mutually exclusive. Styles are in `modem.css`. `_busyCss` is an intentionally empty stub kept for existing callers. `5gdetail.js: setModemBusy` is the card-level variant. `pollData` clears it once registration or signal is back, but not before a minimum hold time. Right after the command, the modem still looks alive, and the next poll would have cleared the overlay too early.

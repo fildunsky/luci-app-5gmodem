@@ -51,7 +51,7 @@ function delBinding(name) {
 }
 
 var ICONS = {
-	power: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/></g>',
+	power: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/></g>',
 	trash: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/></g>',
 	plus: '<path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
 	check: '<path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
@@ -383,23 +383,18 @@ document.addEventListener('click', function() {
 
 return view.extend({
 	// the page shows no modem bar, but the menu tabs hidden by settings must stay hidden here too
-	load: function() { return Promise.all([ detect(), detectLeds(), detectServices(), L.resolveDefault(modemtabs.refreshMenuTabs()) ]); },
+	// render first: the button, LED and service lists come from the router after the page is drawn
+	load: function() { return L.resolveDefault(modemtabs.refreshMenuTabs()); },
 
-	render: function(res) {
-		var buttons = (res && res[0]) || [];
-		var leds = (res && res[1]) || [];
-		var services = (res && res[2]) || [];
-
-		var assignable = (buttons || []).filter(function(b) { return !b['default']; });
+	render: function() {
 
 		/* header card in the Network-page layout */
 		var hd = {};
-		hd.ico = E('div', { 'class': 'tginfo-signal tg-btn-ico' + (assignable.length ? '' : ' off') });
+		hd.ico = E('div', { 'class': 'tginfo-signal tg-btn-ico' });
 		hd.ico.innerHTML = svg('power', 36);
-		hd.count = E('medium', {}, '0');
-		hd.ico.appendChild(hd.count);
-		hd.main = E('div', { 'class': 'tginfo-op tg-btn-main' }, '');
-		hd.add = E('div', { 'class': 'tg-btn-add' });
+		hd.main = E('div', { 'class': 'tginfo-op tg-btn-main' }, E('span', { 'class': 'tg-skel', 'style': 'width:14em' }));
+		hd.add = E('div', { 'class': 'tg-btn-add' }, [ E('span', { 'class': 'tg-skel', 'style': 'width:7em;height:2em' }),
+			E('span', { 'class': 'tg-skel', 'style': 'width:7em;height:2em;margin-left:8px' }) ]);
 		var head = E('div', { 'class': 'cbi-section tg-pg-head tg-btn-head' }, [
 			E('h3', { 'class': 'tg-pg-title tg-btn-title' }, E('span', {}, _('Buttons'))),
 			E('div', { 'class': 'tginfo-general' }, [
@@ -414,53 +409,59 @@ return view.extend({
 			])
 		]);
 		var body = E('div', { 'class': 'tg-btn' }, [ head ]);
+		Promise.all([ L.resolveDefault(detect(), []), L.resolveDefault(detectLeds(), []), L.resolveDefault(detectServices(), []) ])
+			.then(function(res) { fill(res[0] || [], res[1] || [], res[2] || []); });
+		return body;
 
-		if (!assignable.length) {
-			hd.main.textContent = _('No assignable buttons were detected on this device');
-			return body;
-		}
-
-		var list = E('div', { 'class': 'tg-btn-list' });
-		body.appendChild(list);
-
-		var CFG_KEYS = [ 'cmd_pressed', 'cmd_released', 'ct_pressed', 'ct_released',
-			'leds_pressed', 'leds_released', 'ledson_pressed', 'ledsoff_pressed',
-			'ledson_released', 'ledsoff_released' ];
-		function isConfigured(b) {
-			return CFG_KEYS.some(function(k) { return b[k] && b[k] !== ''; });
-		}
-
-		var shown = {};
-		function addCard(b) {
-			shown[b.name] = true;
-			list.appendChild(renderButton(b, leds, services, function(name) { shown[name] = false; refreshAdd(); }));
-			refreshAdd();
-		}
-		function refreshAdd() {
-			var n = assignable.filter(function(b) { return shown[b.name]; }).length;
-			hd.count.textContent = n + ' / ' + assignable.length;
-			hd.main.textContent = _('%d of %d buttons configured').format(n, assignable.length);
-			hd.ico.classList.toggle('off', n === 0);
-			hd.add.innerHTML = '';
-			var avail = assignable.filter(function(b) { return !shown[b.name]; });
-			if (!avail.length) {
-				hd.add.appendChild(E('em', { 'class': 'tg-btn-muted' },
-					_('All buttons of this device have been added')));
+		function fill(buttons, leds, services) {
+			var assignable = (buttons || []).filter(function(b) { return !b['default']; });
+			hd.ico.classList.toggle('off', !assignable.length);
+			if (!assignable.length) {
+				hd.main.textContent = _('No assignable buttons were detected on this device');
+				hd.add.innerHTML = '';
 				return;
 			}
-			avail.forEach(function(b) {
-				var btn = E('button', {
-					'class': 'cbi-button cbi-button-add', 'type': 'button',
-					'title': b.name + (b.type === 'switch' ? ' · ' + _('switch') : ''),
-					'click': function() { addCard(b); }
-				}, [ icon('plus', 14), E('span', {}, [ b.label || b.name ]) ]);
-				hd.add.appendChild(btn);
-			});
-		}
 
-		assignable.forEach(function(b) { if (isConfigured(b)) { addCard(b); } });
-		refreshAdd();
-		return body;
+			var list = E('div', { 'class': 'tg-btn-list' });
+			body.appendChild(list);
+
+			var CFG_KEYS = [ 'cmd_pressed', 'cmd_released', 'ct_pressed', 'ct_released',
+				'leds_pressed', 'leds_released', 'ledson_pressed', 'ledsoff_pressed',
+				'ledson_released', 'ledsoff_released' ];
+			function isConfigured(b) {
+				return CFG_KEYS.some(function(k) { return b[k] && b[k] !== ''; });
+			}
+
+			var shown = {};
+			function addCard(b) {
+				shown[b.name] = true;
+				list.appendChild(renderButton(b, leds, services, function(name) { shown[name] = false; refreshAdd(); }));
+				refreshAdd();
+			}
+			function refreshAdd() {
+				var n = assignable.filter(function(b) { return shown[b.name]; }).length;
+				hd.main.textContent = _('%d of %d buttons configured').format(n, assignable.length);
+				hd.ico.classList.toggle('off', n === 0);
+				hd.add.innerHTML = '';
+				var avail = assignable.filter(function(b) { return !shown[b.name]; });
+				if (!avail.length) {
+					hd.add.appendChild(E('em', { 'class': 'tg-btn-muted' },
+						_('All buttons of this device have been added')));
+					return;
+				}
+				avail.forEach(function(b) {
+					var btn = E('button', {
+						'class': 'cbi-button cbi-button-add', 'type': 'button',
+						'title': b.name + (b.type === 'switch' ? ' · ' + _('switch') : ''),
+						'click': function() { addCard(b); }
+					}, [ icon('plus', 14), E('span', {}, [ b.label || b.name ]) ]);
+					hd.add.appendChild(btn);
+				});
+			}
+
+			assignable.forEach(function(b) { if (isConfigured(b)) { addCard(b); } });
+			refreshAdd();
+		}
 	},
 
 	handleSaveApply: null,
