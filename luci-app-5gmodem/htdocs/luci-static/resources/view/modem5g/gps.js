@@ -154,7 +154,7 @@ var SRC_CHIP = { at: 'AT', nmea: 'NMEA', qmi: 'QMI', ugps: 'ugps', mm: 'MM', usb
 
 return view.extend({
 	load: function() {
-		return fresh.check(40002, [ modemtabs, mutil ]).then(function() {
+		return fresh.check(40003, [ modemtabs, mutil ]).then(function() {
 			return L.resolveDefault(uci.load('5gmodem'));
 		});
 	},
@@ -495,6 +495,8 @@ return view.extend({
 				var has = j.lat !== null && j.lat !== undefined && j.lat !== '';
 				st.map = lf.map(mp.lf, { 'zoomControl': true, 'crs': styleOf(mapKey).crs === 3395 ? lf.CRS.EPSG3395 : lf.CRS.EPSG3857 })
 					.setView(has ? [ +j.lat, +j.lon ] : [ 0, 0 ], has ? 16 : 2);
+				// no "Leaflet" link and flag in the corner; the tile provider credit stays
+				if (st.map.attributionControl) { st.map.attributionControl.setPrefix(false); }
 				setMapStyle(mapKey, false);
 				st.line = lf.polyline(st.track, { 'color': '#1e88e5', 'weight': 3 }).addTo(st.map);
 				var Ctl = lf.Control.extend({

@@ -92,6 +92,11 @@ AP-side AT port (interface 3, `ttyUSB1` here). Everything else it forwards to th
   (signed degrees); `_fm_urc_read` passes it on as `$PELCSLOC,...` and `gnss_parse_nmea` uses it
   for the position, altitude, HDOP and time only when the sentences gave none. A field report with
   a working antenna shows a 3D fix with 57 satellites in view from the same command sequence.
+- **Receiver power drops by itself.** The module now and then switches the receiver off
+  (`+GTGPSPOWER: 0`) without a request (a field report). "Turn GNSS on" stores `gps_on=1` for the
+  modem ("Turn GNSS off" deletes it; a receiver seen on is stored too), and `status` switches the
+  receiver back on when it finds it off while `gps_on=1`: at most once a minute
+  (`gnss_fmrevive_<sec>` marker), with a syslog line either way.
 - `AT+GTGPSDELAID=0/1/2` (cold/warm/hot) answers `OK`; `AT+GTGPSDELAID=?` gives `ERROR`.
 - Undocumented, read-only, seen on this build: `AT+GTGPSCFG?` (`2,<n>` matches `GnssMode` in the
   module's `MNL_Config.xml`, 6 = GPS+GLONASS+Galileo+BeiDou).
@@ -304,6 +309,9 @@ button; the rest of the page works without it. "Keep the position in the center"
 are a Leaflet control on the map (`leaflet-bar tg-gps-ctl`); dragging the map turns following off.
 On a dark theme (light page text, the same test as `isDarkUI` in `netpri.js`) the tile layer is
 dimmed with a CSS filter; the track and marker keep their colours.
+
+The attribution corner shows only the tile provider's credit: the "Leaflet" prefix (link and
+flag) is removed with `attributionControl.setPrefix(false)`.
 
 Tiles come from OpenStreetMap (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) with attribution,
 or from `gps_tiles` (an `https://` template with `{z}`, `{x}`, `{y}`). The browser loads the tiles,

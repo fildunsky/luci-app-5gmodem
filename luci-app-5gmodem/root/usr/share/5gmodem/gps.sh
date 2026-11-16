@@ -828,6 +828,21 @@ utc=$(date -u -d "@$((_um / 1000))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
 				esac
 			fi
 		elif [ "$_fam:${_vp%%:*}" = fibocom:0e8d ]; then
+			# the receiver was switched on here and the modem turned it off by itself: on again,
+			# at most once a minute, so a module that refuses is not asked on every poll
+			_fr="$TD/gnss_fmrevive_$_K"
+			# switched on before this check existed (or from the AT console): remember it now
+			[ "$_st" = on ] && ! _qwant && _qwant_set 1
+			if [ "$_st" = off ] && _qwant && [ -n "$_atp" ] \
+			   && { [ ! -f "$_fr" ] || [ -n "$(find "$_fr" -mmin +0 2>/dev/null)" ]; }; then
+				: > "$_fr"
+				if _fibo_on; then
+					_st=on
+					logger -t 5gmodem "gps: the modem switched the receiver off (GTGPSPOWER 0), switched it back on"
+				else
+					logger -t 5gmodem "gps: the modem switched the receiver off and refused to switch it back on"
+				fi
+			fi
 			# never hunt for an NMEA port here: the other ttys are AT/debug ports of the same module,
 			# and a raw read without the lock would eat answers meant for other pollers
 			if [ "$_st" = on ] && _d=$(_fm_urc_read 2 | gnss_parse_nmea) && [ "$(_kv "$_d" fix)" != "" ]; then
@@ -876,6 +891,17 @@ _reply() { printf '{"ok":%s,"msg":%s}\n' "$1" "$(_str "$2")"; }
 _at_raw() { AT_QUERY_RAW=1; _ar_o=$(_at "$1" "${2:-10}"); AT_QUERY_RAW=""; printf '%s\n' "$_ar_o"; }
 _send_ok() { _at_raw "$1" | grep -q '^OK'; }
 
+_fibo_on() {
+	_at 'AT+GTGPSSWITCH?' | grep -q 'GTGPSSWITCH: *0' && _send_ok 'AT+GTGPSSWITCH=1'
+	# FM350 builds ship GNSS_CFG_ENABLE=false in the modem's gnss_adpd.conf: GTGPSPOWER=1 is
+	# then refused ("gnss feature disabled") until the MTK AT+ELCSGNSSENABLE=1 turns it on
+	_send_ok 'AT+GTGPSPOWER=1' || { _at 'AT+ELCSGNSSENABLE=1' >/dev/null; _send_ok 'AT+GTGPSPOWER=1'; } || false
+	_fo_rc=$?
+	# NMEA comes as URCs on this AT port: keep them off between reads (_fm_urc_read)
+	[ "${_vp%%:*}" = 0e8d ] && _at 'AT+ELCSNMEACFG=0' >/dev/null
+	[ "$_fo_rc" = 0 ]
+}
+
 _power() {
 	_c=$(_caps); _use_gnss_atp "$_c"; _fam=$(_kv "$_c" fam)
 	[ "$(_kv "$_c" sup)" = 1 ] || { _reply 0 "not supported"; return; }
@@ -921,15 +947,13 @@ _power() {
 		meig:on)     _send_ok 'AT+GPSRUN' || { _at 'AT+GPSCFG="outport",1' >/dev/null; _send_ok 'AT+GPSRUN=0,30,100,0,1'; } ;;
 		meig:off)    _send_ok 'AT+GPSSTOP' ;;
 		fibocom:on)
-			_at 'AT+GTGPSSWITCH?' | grep -q 'GTGPSSWITCH: *0' && _send_ok 'AT+GTGPSSWITCH=1'
-			# FM350 builds ship GNSS_CFG_ENABLE=false in the modem's gnss_adpd.conf: GTGPSPOWER=1 is
-			# then refused ("gnss feature disabled") until the MTK AT+ELCSGNSSENABLE=1 turns it on
-			_send_ok 'AT+GTGPSPOWER=1' || { _at 'AT+ELCSGNSSENABLE=1' >/dev/null; _send_ok 'AT+GTGPSPOWER=1'; } || false
-			_rc0=$?
-			# NMEA comes as URCs on this AT port: keep them off between reads (_fm_urc_read)
-			[ "${_vp%%:*}" = 0e8d ] && _at 'AT+ELCSNMEACFG=0' >/dev/null
-			[ "$_rc0" = 0 ] ;;
-		fibocom:off) _send_ok 'AT+GTGPSPOWER=0' ;;
+			# FM350 drops the receiver power on its own now and then: the choice is kept, and the
+			# next status poll switches it back on (_status)
+			[ "${_vp%%:*}" = 0e8d ] && _qwant_set 1
+			_fibo_on ;;
+		fibocom:off)
+			[ "${_vp%%:*}" = 0e8d ] && _qwant_set 0
+			_send_ok 'AT+GTGPSPOWER=0' ;;
 		foxconn:on|foxconn:off)
 			# the setting is stored in the modem and takes a modem restart; ports come back after it
 			[ "$1" = on ] && _v=1 || _v=0

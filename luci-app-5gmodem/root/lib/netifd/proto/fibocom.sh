@@ -120,8 +120,8 @@ _fibocom_v6() {
 
 # Unisoc-based Fibocom modules (2cb7:0a04-0a07) in ECM/NCM/RNDIS mode: the module is a small
 # router of its own. The data call on the host port is made with AT+GTRNDIS and the address comes
-# from the module's DHCP server (udhcpc stays running, so the lease is renewed and a new address
-# is taken); the operator address from +CGPADDR does not work on the netdev.
+# from the module's DHCP server (a dhcp child interface <iface>_4 renews the lease and takes a
+# new address); the operator address from +CGPADDR does not work on the netdev.
 # See docs/modems/fibocom.md#unisoc-modules-gtrndis.
 _uni_state() {
 	sms_tool -d "$1" at "AT+GTRNDIS?" 2>/dev/null | tr -d '\r' \
@@ -558,11 +558,21 @@ proto_fibocom_setup() {
 		_fib_unlock
 		ip link set "$netdev" up 2>/dev/null
 		echo "fibocom[$$] Unisoc: data call up (AT+GTRNDIS), taking the address from the module over DHCP on $netdev"
-		# the stock DHCP client script reports the address, routes and DNS to netifd and
-		# follows renewals and address changes
-		proto_export "INTERFACE=$interface"
-		proto_run_command "$interface" udhcpc -p "/var/run/udhcpc-$netdev.pid" \
-			-s /lib/netifd/dhcp.script -f -t 0 -i "$netdev"
+		# This proto has no device of its own (no_device=1), so netifd rejects a DHCP update
+		# without an ifname (the stock dhcp.script sends "*"): hand the netdev to netifd first,
+		# then a dhcp child interface takes the module's lease and follows renewals.
+		proto_init_update "$netdev" 1
+		proto_send_update "$interface"
+		local zone4
+		zone4=$(_fibocom_fwzone "$interface")
+		json_init
+		json_add_string name "${interface}_4"
+		json_add_string ifname "@$interface"
+		json_add_string proto "dhcp"
+		proto_add_dynamic_defaults
+		[ -n "$zone4" ] && json_add_string zone "$zone4"
+		json_close_object
+		ubus call network add_dynamic "$(json_dump)"
 		# dual stack: the module announces the IPv6 prefix on the same netdev
 		_fibocom_v6 "$interface" "$uni_ctx" "$sourcefilter"
 		return 0

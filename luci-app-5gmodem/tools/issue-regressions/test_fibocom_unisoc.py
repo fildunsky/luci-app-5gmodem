@@ -93,7 +93,16 @@ class FibocomUnisoc(unittest.TestCase):
     def test_setup_watcher_and_page_know_the_family(self):
         proto = PROTO.read_text()
         self.assertIn('2cb7:0a04|2cb7:0a05|2cb7:0a06|2cb7:0a07) IS_UNI=1', proto)
-        self.assertIn('-s /lib/netifd/dhcp.script -f -t 0 -i "$netdev"', proto)
+        # no_device=1: netifd rejects dhcp.script updates without an ifname, so the netdev is
+        # handed over first and a dhcp child interface takes the lease
+        self.assertNotIn('udhcpc -p', proto)
+        uni = proto[proto.index('if [ "$IS_UNI" = 1 ]; then\n\t\tif ! _uni_dial'):]
+        uni = uni[:uni.index('return 0')]
+        self.assertLess(uni.index('proto_init_update "$netdev" 1'), uni.index('proto_send_update "$interface"'))
+        self.assertLess(uni.index('proto_send_update "$interface"'), uni.index('json_add_string name "${interface}_4"'))
+        self.assertIn('json_add_string ifname "@$interface"', uni)
+        self.assertIn('json_add_string proto "dhcp"', uni)
+        self.assertIn('ubus call network add_dynamic', uni)
         self.assertIn('proto_config_add_string "ippass"', proto)
         # dual stack: the same dhcpv6 child interface as the other modems of this proto
         self.assertIn('_fibocom_v6 "$interface" "$uni_ctx" "$sourcefilter"', proto)

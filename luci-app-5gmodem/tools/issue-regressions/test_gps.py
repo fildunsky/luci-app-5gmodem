@@ -352,6 +352,19 @@ qmicli_p() {
         r, sent = self.run_gps('413c:81b6', {'AT!GPSSTATUS?': 'Current time: 2026 11 14'}, 'caps')
         self.assertEqual(json.loads(r.stdout)['family'], 'sierra')
 
+    def test_fm350_receiver_switched_back_on(self):
+        # field report: FM350 drops the GNSS power by itself; the receiver was switched on here
+        ans = {'AT+GTGPSPOWER?': '+GTGPSPOWER: 0', 'AT+GTGPSSWITCH?': '+GTGPSSWITCH: 1', 'AT+GTGPSPOWER=1': 'OK'}
+        r, sent = self.run_gps('0e8d:7127', ans, 'status', uci='\t*gps_on) echo 1 ;;\n')
+        self.assertEqual(json.loads(r.stdout)['state'], 'on', r.stdout)
+        self.assertIn('AT+GTGPSPOWER=1', sent)
+        # not switched on by the user: left off
+        r, sent = self.run_gps('0e8d:7127', ans, 'status')
+        self.assertEqual(json.loads(r.stdout)['state'], 'off')
+        self.assertNotIn('AT+GTGPSPOWER=1', sent)
+        gps = GPS.read_text() if hasattr(GPS, 'read_text') else open(GPS).read()
+        self.assertIn('-mmin +0', gps[gps.index('gnss_fmrevive_'):][:400])  # once a minute at most
+
     def test_foxconn_power_on_accepts_setting_success_without_ok(self):
         # T77W968 answers "Setting success! Module would reboot..." and may restart before "OK"
         ans = {'AT+GPS?': 'AT+GPS? :  GPS is Disable, GPS HW Key pull up',

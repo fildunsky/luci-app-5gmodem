@@ -118,9 +118,12 @@ For this family `proto_fibocom_setup` therefore:
 
 - sets context 1 (`AT+CGDCONT=1`), then `AT+GTRNDIS=0,1` and `AT+GTRNDIS=1,1`, and waits until
   `AT+GTRNDIS?` reports state 1; a live call with the same APN is reused;
-- starts `udhcpc` on the netdev as the interface's own process with the stock
-  `/lib/netifd/dhcp.script`: it reports the address, gateway and DNS to netifd, renews the lease
-  and takes a new address when the module hands one out;
+- hands the netdev to netifd (`proto_init_update <netdev> 1`) and adds a dynamic `dhcp` child
+  interface `<iface>_4` (`ifname @<iface>`, the parent's firewall zone): it takes the address,
+  gateway and DNS from the module, renews the lease and takes a new address when the module hands
+  one out. Running the stock `dhcp.script` as the parent's own process does not work: the
+  protocol has no device of its own (`no_device=1`), and netifd answers "Invalid argument" to an
+  update without an ifname (a field report on 4.0.1/4.0.2: lease obtained, interface stayed down);
 - with a dual-stack or IPv6 context (PDP type of context 1 contains `V6`) adds the same
   `<iface>_6` dhcpv6 child interface as for the other modems of this protocol; whether the module
   announces a prefix on the netdev depends on its firmware;

@@ -265,7 +265,7 @@ function toolBtn(cls, label, fn) {
 }
 
 return baseclass.extend({
-	API: 40002,
+	API: 40003,
 
 	prepare: function(root) {
 		var mib = root.querySelector('#modem-info-block');

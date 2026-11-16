@@ -685,7 +685,7 @@ function tileEl(name, foot, bar) {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40002, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40003, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
