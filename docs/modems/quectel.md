@@ -123,3 +123,23 @@ The PCI metric and band profiles already cover this ID. Issue #69 instead reache
 ### Failed AT transport on 5G profiles
 
 Band and LTE cell-lock writes can fail before the modem receives them, for example when the selected AT port is unavailable. The 5G profile checks the command exit status so a transport failure is not reported as a successful write or followed by the cell-lock reconnect.
+
+### EM160R-GL network controls
+
+The EM160R profile offers Auto (WCDMA + LTE), 3G-only and LTE-only through
+`AT+QNWPREFCFG="mode_pref"`. The module AT manual documents these three values.
+LTE cell locking uses `AT+QNWLOCK="common/4g",1,<earfcn>,<pci>` and unlock uses
+`,0`. A firmware that does not answer the lock query exposes no lock control.
+Transport failures and modem errors are returned as failed writes.
+
+Field reports confirm LTE locking on this model, including a firmware where locking
+one cell reduced carrier aggregation. The UI selects one EARFCN/PCI pair. Lock
+persistence across modem restarts is firmware dependent.
+
+The `2c7c:0512` variant selects these controls when discovery identifies the product
+as EM160R-GL. Other models sharing that USB ID retain their existing profile.
+
+Both EM160R metric paths also try `AT+QRSRQ` after valid `AT+QRSRP` readings.
+Per-chain RSRQ is displayed only for valid values with matching reported RAT.
+Support for this command on EM160R firmware has not been confirmed on hardware or
+in the local field-report corpus. Unsupported or malformed replies leave RSRP intact.

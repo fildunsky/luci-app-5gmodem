@@ -29,3 +29,66 @@ setbands() {
 
 	[ -n "$T" ] && sms_tool -d $_DEVICE at "at+qnwprefcfg=\"lte_band\",$T"
 }
+
+getcelllock() {
+	_gcl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\"" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+QNWLOCK: *"common\/4g", *//p' | head -1)
+	[ -n "$_gcl_o" ] || { echo "Unsupported"; return; }
+	_gcl_n=$(echo "$_gcl_o" | awk -F, '{gsub(/ /,"",$1); print $1}')
+	case "$_gcl_n" in
+		''|*[!0-9]*) echo "Unsupported"; return ;;
+		0) echo "off"; return ;;
+	esac
+	_gcl_ar=$(echo "$_gcl_o" | awk -F, '{gsub(/ /,"",$2); print $2}')
+	_gcl_pc=$(echo "$_gcl_o" | awk -F, '{gsub(/ /,"",$3); print $3}')
+	case "$_gcl_ar" in ''|*[!0-9]*) echo "off"; return ;; esac
+	case "$_gcl_pc" in ''|*[!0-9]*) echo "off"; return ;; esac
+	echo "cell $_gcl_ar $_gcl_pc"
+}
+
+setcelllock() {
+	case "$1" in
+		off)
+			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",0" 2>&1); _scl_rc=$?
+			;;
+		cell)
+			case "$2" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			case "$3" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			[ "$2" -le 262143 ] && [ "$3" -le 503 ] || { echo "Unsupported"; return 1; }
+			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",1,$2,$3" 2>&1); _scl_rc=$?
+			;;
+		arfcn)
+			echo "Unsupported"; return 1 ;;
+		*) return 1 ;;
+	esac
+	case "$_scl_o" in *ERROR*) _scl_rc=1 ;; esac
+	if [ "$_scl_rc" != 0 ]; then
+		logger -t 5gmodem "celllock: QNWLOCK failed (sms_tool exit $_scl_rc): $(echo "$_scl_o" | tr -d '\r' | tr '\n' ' ' | head -c 120)"
+		echo "Unsupported"; return 1
+	fi
+	return 0
+}
+
+getsupportedmodes() {
+	echo "0:Auto 1:3G 2:4G"
+}
+
+getmode() {
+	_gm=$(sms_tool -d "$_DEVICE" at 'at+qnwprefcfg="mode_pref"' 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+QNWPREFCFG: *"mode_pref", *//p' | head -1 | tr -d ' "')
+	case "$_gm" in
+		AUTO|WCDMA:LTE|LTE:WCDMA) echo 0 ;;
+		WCDMA) echo 1 ;;
+		LTE) echo 2 ;;
+	esac
+}
+
+setmode() {
+	case "$1" in
+		0) _sm_word=AUTO ;;
+		1) _sm_word=WCDMA ;;
+		2) _sm_word=LTE ;;
+		*) echo "Unsupported"; return 1 ;;
+	esac
+	sms_tool -d "$_DEVICE" at "at+qnwprefcfg=\"mode_pref\",$_sm_word"
+}
