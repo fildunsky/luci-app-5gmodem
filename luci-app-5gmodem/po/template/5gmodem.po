@@ -1903,3 +1903,15 @@ msgstr ""
 
 msgid "Lock"
 msgstr ""
+
+msgid "Factory password"
+msgstr ""
+
+msgid "Empty password"
+msgstr ""
+
+msgid "Custom password"
+msgstr ""
+
+msgid "Could not save the modem web password."
+msgstr ""

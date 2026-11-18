@@ -49,6 +49,52 @@ def one_liner(name):
 
 
 class HilinkPollContext(unittest.TestCase):
+    def test_web_password_default_empty_and_custom(self):
+        command = (SHARE / 'modemswitch.sh').read_text().split('\nwebpass)\n', 1)[1].split('\n\t;;', 1)[0]
+        command = command.replace('/tmp/5gmodem/', '"$CACHE_DIR"/')
+        helpers = '\n'.join([one_liner('_hl_path'), one_liner('_web_pass'), one_liner('_web_user'),
+                             function('_web_opt', 'hilink.sh'), function('_web_set', 'hilink.sh')])
+        stub = '''
+CFG=5gmodem
+uci() {
+    shift
+    case "$1:$2" in
+        get:5gmodem.@5gmodem\\[0\\].active_modem) echo 1-1 ;;
+        get:5gmodem.m_1_1) echo modem ;;
+        get:*) cat "$CACHE_DIR/$2" 2>/dev/null ;;
+        set:*) printf '%s' "${2#*=}" > "$CACHE_DIR/${2%%=*}" ;;
+        delete:*) rm -f "$CACHE_DIR/$2" ;;
+        commit:*) : ;;
+    esac
+}
+'''
+        actions = '''
+read_auth() {
+    printf '<%s>|<%s> ' "$(_web_user)" "$(_web_pass)"
+    if _web_set; then echo configured; else echo factory; fi
+}
+touch "$CACHE_DIR"/tendaauth_192_168_8_1_1_1.fail "$CACHE_DIR"/tendaauth_192_168_8_1_1_2.fail
+read_auth
+webpass webpass 1-1 empty
+test ! -e "$CACHE_DIR"/tendaauth_192_168_8_1_1_1.fail || exit 1
+test -e "$CACHE_DIR"/tendaauth_192_168_8_1_1_2.fail || exit 1
+(webpass webpass 1-1 get)
+read_auth
+webpass webpass 1-1 set 'synthetic password'
+read_auth
+webpass webpass 1-1 set ''
+read_auth
+'''
+        with tempfile.TemporaryDirectory() as cache:
+            script = stub + helpers + '\nwebpass() {\n' + command + '\n}\n' + actions
+            result = shell(script, dict(os.environ, CACHE_DIR=cache))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), [
+            '<admin>|<admin> factory', '{"ok":1}', '{"set":1}', '<admin>|<> configured',
+            '{"ok":1}', '<admin>|<synthetic password> configured', '{"ok":1}',
+            '<admin>|<admin> factory',
+        ])
+
     def run_sh(self, body):
         with tempfile.TemporaryDirectory() as cache:
             source = STUBS + '\n'.join([one_liner(n) for n in ONE_LINERS]

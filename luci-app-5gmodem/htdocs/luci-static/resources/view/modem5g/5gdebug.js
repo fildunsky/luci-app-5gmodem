@@ -242,7 +242,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40006, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40007, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1190,24 +1190,37 @@ return view.extend({
 			return uci.get('5gmodem', sc, 'kind') === 'hilink';
 		})();
 		if (webPassHl) {
-		o = s.taboption('ports', form.Value, '_web_pass', _('Modem web password'),
-			_('The password of the modem\'s own web interface (user admin). With it the router reads signal, battery, SMS and can reboot the modem. Empty means admin, the factory password of most such modems.'));
-		o.password = true;
-		o.placeholder = 'admin';
-		o.rmempty = false;
-		o.write = function(section_id, value) {
-			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
-			if (!p) { return; }
-			return fs.exec('/usr/share/5gmodem/modemswitch.sh',
-				[ 'webpass', String(p), 'set', String(value || '') ]).catch(function() {});
-		};
-		o.load = function() {
-			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
-			if (!p) { return ''; }
-			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
-			return uci.get('5gmodem', sec, 'web_pass') || '';
-		};
-		o.remove = function(section_id) { return this.write(section_id, ''); };
+			var webPassSection = 'm_' + activePath.replace(/[^A-Za-z0-9]/g, '_');
+			var webPass = uci.get('5gmodem', webPassSection, 'web_pass_empty') === '1'
+				? '' : (uci.get('5gmodem', webPassSection, 'web_pass') || undefined);
+			var saveWebPass = function(action, value) {
+				return fs.exec_direct('/usr/share/5gmodem/modemswitch.sh',
+					[ 'webpass', activePath, action, value == null ? '' : value ]).then(function(out) {
+					if (!JSON.parse(out || '{}').ok) { throw new Error(_('Could not save the modem web password.')); }
+					webPass = action === 'empty' ? '' : (value || undefined);
+				});
+			};
+			o = s.taboption('ports', ListDropdown, '_web_pass_mode', _('Modem web password'));
+			o.value('default', _('Factory password'));
+			o.value('empty', _('Empty password'));
+			o.value('custom', _('Custom password'));
+			o.rmempty = false;
+			o.load = function() {
+				return webPass == null ? 'default' : (webPass === '' ? 'empty' : 'custom');
+			};
+			o.write = function(section_id, value) {
+				if (value === 'default') { return saveWebPass('set', ''); }
+				if (value === 'empty') { return saveWebPass('empty'); }
+			};
+			o.remove = function() {};
+
+			o = s.taboption('ports', form.Value, '_web_pass', _('Custom password'));
+			o.depends('_web_pass_mode', 'custom');
+			o.password = true;
+			o.rmempty = false;
+			o.load = function() { return webPass || ''; };
+			o.write = function(section_id, value) { return saveWebPass('set', value); };
+			o.remove = function() {};
 		}
 		if (atDebugHl) {
 		o = s.taboption('expert', form.Flag, '_at_debug', _('AT ports (debug mode)'),
@@ -1809,7 +1822,7 @@ return view.extend({
 				E('pre', { 'id': 'preout', 'class': 'tg-code-body' }, [])
 			])
 		], !(window.matchMedia && window.matchMedia(PHONE_MQ).matches));
-		var _instant = { '_web_pass': 1, '_roaming': 1, '_ipwatch': 1, '_ippass': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
+		var _instant = { '_roaming': 1, '_ipwatch': 1, '_ippass': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
 		var _instLast = {};
 		(s.children || []).forEach(function(o) {
 			if (!o || !_instant[o.option]) { return; }

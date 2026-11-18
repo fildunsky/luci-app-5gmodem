@@ -7489,3 +7489,15 @@ msgstr "解鎖"
 
 msgid "Lock"
 msgstr "鎖定"
+
+msgid "Factory password"
+msgstr "出廠密碼"
+
+msgid "Empty password"
+msgstr "空密碼"
+
+msgid "Custom password"
+msgstr "自訂密碼"
+
+msgid "Could not save the modem web password."
+msgstr "無法儲存數據機的網頁密碼。"

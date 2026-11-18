@@ -1121,19 +1121,36 @@ webpass)
 	uci -q get "$CFG.$_wp_sec" >/dev/null 2>&1 || { echo '{"error":"no section"}'; exit 0; }
 	case "$3" in
 		get)
-			if [ -n "$(uci -q get "$CFG.$_wp_sec.web_pass")" ]; then echo '{"set":1}'; else echo '{"set":0}'; fi
-			exit 0 ;;
-		set)
-			_wp_v="$4"
-			if [ -z "$_wp_v" ]; then
-				uci -q delete "$CFG.$_wp_sec.web_pass" 2>/dev/null
+			if [ "$(uci -q get "$CFG.$_wp_sec.web_pass_empty")" = 1 ] ||
+			   [ -n "$(uci -q get "$CFG.$_wp_sec.web_pass")" ]; then
+				echo '{"set":1}'
 			else
-				uci -q set "$CFG.$_wp_sec.web_pass=$_wp_v"
+				echo '{"set":0}'
 			fi
-			uci -q commit "$CFG"
-			rm -f /tmp/5gmodem/hilink_*.fail /tmp/5gmodem/tendaauth_* /tmp/5gmodem/ztestok_* /tmp/5gmodem/tendaapi_* 2>/dev/null
+			exit 0 ;;
+		set|empty)
+			_wp_v="$4"
+			if [ "$3" = empty ]; then
+				uci -q set "$CFG.$_wp_sec.web_pass_empty=1" || exit 1
+				uci -q delete "$CFG.$_wp_sec.web_pass" 2>/dev/null || :
+			else
+				if [ -n "$_wp_v" ]; then
+					uci -q set "$CFG.$_wp_sec.web_pass=$_wp_v" || exit 1
+				else
+					uci -q delete "$CFG.$_wp_sec.web_pass" 2>/dev/null || :
+				fi
+				uci -q delete "$CFG.$_wp_sec.web_pass_empty" 2>/dev/null || :
+			fi
+			uci -q commit "$CFG" || exit 1
+			_wp_key=${_wp_sec#m_}
+			for _wp_prefix in hilink tendaauth ztestok tendaapi asrsid; do
+				rm -f /tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key" \
+					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".fail \
+					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".sid \
+					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".who 2>/dev/null
+			done
 			echo '{"ok":1}' ;;
-		*) echo '{"error":"usage: webpass <path> get|set [password]"}' ;;
+		*) echo '{"error":"usage: webpass <path> get|empty|set [password]"}' ;;
 	esac
 	;;
 

@@ -7489,3 +7489,15 @@ msgstr "Bỏ khóa"
 
 msgid "Lock"
 msgstr "Khóa"
+
+msgid "Factory password"
+msgstr "Mật khẩu mặc định"
+
+msgid "Empty password"
+msgstr "Mật khẩu trống"
+
+msgid "Custom password"
+msgstr "Mật khẩu tùy chỉnh"
+
+msgid "Could not save the modem web password."
+msgstr "Không lưu được mật khẩu web của modem."

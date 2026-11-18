@@ -7489,3 +7489,15 @@ msgstr "Lepas"
 
 msgid "Lock"
 msgstr "Kunci"
+
+msgid "Factory password"
+msgstr "Kata sandi bawaan"
+
+msgid "Empty password"
+msgstr "Kata sandi kosong"
+
+msgid "Custom password"
+msgstr "Kata sandi khusus"
+
+msgid "Could not save the modem web password."
+msgstr "Gagal menyimpan kata sandi web modem."

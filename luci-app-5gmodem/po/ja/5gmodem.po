@@ -7489,3 +7489,15 @@ msgstr "固定解除"
 
 msgid "Lock"
 msgstr "ロック"
+
+msgid "Factory password"
+msgstr "初期パスワード"
+
+msgid "Empty password"
+msgstr "空のパスワード"
+
+msgid "Custom password"
+msgstr "カスタムパスワード"
+
+msgid "Could not save the modem web password."
+msgstr "モデムのWebパスワードを保存できませんでした。"

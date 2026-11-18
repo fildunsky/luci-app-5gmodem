@@ -270,17 +270,20 @@ _human() {
 conn_up() { [ "$1" = "901" ]; }
 
 _web_opt() {
-	_wo=$(uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
-		| sed 's/[^A-Za-z0-9]/_/g').$2")
-	printf '%s' "${_wo:-admin}"
+	local section="$CFG.m_$(_hl_path "$1" | sed 's/[^A-Za-z0-9]/_/g')" value
+	if [ "$2" = web_pass ] && [ "$(uci -q get "$section.web_pass_empty")" = 1 ]; then
+		return 0
+	fi
+	value=$(uci -q get "$section.$2") || value=''
+	printf '%s' "${value:-admin}"
 }
 
 _web_user() { _web_opt "$1" web_user; }
 _web_pass() { _web_opt "$1" web_pass; }
 
 _web_set() {
-	uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
-		| sed 's/[^A-Za-z0-9]/_/g').web_pass" >/dev/null
+	local section="$CFG.m_$(_hl_path "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	[ "$(uci -q get "$section.web_pass_empty")" = 1 ] || uci -q get "$section.web_pass" >/dev/null
 }
 
 _zte_pass() { _web_pass "$1"; }

@@ -7774,3 +7774,15 @@ msgstr "Открепить"
 
 msgid "Lock"
 msgstr "Лок"
+
+msgid "Factory password"
+msgstr "Заводской пароль"
+
+msgid "Empty password"
+msgstr "Пустой пароль"
+
+msgid "Custom password"
+msgstr "Свой пароль"
+
+msgid "Could not save the modem web password."
+msgstr "Не удалось сохранить пароль веб-интерфейса модема."
