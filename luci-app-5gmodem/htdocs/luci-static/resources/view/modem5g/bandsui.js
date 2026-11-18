@@ -1261,7 +1261,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 40007,
+	API: 40008,
 	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },

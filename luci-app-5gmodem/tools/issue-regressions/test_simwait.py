@@ -95,6 +95,18 @@ tick
 [ "$(grep -c 'interface up' "$TRACE")" = 1 ]
 ''')
 
+    def test_check_works_with_busybox_flock(self):
+        output = self.run_shell('''
+flock() {
+    [ "$1" = -n ] || return 2
+    command flock "$@"
+}
+STATE=absent
+check && exit 1
+simwait_status modem
+''')
+        self.assertEqual(json.loads(output), {'sim_state': 'absent', 'waiting_sim': True})
+
     def test_unknown_does_not_create_wait(self):
         self.run_shell('STATE=unknown; check; [ ! -f "$SIMWAIT_DIR/modem" ]')
 

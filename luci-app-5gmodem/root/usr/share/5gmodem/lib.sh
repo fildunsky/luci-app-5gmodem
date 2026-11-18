@@ -1421,26 +1421,27 @@ at_query() {
 	_aq_o=$(mktemp /tmp/5gmodem/atq.XXXXXX 2>/dev/null) || _aq_o="/tmp/5gmodem/atq.$$.$(date +%s)"
 	sleep_tick_init
 	if [ "$_TICKS_PER_SEC" = 1 ]; then
-		{
-			( sleep "$_aq_t" </dev/null & _aq_x=$!; trap 'kill $_aq_x; exit' TERM; wait $_aq_x; echo t ) &
-			echo $! > "$_aq_o.s"
+		(
+			# Ash saves temporary redirections on descriptors its forked shells can inherit.
+			exec 7>&- 8>&- 9>&-
 			( sms_tool ${AT_QUERY_RAW:+-D} -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null </dev/null & _aq_x=$!
-			  trap 'kill $_aq_x; exit' TERM; wait $_aq_x; echo d ) &
-			echo $! > "$_aq_o.p"
-		} 2>/dev/null 7>&- 8>&- 9>&- | read -r _aq_r
-		kill "$(cat "$_aq_o.s" 2>/dev/null)" 2>/dev/null
-		_aq_pid=$(cat "$_aq_o.p" 2>/dev/null)
-		[ -n "$_aq_pid" ] && kill -0 "$_aq_pid" 2>/dev/null && kill "$_aq_pid" 2>/dev/null
-		rm -f "$_aq_o.s" "$_aq_o.p"
+			  trap 'kill "$_aq_x" 2>/dev/null; exit' TERM; wait "$_aq_x"; echo d ) &
+			_aq_child=$!
+			( sleep "$_aq_t" </dev/null & _aq_x=$!; trap 'kill "$_aq_x" 2>/dev/null; exit' TERM
+			  wait "$_aq_x"; kill "$_aq_child" 2>/dev/null; echo t ) &
+			echo $! > "$_aq_o.s"
+		) 2>/dev/null | ( exec 7>&- 8>&- 9>&-; read -r _aq_r )
+		_aq_timer=$(cat "$_aq_o.s" 2>/dev/null)
+		[ -z "$_aq_timer" ] || kill "$_aq_timer" 2>/dev/null
+		rm -f "$_aq_o.s"
 	else
-		sms_tool ${AT_QUERY_RAW:+-D} -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 7>&- 8>&- 9>&- &
+		sms_tool ${AT_QUERY_RAW:+-D} -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null </dev/null 7>&- 8>&- 9>&- &
 		_aq_pid=$!
-		# the sleep is killed with the watchdog: a bare "sleep; kill" left it running for the whole timeout
-		( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_aq_t" & _aq_s=$!
-		  trap 'kill $_aq_s 2>/dev/null; exit' TERM; wait $_aq_s; kill "$_aq_pid" 2>/dev/null ) </dev/null & _aq_w=$!
+		( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep "$_aq_t" & _aq_s=$!
+		  trap 'kill "$_aq_s" 2>/dev/null; exit' TERM; wait "$_aq_s"; kill "$_aq_pid" 2>/dev/null ) </dev/null & _aq_w=$!
 		_aq_i=0; _aq_max=$(( (${_aq_t:-8} + 1) * _TICKS_PER_SEC ))
 		while kill -0 "$_aq_pid" 2>/dev/null && [ "$_aq_i" -lt "$_aq_max" ]; do
-			_aq_i=$((_aq_i + 1)); sleep "$_SLEEP_TICK"
+			_aq_i=$((_aq_i + 1)); sleep "$_SLEEP_TICK" 7>&- 8>&- 9>&-
 		done
 		kill -0 "$_aq_pid" 2>/dev/null || wait "$_aq_pid" 2>/dev/null
 		if kill -0 "$_aq_pid" 2>/dev/null; then

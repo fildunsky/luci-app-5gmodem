@@ -4,7 +4,10 @@ SIMWAIT_DIR=/tmp/5gmodem/simwait
 
 simwait_at_state() {
 	local answer
-	answer=$(AT_QUERY_RAW=1 at_query "$1" 'AT+CPIN?' 4 1 2>/dev/null 5>&- 6>&- 7>&- 8>&- 9>&- | tr -d '\r')
+	answer=$(
+		exec 5>&- 6>&- 7>&- 8>&- 9>&-
+		AT_QUERY_RAW=1 at_query "$1" 'AT+CPIN?' 4 1 2>/dev/null | tr -d '\r'
+	)
 	printf '%s\n' "$answer" | awk '
 		/^\+CPIN: *(READY|SIM PIN2|SIM PUK2)[[:space:]]*$/ { state="ready" }
 		/^\+CPIN: *SIM PIN[[:space:]]*$/ { state="pin" }
@@ -171,10 +174,15 @@ simwait_check_locked() {
 }
 
 simwait_check() (
+	local attempt=0
 	case "$1" in ''|*[!A-Za-z0-9_-]*) return 0 ;; esac
 	mkdir -p "$SIMWAIT_DIR"
 	exec 5>"$SIMWAIT_DIR/.lock.$1"
-	flock -w 2 5 || { [ ! -f "$SIMWAIT_DIR/$1" ]; return; }
+	until flock -n 5; do
+		[ "$attempt" -lt 2 ] || { [ ! -f "$SIMWAIT_DIR/$1" ]; return; }
+		attempt=$((attempt + 1))
+		sleep 1
+	done
 	simwait_check_locked "$@"
 )
 

@@ -1,9 +1,14 @@
+from contextlib import suppress
+import fcntl
 import json
 import os
 from pathlib import Path
 import re
+import shutil
+import signal
 import subprocess
 import tempfile
+import time
 import unittest
 
 from test_runtime_audit import ROOT, SHARE, function, shell
@@ -308,6 +313,49 @@ _td_at /dev/null AT
             self.assertEqual(result.stdout, '')
             self.assertEqual(Path(temp+'/calls').read_text(), 'lock\nunlock\n')
             self.assertFalse(list(Path(temp).glob('atq.*')))
+
+    @unittest.skipUnless(shutil.which('busybox'), 'requires BusyBox ash')
+    def test_cancelled_at_query_does_not_leave_lock_with_workers(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            source = '\n'.join([(SHARE/'atlock.sh').read_text().replace('/var/lock', temp),
+                                function('at_query', 'lib.sh').replace('/tmp/5gmodem', temp)])
+            source += r'''
+sleep_tick_init() { _TICKS_PER_SEC=1; _SLEEP_TICK=1; }
+sms_tool() {
+    : > "$STARTED"
+    exec sleep 20
+}
+at_query /dev/null AT 5
+'''
+            started = folder/'started'
+            proc = subprocess.Popen(['busybox', 'ash', '-c', source],
+                                    env={**os.environ, 'STARTED': str(started)},
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    start_new_session=True)
+            try:
+                deadline = time.monotonic() + 3
+                while not started.exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue(started.exists(), 'AT worker did not start')
+                with (folder/'5gmodem-at-null.lock').open('r+') as lock:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    proc.kill()
+                    proc.wait(timeout=2)
+                    deadline = time.monotonic() + 0.5
+                    while True:
+                        try:
+                            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            break
+                        except BlockingIOError:
+                            if time.monotonic() >= deadline:
+                                self.fail('AT workers kept the lock after the caller exited')
+                            time.sleep(.01)
+            finally:
+                with suppress(ProcessLookupError):
+                    os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait(timeout=2)
 
     def test_registration_reads_reported_home_state(self):
         for response in ('+CEREG: 2,1', '+C5GREG: 2,1,"012029","0000000021CF9401",11,4,"01.000000"'):
