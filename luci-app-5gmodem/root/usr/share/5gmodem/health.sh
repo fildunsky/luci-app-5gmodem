@@ -526,33 +526,6 @@ mm_registered_now() {
 		| sed -n 's/^modem\.generic\.state *: *//p' | head -1)" = registered ]
 }
 
-sim_absent() {
-	if [ "$(uci -q get "$CFG.$1.kind")" = "hilink" ]; then
-		_sa_js=$("$RES/hilink.sh" json "$2" 2>/dev/null)
-		# Huawei reports sim_status; ZTE/Tenda/ASR report the state in registration.
-		case "$(printf '%s' "$_sa_js" | jsonfilter -e '@.sim_status' 2>/dev/null)" in 0|255) return 0 ;; esac
-		[ "$(printf '%s' "$_sa_js" | jsonfilter -e '@.registration' 2>/dev/null)" = "SIM not inserted" ] && return 0
-		return 1
-	fi
-	_sa_idx=$("$RES/modemswitch.sh" mmindex "$2" 2>/dev/null)
-	if [ -n "$_sa_idx" ] && command -v mmcli >/dev/null 2>&1; then
-		mmcli -m "$_sa_idx" -K 2>/dev/null \
-			| grep -q "state-failed-reason *: *sim-missing" && return 0
-		return 1
-	fi
-	_sa_at=$(uci -q get "$CFG.$1.at_port")
-	[ -n "$_sa_at" ] && [ -e "$_sa_at" ] || return 1
-	case "$(readlink -f "/sys/class/tty/${_sa_at##*/}/device" 2>/dev/null)" in
-		*"/$2:"*) ;;
-		*) return 1 ;;
-	esac
-	_sa_o=$(at_query "$_sa_at" "AT+CPIN?" 3 2>/dev/null | tr -d '\r')
-	case "$_sa_o" in
-		*"not inserted"*|*"SIM_ABSENT"*) return 0 ;;
-	esac
-	printf '%s\n' "$_sa_o" | grep -qx '+CME ERROR: 10' && return 0
-	return 1
-}
 
 heal() {
 	[ "$H_HEAL" = "1" ] || [ "$H_HEALWIFI" = "1" ] || return 0
@@ -723,6 +696,12 @@ heal() {
 			[ "$_h_cap" -ge 3 ] && [ "$_h_st" = gone ] || continue
 			_h_absent=1
 		fi
+		if [ -z "$_h_absent" ] && [ -x "$RES/simwait.sh" ]; then
+			if [ -f "/tmp/5gmodem/simwait/$_h_if.resume" ] && "$RES/simwait.sh" recovering "$_h_if"; then continue; fi
+			_h_simowner=""
+			[ "$(uci -q get "network.$_h_if.proto")" = modemmanager ] && _h_simowner=mm
+			"$RES/simwait.sh" check "$_h_if" "$_h_sec" "$_h_path" "$(uci -q get "5gmodem.$_h_sec.at_port")" "$_h_simowner" || continue
+		fi
 		_h_step=0; _h_last=0; _h_n=0
 		[ -f "$HDIR/$_h_if.heal" ] && read -r _h_step _h_last _h_n < "$HDIR/$_h_if.heal"
 		case "$_h_step" in ''|*[!0-9]*) _h_step=0 ;; esac
@@ -733,14 +712,6 @@ heal() {
 		if [ "$_h_st" != gone ] || { [ "$_h_last" != 0 ] && [ -z "$_h_regnow" ]; }; then
 			[ $((_h_now - _h_last)) -ge "$HEAL_COOLDOWN" ] || continue
 		fi
-		if [ -z "$_h_absent" ] && sim_absent "$_h_sec" "$_h_path"; then
-			if [ ! -f "$HDIR/$_h_if.nosim" ]; then
-				: > "$HDIR/$_h_if.nosim"
-				_ev "healing $_h_if: no SIM inserted - healing postponed"
-			fi
-			continue
-		fi
-		rm -f "$HDIR/$_h_if.nosim"
 		_h_pr=$(uci -q get "network.$_h_if.proto")
 		case "$_h_pr" in
 			''|static|none) ;;

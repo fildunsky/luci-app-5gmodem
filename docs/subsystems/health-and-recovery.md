@@ -122,7 +122,7 @@ If MM reports the modem as `initializing`, `enabling`, `connecting` or `disconne
 
 - **Common cause.** If several links are watched and all of them are down at once, the cause is almost certainly not the modems (dead probe targets, upstream router, regional operator outage). Rebooting every modem would only cause damage. A single link is always healed, because a one-modem router has nothing to compare against.
 - **Probes blocked by the firewall** (see `probe_proxy`). Even a single link is not healed. Otherwise, with a VPN killswitch, a one-modem router would climb to `CFUN=1,1` on a healthy modem.
-- **SIM absent (`sim_absent`)**, checked before every attempt. HiLink: API `SimStatus` (1 = present, 255/0 = absent). MM: the failed reason in the modem record. AT: a short `CPIN` through the port queue. Only a confident "no card" returns 0. Silence or a busy port does not block healing. With no card, the attempt is not counted and the event is logged once per episode.
+- **SIM absent**, checked by the shared SIM wait mechanism before the recovery counter and cooldown. See [Waiting for a SIM](#waiting-for-a-sim).
 - **Operator cut off the traffic.** If the interface **has an address**, the session is established: SIM alive, registered, bearer up. The operator is cutting the traffic (quota used up, zero balance, block). Reboot, USB power cycle and ifup cannot fix that. In one case (Aug 2026) the ladder rebooted a healthy EP06 three times and then kept burning attempts at "Reconnect (3/6)". So the ladder stops completely: the attempt is not counted, the ladder is reset, and the event is logged once. When the address disappears, the mark is cleared. Stuck sessions that keep an address are handled by sessionwatch, which compares the address with the modem.
   - **The address in netifd is not the address on the device.** Protocols with `proto_set_keep 1` (qmiraw and similar) keep the interface "up" after the modem left the bus and came back. ubus still shows the old address, but the netdev is DOWN and empty. Reading only ubus stopped healing forever (EC21, Sep 2026). The address is checked in the kernel on the l3 device.
   - **Exception: fallen back to 2G.** "Address but no traffic" on GSM/EDGE is a radio failure, not a quota limit. LTE was lost and there is practically no data on 2G (SIM7100E stuck overnight on EGSM 900, Aug 2026). A module reboot brings LTE back. The mode comes from a fresh metrics snapshot. A stale snapshot does not change the decision.
@@ -367,3 +367,57 @@ A HiLink modem has no AT channel, so it is rebooted through its own API. Without
 Healing skips an interface with `auto=0` or `disabled=1`. This holds both when netifd reports
 `autostart: false` and when the interface is missing from the netifd dump altogether (a disabled
 interface is not listed there).
+
+## Waiting for a SIM
+
+`simwait.sh` shares SIM absence state between sessionwatch, health recovery and the
+bundled fibocom, qmiraw and mbimp protocol setup handlers. Sessionwatch checks
+registered modem interfaces every round (normally 30 seconds), including modems
+owned by ModemManager. Confirmed absence pauses automatic connection and recovery.
+The protocol error is `SIM_MISSING`. Netifd temporarily marks the interface
+unavailable through its runtime notification API, stopping a pending or stale
+connection while preserving autostart intent. Persistent UCI enable/auto settings
+are never changed. The bundled protocol setup handlers also block restart when
+their preflight detects absence. Protocols supplied by OpenWrt retain their native
+initialization and SIM handling.
+
+State sources are queued raw `AT+CPIN?`, the owning ModemManager record (including
+MBIM+MM cooperative operation), HiLink SIM
+status, or an idle QMI/MBIM control channel associated with the same physical modem.
+Only explicit absence is accepted. PIN/PUK, illegal SIM state, generic errors,
+missing answers and busy control channels are distinct from absence. An empty UIM
+object from uqmi does not establish absence: it skips cards whose state is not
+present, including card errors. The fallback qmicli card-status query requires
+explicit absent states for all reported slots. Control queries
+are bounded and skipped when another control client is active. No vendor SIM-detect
+configuration or unsolicited-response listener is enabled.
+
+After confirmed absence, unknown replies keep the interface waiting. A ready SIM
+restores availability and starts normal netifd setup once, clearing that interface's recovery counters,
+even if recovery previously exhausted its attempt limit. A PIN-locked inserted
+card may enter normal setup when a PIN is configured; otherwise it keeps waiting.
+An unsuccessful ubus bring-up retains the wait marker for the next round. A
+120-second grace period after resuming prevents health and sessionwatch from
+restarting a connection that netifd has just begun. New confirmed absence cancels
+that grace period.
+
+Manual stops with no protocol error, removed hardware and changed modem identities
+clear the wait marker without starting a connection. A configuration-disabled
+interface stays dormant until enabled by the user. Connected interfaces are checked
+too: hot SIM removal may leave an old address and an incorrect up state in netifd.
+Only confirmed absence interrupts that stale connection. Healthy connections and
+other interfaces are left alone. Per-interface locks
+serialize preflight checks and the watcher, and identity/status files are replaced
+atomically. Waiting resumes independently of the health monitor's enabled setting.
+
+`simwait.sh status <interface>` returns cached JSON with `sim_state` set to
+`absent`, `locked`, `ready` or `unknown`, and boolean `waiting_sim`. Observations
+older than 90 seconds become unknown. The normal AT/ModemManager metric snapshot
+includes these two fields as well. The status command performs no modem query.
+This is a connection-policy observation, so a healthy interface that is not being
+checked can report unknown. HiLink consumers can use the status command alongside
+their existing API output.
+
+Automatic reconnection requires the modem itself to recognize an inserted SIM.
+Boards or firmware without working hot insertion may still require their normal
+reinitialization procedure. No speculative modem reset is performed while waiting.

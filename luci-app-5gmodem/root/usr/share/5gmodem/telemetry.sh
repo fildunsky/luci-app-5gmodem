@@ -48,6 +48,11 @@ _str() {
 	_J="$_J${_J:+,}\"$1\":\"$_s\""
 }
 
+_tele_sim_fields() {
+	case "$_tele_sim_state" in absent|locked|ready|unknown) _str sim_state "$_tele_sim_state" ;; esac
+	case "$_tele_sim_waiting" in true|false) _J="$_J${_J:+,}\"waiting_sim\":$_tele_sim_waiting" ;; esac
+}
+
 tele_write() {
 	_J=""
 	_fresh=""
@@ -112,6 +117,12 @@ tele_write() {
 	_net=""
 	[ -n "$_fresh" ] && _net=$(_jf iface)
 	[ -n "$_net" ] || _net=$(uci -q get "$CFG.@5gmodem[0].network")
+	_tele_sim_state=""; _tele_sim_waiting=""
+	if [ -n "$_net" ] && [ -x /usr/share/5gmodem/simwait.sh ]; then
+		_tele_sim_json=$(/usr/share/5gmodem/simwait.sh status "$_net" 2>/dev/null)
+		_tele_sim_state=$(jsonfilter -s "$_tele_sim_json" -e '@.sim_state' 2>/dev/null)
+		_tele_sim_waiting=$(jsonfilter -s "$_tele_sim_json" -e '@.waiting_sim' 2>/dev/null)
+	fi
 	if [ -n "$_net" ] && [ -f "/tmp/5gmodem/health/$_net" ]; then
 		read -r _hs _hf _ho _hms _hsince < "/tmp/5gmodem/health/$_net"
 		[ "$_hs" = "up" ] && _num ping "$(_int "$_hms")"
@@ -177,12 +188,15 @@ tele_write() {
 				_tw_age=$(( $(date +%s) - $(date -r "$TELE" +%s 2>/dev/null || echo 0) ))
 				if [ "$_tw_age" -lt 120 ]; then
 					case "$(cat "$TELE" 2>/dev/null)" in
-						*'"sig"'*|*'"rsrp"'*|*'"oper"'*) return 0 ;;
+						*'"sig"'*|*'"rsrp"'*|*'"oper"'*)
+						if [ "$(jsonfilter -i "$TELE" -e '@.sim_state' 2>/dev/null)" = "$_tele_sim_state" ] \
+							&& [ "$(jsonfilter -i "$TELE" -e '@.waiting_sim' 2>/dev/null)" = "$_tele_sim_waiting" ]; then return 0; fi ;;
 					esac
 				fi ;;
 		esac
 	fi
 
+	_tele_sim_fields
 	printf '{%s}\n' "$_J" > "$TELE.tmp" && mv "$TELE.tmp" "$TELE"
 
 	_J=""
@@ -247,6 +261,7 @@ tele_write() {
 		_str ext_ip  "$_te_xip"
 		_str ext_ip6 "$_te_xip6"
 	fi
+	_tele_sim_fields
 	printf '{%s}\n' "$_J" > "$TELE_CELL.tmp" && mv "$TELE_CELL.tmp" "$TELE_CELL"
 }
 

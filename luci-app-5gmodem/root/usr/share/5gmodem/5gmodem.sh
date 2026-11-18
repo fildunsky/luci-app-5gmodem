@@ -1454,6 +1454,13 @@ _sanv PATHLOSS TXPOWER UECAT CQI VOLTE RSCP
 _sanv MAXDL MAXUL AMBRDL AMBRUL QCI
 _sanv ECIO RSRP RSRQ RSSI SINR _SN_CONNST
 _sanv _SN_ALIAS _SN_CPORT BS_DIST TEMPS BATTERY BATTERY_CHG
+_SN_SIMWAIT='"sim_state":"unknown","waiting_sim":false'
+if [ -r "$RES/simwait.sh" ]; then
+	. "$RES/simwait.sh"
+	_SN_SIMWAIT=$(simwait_status "$SEC")
+	_SN_SIMWAIT=${_SN_SIMWAIT#\{}
+	_SN_SIMWAIT=${_SN_SIMWAIT%\}}
+fi
 # no comments inside this heredoc: they would end up in the JSON
 cat <<EOF
 {
@@ -1501,6 +1508,7 @@ cat <<EOF
 "location":"${_J_LOC}",
 "mode":"${_J_MODE}",
 "registration":"${_J_REG}",
+$_SN_SIMWAIT,
 "registration_cs":"${_J_REG_CS}",
 "simslot":"${_J_SSIM}",
 "allow_roaming":"$_SN_ROAMOK",

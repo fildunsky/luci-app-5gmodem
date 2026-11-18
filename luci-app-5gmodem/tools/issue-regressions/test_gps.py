@@ -205,6 +205,24 @@ class Parsers(unittest.TestCase):
         d, _ = parse('parse-qmi', "[/dev/cdc-wdm0] Client ID not released:\n\tService: 'loc'")
         self.assertEqual(d, {'qmi': 'none'})
 
+    def test_qmi_incomplete_cellular_position_is_not_a_fix(self):
+        for status, technology in [('in-progress', 'cellular'),
+                                   ('success', 'cellular'),
+                                   ('in-progress', 'satellite')]:
+            with self.subTest(status=status, technology=technology):
+                report = ('[position report] status: ' + status + '\n'
+                          '   latitude: 45.123456 degrees\n'
+                          '   longitude: 12.345678 degrees\n'
+                          '   altitude w.r.t. mean sea level: 35.000000 meters\n'
+                          '   circular horizontal position uncertainty: 4000000.000 meters\n'
+                          '   technology: ' + technology + '\n'
+                          '   UTC timestamp: n/a\n'
+                          '   time source: invalid\n')
+                data, _ = parse('parse-qmi', report)
+                self.assertEqual(data['fix'], '0')
+                self.assertNotIn('lat', data)
+                self.assertNotIn('lon', data)
+
     def test_mm_location_get(self):
         # gps-nmea and gps-raw enabled: speed, course and satellites come from the NMEA traces
         d, r = parse('parse-mm', mm_location_get(NMEA_FIX, '55.752220', '37.615560', '152.400000', '093357.00'))
@@ -298,7 +316,7 @@ qmicli_p() {
 		*--get-service-version-info*) printf '%s\n' '[/dev/cdc-wdm0] Supported versions:' '	loc (2.0)' ;;
 		*--loc-get-engine-lock*) echo 'Successfully retrieved engine lock: none' ;;
 		*--loc-start*) printf '%s\n' 'Successfully started location tracking (session id 0)' "	    CID: '5'" ;;
-		*--client-cid=5*--loc-get-position-report*) printf '%s\n' '[position report] status: in-progress' '   latitude:  55.0 degrees' '   longitude: 37.0 degrees' ;;
+		*--client-cid=5*--loc-get-position-report*) printf '%s\n' '[position report] status: success' '   latitude:  55.0 degrees' '   longitude: 37.0 degrees' '   technology: satellite' ;;
 		*--loc-stop*) echo 'Successfully stopped' ;;
 	esac
 }

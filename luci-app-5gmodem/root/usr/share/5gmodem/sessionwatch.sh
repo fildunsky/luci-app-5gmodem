@@ -121,6 +121,8 @@ _revive() {
 check_one() {
 	_path="$1"; _if="$2"; _proto="$3"; _port="$4"
 
+	[ ! -f "/tmp/5gmodem/simwait/$_if" ] || return 0
+	if [ -f "/tmp/5gmodem/simwait/$_if.resume" ] && "$RES/simwait.sh" recovering "$_if"; then return 0; fi
 	_sw_st=$(ifstatus "$_if" 2>/dev/null)
 	case "$_sw_st" in
 		*'"up": true'*) : ;;
@@ -459,7 +461,7 @@ case "$1" in
 			if ! pidof ModemManager >/dev/null 2>&1 \
 			   && ! uci -q show network 2>/dev/null | grep -qE "\.proto='?($(proto_re proxy))'?\$"; then
 				_ps_if=$(uci -q get 5gmodem.@5gmodem[0].network)
-				if proto_in direct "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)"; then
+				if [ ! -f "/tmp/5gmodem/simwait/$_ps_if" ] && proto_in direct "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)"; then
 					if pidof mbim-proxy >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1; then
 						if ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"up": true'; then
 							if pgrep -x lpac >/dev/null 2>&1 \
@@ -471,7 +473,7 @@ case "$1" in
 								_log "a stray proxy sits on a direct channel ($_ps_if) - killing mbim/qmi-proxy and redialing"
 								killall mbim-proxy 2>/dev/null
 								killall qmi-proxy 2>/dev/null
-								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+								( sleep 2; [ -f "/tmp/5gmodem/simwait/$_ps_if" ] || ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
 							fi
 						elif ! pgrep -x lpac >/dev/null 2>&1 \
 						   && ! pgrep -x qmicli >/dev/null 2>&1 \
@@ -484,8 +486,8 @@ case "$1" in
 							_log "a stray proxy is blocking the dial ($_ps_if is down) - killing mbim/qmi-proxy"
 							killall mbim-proxy 2>/dev/null
 							killall qmi-proxy 2>/dev/null
-							if _sw_sim_ready "$_ps_if"; then
-								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+							if [ ! -f "/tmp/5gmodem/simwait/$_ps_if" ] && _sw_sim_ready "$_ps_if"; then
+								( sleep 2; [ -f "/tmp/5gmodem/simwait/$_ps_if" ] || ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
 							fi
 						fi
 					fi
@@ -521,6 +523,7 @@ case "$1" in
 					"$RES/modemswitch.sh" resolve >/dev/null 2>&1
 				fi
 			fi
+			[ -n "$_SW_NETONLY" ] || "$RES/simwait.sh" tick
 			[ -n "$_SW_NETONLY" ] || check_once
 			_page_refresh
 			[ -n "$_SW_NETONLY" ] || warm_snapshots

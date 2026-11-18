@@ -156,6 +156,12 @@ proto_mbimp_setup() {
 	[ -c "$device" ] || { proto_set_available "$interface" 0; _mbimp_fail "$interface" NO_DEVICE "The control device $device does not exist"; return 1; }
 	command -v mbimcli >/dev/null 2>&1 || { _mbimp_fail "$interface" NO_MBIMCLI "mbimcli is not installed (package mbim-utils)" block; return 1; }
 
+	if [ -x /usr/share/5gmodem/simwait.sh ] && ! /usr/share/5gmodem/simwait.sh check-interface "$interface"; then
+		proto_notify_error "$interface" SIM_MISSING
+		proto_block_restart "$interface"
+		return 1
+	fi
+
 	local devname ifname syspath
 	devname="$(basename "$device")"
 	syspath="$(readlink -f "/sys/class/usbmisc/$devname/device/" || readlink -f "/sys/class/wwan/$devname/device/")"
@@ -198,6 +204,11 @@ proto_mbimp_setup() {
 	echo "MBIM+MM[$$] Checking subscriber"
 	local n=0 ready=""
 	while :; do
+		if [ -f "/tmp/5gmodem/simwait/$interface" ] && /usr/share/5gmodem/simwait.sh blocked "$interface"; then
+			proto_notify_error "$interface" SIM_MISSING
+			proto_block_restart "$interface"
+			return 1
+		fi
 		out=$(_mbimp_cli 20 --query-subscriber-ready-status)
 		ready=$(_mbimp_field 'Ready state' "$out")
 		[ "$ready" = "initialized" ] && { rm -f "/tmp/5gmodem/mbimp_sim_$interface"; break; }

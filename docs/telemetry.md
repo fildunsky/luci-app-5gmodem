@@ -30,6 +30,8 @@ ifup интерфейса активного модема (хук `/etc/hotplug.
 | `sig` | 0..100 | % | Качество сигнала, сведённое к процентам |
 | `oper` | строка | — | Имя оператора |
 | `model` | строка | — | Модель модема |
+| `sim_state` | string | — | Active modem SIM state: `absent`, `locked`, `ready`, `unknown` |
+| `waiting_sim` | boolean | — | Automatic connection is paused while waiting for a SIM |
 | `rsrp` | int | dBm | Мощность опорного сигнала (дробное от модема округляется к ближайшему) |
 | `rsrq` | int | dB | Качество опорного сигнала |
 | `sinr` | int | dB | Сигнал/шум |
@@ -363,3 +365,10 @@ logread | grep 5gmodem                  # если что-то не так
 Пустые модемные поля при работающем модеме — обычно значит, что страница
 «Сеть» давно не открывалась и снимок метрик не обновлялся: сторож обновляет
 его сам в фоне, подождите один круг (до минуты) или откройте страницу.
+
+SIM wait state is read from its own cache without querying the modem and is
+updated even when the radio snapshot is stale. Both fields are included in
+`tele.json`, the `/cgi-bin/5gmodem-tele` HTTP response, MQTT state JSON and
+`tele_cell.json`. `waiting_sim` is a JSON boolean (`true`/`false`). `unknown` means
+there is no fresh confirmed SIM state. The normal telemetry freshness rules apply
+when the entire modem is removed.

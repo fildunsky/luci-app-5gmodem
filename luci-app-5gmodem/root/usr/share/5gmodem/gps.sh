@@ -150,11 +150,12 @@ gnss_parse_qmi() {
 	/^ *heading: *[0-9]/ { co = sprintf("%.1f", $2) }
 	/^ *horizontal DOP: *[0-9]/ { hd = sprintf("%.1f", $3) }
 	/^ *UTC timestamp: *[0-9]/ { ut = $3 }
+	/^ *technology:/ { tech = tolower($0); sub(/^ *technology: */, "", tech) }
 	/^ *Satellites used: *[0-9]/ { s = $0; sub(/^.*: */, "", s); su = split(s, x, ",") }
 	END {
 		if (!seen) { print "qmi=none"; exit }
 		print "qmi=" st
-		if (la == "" || lo == "" || (st != "success" && st != "in-progress")) { print "fix=0"; exit }
+		if (la == "" || lo == "" || st != "success" || la + 0 < -90 || la + 0 > 90 || lo + 0 < -180 || lo + 0 > 180 || (tech != "" && tech !~ /satellite/)) { print "fix=0"; exit }
 		print "fix=" (al != "" ? 3 : 2); print "lat=" la; print "lon=" lo
 		if (al != "") print "alt=" al
 		if (sp != "") print "speed=" sp
@@ -324,6 +325,11 @@ _tmo() {
 
 # Family by USB vendor; Dell ids split between Foxconn and Sierra builds.
 _family_hint() {
+	if [ -n "$_TGT" ]; then
+		case "$(cat "/sys/bus/usb/devices/$_TGT/product" 2>/dev/null)" in
+			*VOS_5G*|*RXMG1*|*RXM-G1*|*SG500M2*) echo compal; return ;;
+		esac
+	fi
 	case "$_vp" in
 		2c7c:*) echo quectel ;;
 		1e0e:*) echo simcom ;;
@@ -331,7 +337,6 @@ _family_hint() {
 		2dee:*) echo meig ;;
 		0e8d:*|2cb7:*) echo fibocom ;;
 		0489:*|1e2d:*|105b:*) echo foxconn ;;
-		# Qualcomm generic ids of T99W175/T99W373; a Compal on the same ids answers nothing and stays unsupported
 		05c6:90d5|05c6:90d6|05c6:9025) echo foxconn ;;
 		413c:81d7|413c:81d8|413c:81d9|413c:81e0|413c:81e4|413c:81e6) echo foxconn ;;
 		1199:*|0f3d:*|413c:*) echo sierra ;;
@@ -591,7 +596,12 @@ _caps() {
 	# the cache belongs to one modem: another modem on the same USB port gets a fresh probe
 	# (the usb hotplug script 71-5gmodem-resolve drops these files as well)
 	if [ -s "$CAPS" ]; then
-		if [ "$(sed -n 's/^vp=//p' "$CAPS" | head -n 1)" = "$_vp" ]; then cat "$CAPS"; return; fi
+		_cached_family=$(sed -n 's/^fam=//p' "$CAPS" | head -n 1)
+		_current_family=$(_family_hint)
+		if [ "$(sed -n 's/^vp=//p' "$CAPS" | head -n 1)" = "$_vp" ] \
+			&& { { [ "$_cached_family" != compal ] && [ "$_current_family" != compal ]; } || [ "$_cached_family" = "$_current_family" ]; }; then
+			cat "$CAPS"; return
+		fi
 		rm -f "$CAPS" "$TD/gnss_port_$_K"
 	fi
 	# a silent or busy port is not cached for good, but it is not asked again for a minute:
@@ -625,7 +635,8 @@ vp=$_vp"
 	fi
 	_sup=0; _st=""; _r=""; _op=""; _gap=""
 	if [ -n "$_fam" ] && [ -n "$_atp" ]; then
-		_r=$(_at "$(_probe_cmd "$_fam")")
+		_probe=$(_probe_cmd "$_fam")
+		[ -z "$_probe" ] || _r=$(_at "$_probe")
 		case "$_fam" in
 			sierra) printf '%s' "$_r" | grep -q 'ERROR' || { [ -n "$_r" ] && _sup=1; } ;;
 			fibocom)
@@ -789,7 +800,7 @@ utc=$(date -u -d "@$((_um / 1000))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
 		fi
 	elif [ "$(_kv "$_c" sup)" = 1 ]; then
 		case "$_fam" in
-			sierra|qualcomm) ;;
+			sierra|qualcomm|compal) ;;
 			*) [ -n "$_atp" ] && _st=$(_at "$(_state_cmd "$_fam")" | gnss_parse_state "$_fam") ;;
 		esac
 		if [ "$(_kv "$_c" loc)" = qmi ]; then

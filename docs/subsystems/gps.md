@@ -356,3 +356,16 @@ is kept in the browser (`localStorage` `5gmodem.gps.map`) and wins over the sett
 Home Assistant sensors to discovery. It is off by default: a stream of coordinates is a log of
 where the router has been. Each telemetry tick then calls `gps.sh status`, which costs one AT
 query or a 2 s NMEA read.
+
+### QMI LOC position validity
+
+A position report must have status `success` and valid latitude/longitude before
+it is shown as a GNSS fix. When the report includes a technology mask, that mask
+must include satellite positioning. In-progress reports and cellular-only estimates
+are kept in the searching state with no coordinates. A modem can report a
+cellular estimate with uncertainty spanning thousands of kilometres and invalid
+GNSS time; the presence of coordinate fields alone does not establish a fix.
+
+Compal devices sharing Qualcomm USB IDs with Foxconn are identified through their
+USB product descriptor. Their GNSS support is discovered through ModemManager or
+the QMI LOC service. Foxconn-specific AT GPS controls are not selected for them.

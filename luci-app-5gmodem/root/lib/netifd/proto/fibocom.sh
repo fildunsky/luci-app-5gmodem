@@ -421,6 +421,15 @@ proto_fibocom_setup() {
 		return 1
 	fi
 
+	if [ -x /usr/share/5gmodem/simwait.sh ]; then
+		local sim_section="m_$(printf '%s' "$usbpath" | sed 's/[^A-Za-z0-9]/_/g')"
+		if ! /usr/share/5gmodem/simwait.sh check "$interface" "$sim_section" "$usbpath" "$dial"; then
+			proto_notify_error "$interface" SIM_MISSING
+			proto_block_restart "$interface"
+			return 1
+		fi
+	fi
+
 	_fib_lock_held=""
 	if [ -r /usr/share/5gmodem/atlock.sh ]; then
 		. /usr/share/5gmodem/atlock.sh 2>/dev/null
@@ -440,6 +449,12 @@ proto_fibocom_setup() {
 	[ "$IS_R11E" = 1 ] && _r11e_prepare "$dial" "$pdptype" "$apn" "$interface"
 	local _reg="" _rw=0 _kick=0
 	while :; do
+		if [ -f "/tmp/5gmodem/simwait/$interface" ] && /usr/share/5gmodem/simwait.sh blocked "$interface"; then
+			_fib_unlock
+			proto_notify_error "$interface" SIM_MISSING
+			proto_block_restart "$interface"
+			return 1
+		fi
 		_reg=$(_fibocom_reg "$dial")
 		case "$_reg" in 1|5|6|7|9|10) break ;; esac
 		if [ "$_kick" = 0 ] && [ "$(_fibocom_cops_mode "$dial")" = 2 ]; then

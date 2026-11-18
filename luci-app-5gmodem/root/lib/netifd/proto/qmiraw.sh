@@ -87,6 +87,12 @@ proto_qmiraw_setup() {
 		return 1
 	}
 
+	if [ -x /usr/share/5gmodem/simwait.sh ] && ! /usr/share/5gmodem/simwait.sh check-interface "$interface"; then
+		proto_notify_error "$interface" SIM_MISSING
+		proto_block_restart "$interface"
+		return 1
+	fi
+
 	devname="$(basename "$device")"
 	devpath="$(readlink -f /sys/class/usbmisc/$devname/device/)"
 	ifname="$( ls "$devpath"/net )"
@@ -125,6 +131,11 @@ proto_qmiraw_setup() {
 	uqmi -d "$device" -t 3000 --get-pin-status > /dev/null 2>&1
 	local sim_wait=0 pin_out uim_out
 	while [ "$sim_wait" -lt 30 ]; do
+		if [ -f "/tmp/5gmodem/simwait/$interface" ] && /usr/share/5gmodem/simwait.sh blocked "$interface"; then
+			proto_notify_error "$interface" SIM_MISSING
+			proto_block_restart "$interface"
+			return 1
+		fi
 		[ -e "$device" ] || return 1
 		pin_out=$(uqmi -s -d "$device" -t 1000 --get-pin-status 2>&1)
 		case "$pin_out" in
@@ -144,6 +155,11 @@ proto_qmiraw_setup() {
 	done
 	[ "$sim_wait" -gt 0 ] && echo "Waited ${sim_wait}s for the SIM"
 	while uqmi -s -d "$device" -t 1000 --get-pin-status | grep '"UIM uninitialized"' > /dev/null; do
+		if [ -f "/tmp/5gmodem/simwait/$interface" ] && /usr/share/5gmodem/simwait.sh blocked "$interface"; then
+			proto_notify_error "$interface" SIM_MISSING
+			proto_block_restart "$interface"
+			return 1
+		fi
 		[ -e "$device" ] || return 1
 		if [ "$uninitialized_timeout" -lt "$timeout" -o "$timeout" = "0" ]; then
 			let uninitialized_timeout++
@@ -159,6 +175,11 @@ proto_qmiraw_setup() {
 	local uim_state_timeout=0
 	local uim_unavail_timeout=0
 	while true; do
+		if [ -f "/tmp/5gmodem/simwait/$interface" ] && /usr/share/5gmodem/simwait.sh blocked "$interface"; then
+			proto_notify_error "$interface" SIM_MISSING
+			proto_block_restart "$interface"
+			return 1
+		fi
 		json_load "$(uqmi -s -d "$device" -t 2000 --uim-get-sim-state)"
 		json_get_var card_application_state card_application_state
 
