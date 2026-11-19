@@ -241,6 +241,21 @@ for _n in $NODES; do
 done
 
 OUT=""
+if [ -d /sys/class/net/ccmni0 ] && [ "$(uci -q get 5gmodem.m_mt60.vidpid)" = '0e8d:2004' ]; then
+	_mt60_snapshot=/tmp/mt60-radio/metrics.json
+	_mt60_op=""
+	_mt60_at=$(jsonfilter -i "$_mt60_snapshot" -e '@.sampled_uptime' 2>/dev/null)
+	case "$_mt60_at" in
+		''|*[!0-9]*) ;;
+		*)
+			_mt60_age=$(( $(uptime_s) - _mt60_at ))
+			if [ "$_mt60_age" -ge 0 ] && [ "$_mt60_age" -le 18 ]; then
+				_mt60_op=$(jsonfilter -i "$_mt60_snapshot" -e '@.operator' 2>/dev/null | tr -d '\000-\037\177')
+			fi
+			;;
+	esac
+	OUT='{"path":"mt60","vidpid":"0e8d:2004","product":"t60_extchg_k62","model":"OLAX MT60","sim_icon":true,"tty":[],"wdm":[],"net":["ccmni0","ccmni1"],"operator":"'"$(esc "$_mt60_op")"'"}'
+fi
 i=0
 for n in $NODES; do
 	i=$((i + 1))

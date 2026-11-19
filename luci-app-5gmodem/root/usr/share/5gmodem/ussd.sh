@@ -116,6 +116,19 @@ _mm_restore() {
 }
 
 case "$1" in
+send|reply|cancel)
+	if [ -r "$RES/mt60-web.sh" ] && [ -r "$RES/mt60-ussd.sh" ] && [ "$(active_path 2>/dev/null)" = mt60 ]; then
+		. "$RES/mt60-web.sh"
+		if mt60_native; then
+			. "$RES/mt60-ussd.sh"
+			mkdir -p /tmp/5gmodem
+			mt60_ussd_dispatch "$@"
+			exit $?
+		fi
+	fi ;;
+esac
+
+case "$1" in
 status)
 	[ -f "$ST" ] && cat "$ST" || echo '{"status":"idle","stage":""}'
 	exit 0 ;;

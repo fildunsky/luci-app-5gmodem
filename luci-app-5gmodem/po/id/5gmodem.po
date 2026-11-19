@@ -7501,3 +7501,6 @@ msgstr "Kata sandi khusus"
 
 msgid "Could not save the modem web password."
 msgstr "Gagal menyimpan kata sandi web modem."
+
+msgid "Could not change the APN."
+msgstr "Tidak dapat mengubah APN."

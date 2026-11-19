@@ -27,10 +27,61 @@ android_usb_serial() {
 	printf '%s\n' "$_ad_serial"
 }
 
+android_legacy_usb() {
+	if command -v legacy_android_usb >/dev/null 2>&1; then
+		legacy_android_usb "$1"
+	else
+		( . /usr/share/5gmodem/lib.sh && legacy_android_usb "$1" )
+	fi
+}
+
+android_legacy_json() {
+	local serial="$1" path="$2" iface="$3" ip="$4" netdev="$5" dump web cells usb
+	usb="/sys/bus/usb/devices/$path"
+	dump=$(android_adb -s "$serial" shell '
+		echo __5GM_LEGACY__
+		getprop ro.board.platform
+		getprop ro.build.version.sdk
+		getprop gsm.version.baseband
+		getprop gsm.sim.state
+		getprop gsm.network.type
+		getprop gsm.operator.alpha
+		getprop gsm.operator.numeric
+		dumpsys telephony.registry
+		dumpsys battery
+		echo __5GM_LEGACY_THERMAL__
+		for zone in /sys/class/thermal/thermal_zone*; do
+			read type < "$zone/type" || continue
+			case "$type" in
+				tsens_tz_sensor[0-9]*|pm8916_tz)
+					read temp < "$zone/temp" 2>/dev/null && echo "$type $temp"
+					;;
+			esac
+		done
+		echo __5GM_END__') || return 1
+	dump=$(printf '%s\n' "$dump" | tr -d '\r')
+	[ "$(printf '%s\n' "$dump" | sed -n '2,3p')" = "$(printf 'msm8916\n19')" ] || return 1
+	case "$dump" in *__5GM_END__) ;; *) return 1 ;; esac
+	if [ -n "$netdev" ]; then
+		web=$("$RES/hilink.sh" msmweb metrics "$path" 2>/dev/null) || web=
+	fi
+	cells=$(android_adb -s "$serial" shell '
+		read uptime idle < /proc/uptime
+		echo "$uptime"
+		logcat -b radio -d -t 100 -s RILJ:V | grep "< RIL_REQUEST_GET_CELL_INFO_LIST \["
+	') || cells=
+	printf '%s\n__5GM_LEGACY_WEB__\n%s\n__5GM_LEGACY_CELLS__\n%s\n__5GM_END__\n' \
+		"${dump%__5GM_END__}" "$web" "$(printf '%s' "$cells" | tr -d '\r')" | \
+		awk -v path="$path" -v iface="$iface" -v ip="$ip" -v netdev="$netdev" \
+			-v vidpid="$(cat "$usb/idVendor"):$(cat "$usb/idProduct")" \
+			-v sampled_at="$(date +%s)" -f "$RES/android-metrics.awk"
+}
+
 android_json() {
 	_ad_serial=$(android_usb_serial "$1") || return 1
 	_ad_usb="/sys/bus/usb/devices/$1"
 	[ "$(android_adb -s "$_ad_serial" get-state)" = device ] || return 1
+	if android_legacy_usb "$1"; then android_legacy_json "$_ad_serial" "$@"; return; fi
 	_ad_hash=$(md5sum "$RES/android-probe.sh" | cut -d' ' -f1)
 	_ad_marker="/tmp/5gmodem/android_probe_$_ad_serial"
 	if [ "$(cat "$_ad_marker" 2>/dev/null)" != "$_ad_hash" ]; then
@@ -58,6 +109,7 @@ android_cell_fields() {
 
 # $2: serial whose ADB state the caller has just checked (android_json), saving one adb round trip per poll.
 android_cells_ready() {
+	android_legacy_usb "$1" && return 1
 	if [ -n "$2" ]; then
 		_ar_serial=$2
 	else
@@ -116,6 +168,18 @@ android_cells() {
 }
 
 android_slots() {
+	if android_legacy_usb "$1"; then
+		case "$2" in
+			status|'') "$RES/hilink.sh" msmweb slots "$1" && return 0 ;;
+			set)
+				if "$RES/hilink.sh" msmweb setslot "$1" "$3"; then
+					echo '{"ok":true}'
+					return 0
+				fi ;;
+		esac
+		echo '{"error":"MSM8916 SIM request failed"}'
+		return 1
+	fi
 	case "$2" in
 		status|'') _as_command=slots ;;
 		set)
@@ -338,6 +402,10 @@ android_set_bands() {
 }
 
 android_sms() {
+	if android_legacy_usb "$1"; then
+		echo '{"error":"SMS unavailable on this Android firmware","read_only":true}'
+		return 1
+	fi
 	_as_serial=$(android_usb_serial "$1") || { echo '{"error":"Android ADB unavailable","read_only":true}'; return 1; }
 	[ "$(android_adb -s "$_as_serial" get-state)" = device ] || { echo '{"error":"Android ADB unauthorized","read_only":true}'; return 1; }
 	_as_count=0

@@ -110,7 +110,11 @@ api_json() {
 	if [ "$1" != fresh ] && [ -s "$APIC" ] && [ -n "$(find "$APIC" -mmin -5 2>/dev/null)" ]; then
 		cat "$APIC"; return 0
 	fi
-	_aj=$(net_fetch 15 "$API") || return 1
+	if [ "$1" = fresh ]; then
+		_aj=$(net_fetch 10 "$API" "" "" check) || return 1
+	else
+		_aj=$(net_fetch 15 "$API") || return 1
+	fi
 	printf '%s' "$_aj" | jsonfilter -e '@.tag_name' >/dev/null 2>&1 || return 1
 	printf '%s' "$_aj" > "$APIC.tmp" && mv "$APIC.tmp" "$APIC"
 	printf '%s' "$_aj"
@@ -174,7 +178,7 @@ check)
 			# API address for the same reason as the package below (long headers on github.com)
 			_nl_url=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='notes-$2.txt'].url" 2>/dev/null)
 			if [ -n "$_nl_url" ]; then
-				_nl_txt=$(net_fetch 10 "$_nl_url" "" "Accept: application/octet-stream" | head -c 8192)
+				_nl_txt=$(net_fetch 4 "$_nl_url" "" "Accept: application/octet-stream" check | head -c 8192)
 				[ -n "$_nl_txt" ] && NOTES="$_nl_txt"
 			fi
 			;;

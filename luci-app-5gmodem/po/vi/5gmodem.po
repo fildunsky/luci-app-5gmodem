@@ -7501,3 +7501,6 @@ msgstr "Mật khẩu tùy chỉnh"
 
 msgid "Could not save the modem web password."
 msgstr "Không lưu được mật khẩu web của modem."
+
+msgid "Could not change the APN."
+msgstr "Không thể thay đổi APN."

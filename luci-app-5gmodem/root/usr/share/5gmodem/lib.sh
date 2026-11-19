@@ -295,6 +295,7 @@ android_tether_path() {
 	[ "$(uci -q get "5gmodem.$_atp_sec.kind")" = tether ] || return 1
 	_atp_t=$(uci -q get "5gmodem.$_atp_sec.tether")
 	[ "$_atp_t" = android ] && return 0
+	[ "$_atp_t" = phone ] && legacy_android_usb "$1" && return 0
 	[ -z "$_atp_t" ] && [ "$(tether_os "$1")" = android ]
 }
 
@@ -343,12 +344,57 @@ tether_cdc_vid() {
 	android_vid "$1"
 }
 
+legacy_android_usb() {
+	local node serial devnum inode key cache now saved result checked identity pending
+	case "$1" in ''|*[!0-9.-]*) return 1 ;; esac
+	node="/sys/bus/usb/devices/$1"
+	[ "$(cat "$node/idVendor" 2>/dev/null):$(cat "$node/idProduct" 2>/dev/null)" = 05c6:9024 ] || return 1
+	serial=$(cat "$node/serial" 2>/dev/null) || return 1
+	case "$serial" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
+	devnum=$(cat "$node/devnum" 2>/dev/null) || return 1
+	case "$devnum" in ''|*[!0-9]*) return 1 ;; esac
+	inode=$(ls -diL "$node" 2>/dev/null | awk 'NR == 1 { print $1 }')
+	case "$inode" in ''|*[!0-9]*) return 1 ;; esac
+	key="$inode:$devnum:$serial"
+	cache="/tmp/5gmodem/msm8916_identity_$1"
+	read -r now _ < /proc/uptime || return 1
+	now=${now%%.*}
+	# Match the Android platform on this USB device. Recheck after re-enumeration or when ADB is authorized later.
+	if read -r saved result checked 2>/dev/null < "$cache" && [ "$saved" = "$key" ]; then
+		[ "$result" != yes ] || return 0
+		case "$checked" in ''|*[!0-9]*) ;; *)
+			[ "$now" -lt "$checked" ] || [ "$((now - checked))" -ge 5 ] || return 1 ;;
+		esac
+	fi
+	result=no
+	if identity=$(
+		command -v android_usb_serial >/dev/null 2>&1 || . /usr/share/5gmodem/android.sh || exit 1
+		[ "$(android_usb_serial "$1")" = "$serial" ] || exit 1
+		android_adb -s "$serial" shell 'getprop ro.board.platform; getprop ro.build.version.sdk'
+	) && [ "$(printf '%s' "$identity" | tr -d '\r')" = "$(printf 'msm8916\n19')" ]; then
+		result=yes
+	fi
+	inode=$(ls -diL "$node" 2>/dev/null | awk 'NR == 1 { print $1 }')
+	[ "$inode:$(cat "$node/devnum" 2>/dev/null):$(cat "$node/serial" 2>/dev/null)" = "$key" ] || return 1
+	if read -r now _ < /proc/uptime && pending=$(mktemp "$cache.XXXXXX" 2>/dev/null); then
+		printf '%s %s %s\n' "$key" "$result" "${now%%.*}" > "$pending" && mv -f "$pending" "$cache"
+		rm -f "$pending"
+	fi
+	[ "$result" = yes ]
+}
+
+olax_mt60_usb() {
+	case "$1" in ''|*[!0-9.-]*) return 1 ;; esac
+	local node="/sys/bus/usb/devices/$1"
+	[ "$(cat "$node/idVendor" 2>/dev/null):$(cat "$node/idProduct" 2>/dev/null):$(cat "$node/product" 2>/dev/null)" = 0e8d:2004:t60_extchg_k62 ]
+}
+
 tether_os() {
 	if is_iphone "$1"; then echo iphone; return 0; fi
 	if [ -n "$1" ] && [ -f "/sys/bus/usb/devices/$1/idVendor" ]; then
 		read -r _to_v < "/sys/bus/usb/devices/$1/idVendor"
 		if usb_gadget_vid "$_to_v"; then echo router
-		elif android_vid "$_to_v"; then echo android; else echo phone; fi
+		elif android_vid "$_to_v" || legacy_android_usb "$1"; then echo android; else echo phone; fi
 		return 0
 	fi
 	_to_s=$(uci -q get "5gmodem.$(secname "$1").tether")
@@ -1599,13 +1645,15 @@ net_proxy_port() {
 		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 	case "$_np_p" in ''|0) ;; *) printf '%s' "$_np_p"; return 0 ;; esac
 	command -v curl >/dev/null 2>&1 || return 1
+	_np_t=3
+	[ "$1" != check ] || _np_t=$(_nf_remaining 2) || return 1
 	_np_s=$(sed -n "s/^ *secret *: *[\"']*\([^\"' ]*\).*/\1/p" \
 		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 	_np_capi() {
 		if [ -n "$_np_s" ]; then
-			printf 'header = "Authorization: Bearer %s"\n' "$(curl_kq "$_np_s")" | curl -s -m 3 -K - "$@" 2>/dev/null
+			printf 'header = "Authorization: Bearer %s"\n' "$(curl_kq "$_np_s")" | curl -s -m "$_np_t" -K - "$@" 2>/dev/null
 		else
-			curl -s -m 3 "$@" 2>/dev/null
+			curl -s -m "$_np_t" "$@" 2>/dev/null
 		fi
 	}
 	_np_j=$(_np_capi "http://127.0.0.1:9090/configs")
@@ -1617,6 +1665,7 @@ net_proxy_port() {
 	[ -n "$(printf '%s' "$_np_j" | jsonfilter -e '@["mixed-port"]' 2>/dev/null)" ] || return 1
 	# never open a port the LAN could use as an open proxy
 	[ "$(printf '%s' "$_np_j" | jsonfilter -e '@["allow-lan"]' 2>/dev/null)" = false ] || return 1
+	[ "$1" != check ] || _np_t=$(_nf_remaining 2) || return 1
 	_np_capi -X PATCH "http://127.0.0.1:9090/configs" -d '{"mixed-port":7895}' -o /dev/null || return 1
 	logger -t 5gmodem "net: direct path is blocked and clash has no HTTP port in its config - opened mixed-port 7895 (allow-lan is off: 127.0.0.1 only, until clash restarts)"
 	printf '7895'
@@ -1627,7 +1676,7 @@ net_proxy_port() {
 # (sing-box, xray, ss-local...), then VPN and tun interfaces that are up.
 # Nothing is configured: net_fetch probes each one and takes the first that works.
 net_alt_paths() {
-	_ap_cp=$(net_proxy_port 2>/dev/null) && [ -n "$_ap_cp" ] && echo "-x http://127.0.0.1:$_ap_cp"
+	_ap_cp=$(net_proxy_port "$1" 2>/dev/null) && [ -n "$_ap_cp" ] && echo "-x http://127.0.0.1:$_ap_cp"
 	_ap_ino=""
 	for _ap_d in /proc/[0-9]*; do
 		{ read -r _ap_c < "$_ap_d/comm"; } 2>/dev/null || continue
@@ -1673,54 +1722,86 @@ _nf_wget() {
 	return $_nw_rc
 }
 
+_nf_remaining() {
+	local limit="$1" now left
+	if [ -n "$_nf_deadline" ]; then
+		read -r now _ </proc/uptime || return 1
+		left=$((_nf_deadline - ${now%%.*}))
+		[ "$left" -gt 0 ] || return 1
+		[ "$left" -ge "$limit" ] || limit="$left"
+	fi
+	printf '%s' "$limit"
+}
+
 net_fetch() {
 	# $4: one optional request header, e.g. "Accept: application/octet-stream"
+	# $5=check shares the time limit across routes for synchronous LuCI requests.
 	_nf_t="$1"; _nf_u="$2"; _nf_o="$3"; _nf_h="$4"
+	local _nf_deadline="" _nf_now _nf_limit _nf_wait _nf_m
+	_nf_limit="$_nf_t"; _nf_wait=$((_nf_t + 20))
+	if [ "$5" = check ]; then
+		read -r _nf_now _ </proc/uptime || return 1
+		_nf_deadline=$((${_nf_now%%.*} + _nf_t))
+		_nf_limit=3
+		[ "$_nf_t" -gt 5 ] || _nf_limit=1
+		_nf_wait="$_nf_limit"
+	fi
 	# a device the owner picked for downloads (GitHub blocked on the default uplink) goes first;
 	# binding to a device needs curl, wget cannot do it
 	_nf_d=$(uci -q get 5gmodem.@5gmodem[0].fetch_dev)
 	case "$_nf_d" in *[!A-Za-z0-9._@-]*) _nf_d="" ;; esac
 	if [ -n "$_nf_d" ] && [ -d "/sys/class/net/$_nf_d" ] && command -v curl >/dev/null 2>&1; then
+		_nf_m=$(_nf_remaining "$_nf_limit") || return 1
 		if [ -n "$_nf_o" ]; then
-			curl -fsSL --connect-timeout 8 -m "$_nf_t" --interface "$_nf_d" ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} -o "$_nf_o" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
+			curl -fsSL --connect-timeout 8 -m "$_nf_m" --interface "$_nf_d" ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} -o "$_nf_o" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
 			rm -f "$_nf_o" 2>/dev/null
 		else
-			_nf_b=$(curl -fsSL --connect-timeout 8 -m "$_nf_t" --interface "$_nf_d" ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} "$_nf_u" 2>/dev/null)
-			[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
+			if _nf_b=$(curl -fsSL --connect-timeout 8 -m "$_nf_m" --interface "$_nf_d" ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} "$_nf_u" 2>/dev/null) && [ -n "$_nf_b" ]; then
+				printf '%s' "$_nf_b"; return 0
+			fi
 		fi
 		logger -t 5gmodem "net: fetch through $_nf_d failed - trying the default route"
 	fi
+	_nf_wait=$(_nf_remaining "$_nf_wait") || return 1
 	if [ -n "$_nf_o" ]; then
-		_nf_wget $((_nf_t + 20)) -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
+		_nf_wget "$_nf_wait" -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_limit" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
 		rm -f "$_nf_o" 2>/dev/null
 	else
-		_nf_b=$(_nf_wget $((_nf_t + 20)) -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
-		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
+		if _nf_b=$(_nf_wget "$_nf_wait" -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_limit" "$_nf_u" 2>/dev/null) && [ -n "$_nf_b" ]; then
+			printf '%s' "$_nf_b"; return 0
+		fi
 	fi
 	if ! command -v curl >/dev/null 2>&1; then
-		_nf_p=$(net_proxy_port) && [ -n "$_nf_p" ] || return 1
+		_nf_p=$(net_proxy_port "$5") && [ -n "$_nf_p" ] || return 1
+		_nf_wait=$(_nf_remaining "$((_nf_t + 20))") || return 1
+		_nf_m=$(_nf_remaining "$_nf_t") || return 1
 		logger -t 5gmodem "net: direct fetch failed - retrying via local proxy 127.0.0.1:$_nf_p"
 		if [ -n "$_nf_o" ]; then
 			( export http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p"
-			  _nf_wget $((_nf_t + 20)) -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null ) && [ -s "$_nf_o" ] && return 0
+			  _nf_wget "$_nf_wait" -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_m" "$_nf_u" 2>/dev/null ) && [ -s "$_nf_o" ] && return 0
 			rm -f "$_nf_o" 2>/dev/null; return 1
 		fi
-		_nf_b=$(export http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p"
-			_nf_wget $((_nf_t + 20)) -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
-		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
+		if _nf_b=$(export http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p"
+			  _nf_wget "$_nf_wait" -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_m" "$_nf_u" 2>/dev/null) && [ -n "$_nf_b" ]; then
+			printf '%s' "$_nf_b"; return 0
+		fi
 		return 1
 	fi
-	net_alt_paths | {
+	net_alt_paths "$5" | {
 		while read -r _nf_a; do
 			# a one-byte probe, so a dead path costs seconds and not the whole timeout
-			curl -fsSL --connect-timeout 4 -m 8 -r 0-0 -o /dev/null $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} "$_nf_u" 2>/dev/null || continue
+			if [ "$5" != check ]; then
+				curl -fsSL --connect-timeout 4 -m 8 -r 0-0 -o /dev/null $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} "$_nf_u" 2>/dev/null || continue
+			fi
+			_nf_m=$(_nf_remaining "$_nf_t") || exit 1
 			logger -t 5gmodem "net: direct fetch failed - using $_nf_a"
 			if [ -n "$_nf_o" ]; then
-				curl -fsSL -m "$_nf_t" $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} -o "$_nf_o" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && exit 0
+				curl -fsSL -m "$_nf_m" $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} -o "$_nf_o" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && exit 0
 				rm -f "$_nf_o" 2>/dev/null
 			else
-				_nf_b=$(curl -fsSL -m "$_nf_t" $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} "$_nf_u" 2>/dev/null)
-				[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; exit 0; }
+				if _nf_b=$(curl -fsSL -m "$_nf_m" $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} "$_nf_u" 2>/dev/null) && [ -n "$_nf_b" ]; then
+					printf '%s' "$_nf_b"; exit 0
+				fi
 			fi
 		done
 		exit 1

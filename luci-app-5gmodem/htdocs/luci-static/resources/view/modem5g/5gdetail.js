@@ -1301,11 +1301,12 @@ function renderAndroidSlots(json) {
 		return;
 	}
 	if (lacLabel) { lacLabel.textContent = _('LAC/TAC'); lacLabel.setAttribute('data-android', '1'); }
+	var msmWeb = json.msm_web === true;
 	renderSimSlots({
 		type: 'android', active: String(Number(json.android_slot) + 1),
 		writable: json.android_sim_switch === '1',
 		slots: (json.android_sims || []).map(function(sim) {
-			return { id: String(Number(sim.slot) + 1), label: 'SIM ' + (Number(sim.slot) + 1), present: sim.subscription_id ? '1' : '0' };
+			return { id: String(Number(sim.slot) + 1), label: 'SIM ' + (Number(sim.slot) + 1), present: msmWeb ? undefined : (sim.subscription_id ? '1' : '0') };
 		})
 	});
 }
@@ -2989,7 +2990,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40008, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40009, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

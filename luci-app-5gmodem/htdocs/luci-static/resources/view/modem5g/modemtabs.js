@@ -339,11 +339,11 @@ function isUsbStick(m) {
 	return (/^12d1:/i).test((m && m.vidpid) || '');
 }
 
-function operatorTabIcon(name) {
-	return mutil.operatorIcon(name);
+function tabBadge(m) {
+	return mutil.operatorIcon(m.operator) || ((m.tether || m.sim_icon === true) ? 'op-sim' : null);
 }
-function tabIconSrc(m, opIcon) {
-	if (!opIcon && m && m.tether) { opIcon = 'op-sim'; }
+function tabIconSrc(m) {
+	var opIcon = tabBadge(m);
 	if (opIcon) { return mutil.icon('icons/5gmodem/' + opIcon + '.svg'); }
 	return mutil.icon(isUsbStick(m) ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg');
 }
@@ -353,7 +353,7 @@ function tabsCacheSave(modems, active) {
 		var lbl = dedupLabels(modems);
 		window.localStorage.setItem(TABS_CACHE, JSON.stringify(modems.map(function(m, i) {
 			return { label: lbl[i], active: (m.path === active), usb: isUsbStick(m),
-			         op: operatorTabIcon(m.operator) || (m.tether ? 'op-sim' : null) };
+			         op: tabBadge(m) };
 		})));
 	} catch (e) {}
 }
@@ -369,7 +369,7 @@ var LIST_CACHE = '/tmp/5gmodem/listmodems.cache';
 
 function pathsSig(list) {
 	return list.map(function(m) {
-		return [ m.path, m.vidpid || '', m.model || '', m.operator || '' ].join('|');
+		return [ m.path, m.vidpid || '', m.model || '', m.operator || '', m.sim_icon === true ].join('|');
 	}).sort().join(',');
 }
 
@@ -539,7 +539,7 @@ function tabsBar(modems, active) {
 		}, [
 			E('img', {
 				'class': 'modemtab-ic',
-				'src': tabIconSrc(m, operatorTabIcon(m.operator)),
+				'src': tabIconSrc(m),
 				'width': 16, 'height': 16, 'alt': '',
 				'title': m.operator || ''
 			}),
@@ -578,7 +578,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 40008,
+	API: 40009,
 	renderBar: function() {
 		pageFadeIn();
 		return loadModems().then(function(st) {

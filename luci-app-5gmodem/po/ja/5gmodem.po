@@ -7501,3 +7501,6 @@ msgstr "カスタムパスワード"
 
 msgid "Could not save the modem web password."
 msgstr "モデムのWebパスワードを保存できませんでした。"
+
+msgid "Could not change the APN."
+msgstr "APN を変更できませんでした。"

@@ -278,6 +278,15 @@ if [ -z "$_rb_if" ] && [ "$_rb_am" = "$_rb_act" ]; then
 fi
 if [ -n "$_rb_am" ]; then
 	_rb_sec="m_$(echo "$_rb_am" | sed 's/[^A-Za-z0-9]/_/g')"
+	if [ "$(uci -q get "5gmodem.$_rb_sec.vidpid")" = 05c6:9024 ] &&
+	   /usr/share/5gmodem/hilink.sh msmweb identify "$_rb_am" >/dev/null; then
+		if /usr/share/5gmodem/hilink.sh msmweb reboot "$_rb_am"; then
+			echo '{"success":true,"mode":"hilink-api"}'
+			exit 0
+		fi
+		echo '{"success":false,"error":"MSM8916 web reboot failed"}'
+		exit 1
+	fi
 	if [ "$(uci -q get "5gmodem.$_rb_sec.kind")" = "hilink" ]; then
 		( /usr/share/5gmodem/hilink.sh reboot "$_rb_am" ) >/dev/null 2>&1 </dev/null &
 		echo '{"success":true,"mode":"hilink-api"}'

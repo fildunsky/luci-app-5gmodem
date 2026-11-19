@@ -28,6 +28,32 @@ through the phone returned HTTP 200 while the wired WAN stayed primary
 One UI 7 / Android 15) was validated afterwards; see [Samsung Galaxy](#samsung-galaxy-exynos).
 Other phones are not yet validated; Android dumps are vendor- and version-dependent.
 
+## Qualcomm MSM8916 USB tethering
+
+The MSM8916 web profile supports selected Android 4.4 (API 19) firmware
+with RNDIS and ADB as USB `05c6:9024`. 5gmodem checks the attached device
+and its firmware before using this profile. ADB provides network
+registration, operator, LTE signal, battery level and temperatures for
+the battery, SoC and power controller. Fresh LTE cell reports from the
+Android radio log supply the serving PCI and TAC, plus neighbouring PCIs
+and signal levels. EARFCN is unavailable in these reports.
+
+The modem web API supplies Cell ID, IMEI, IMSI and ICCID. If the web
+password differs from the factory setting, enter it under **Modem web
+password** in 5gmodem. The normal network mode control offers Auto
+(4G/3G), 4G and 3G. The modem settings can select an existing APN profile
+and restart the stick. The SIM buttons show the active SIM and can
+switch it when the firmware permits switching without a separate SIM
+password.
+
+Serial AT and SMS access are unavailable with the supported RNDIS and
+ADB firmware configuration.
+
+Firmware configured for RNDIS + AT + ADB (`05c6:90b4`) uses the
+existing MSM8916 serial modem profile. Its standard band controls
+offer network mode selection. LTE band locks and cell locks are
+outside the capabilities of that profile.
+
 ## Device and SIM selection
 
 The reader requires USB interface `ff/42/01` and takes the serial from the

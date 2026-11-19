@@ -7501,3 +7501,6 @@ msgstr "自定义密码"
 
 msgid "Could not save the modem web password."
 msgstr "无法保存调制解调器的网页密码。"
+
+msgid "Could not change the APN."
+msgstr "无法更改 APN。"

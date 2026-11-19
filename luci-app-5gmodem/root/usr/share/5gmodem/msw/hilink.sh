@@ -3,6 +3,7 @@ is_hilink() {
 	[ "$(uci -q get "$CFG.$_ih_sec.kind")" = "hilink" ] && return 0
 	_ih_id=$(modem_vidpid "$1")
 	[ -n "$_ih_id" ] || return 1
+	[ "$_ih_id" = 0e8d:2004 ] && olax_mt60_usb "$1" && return 0
 	for _ih_k in $HILINK_IDS; do
 		[ "$_ih_id" = "$_ih_k" ] && return 0
 	done
@@ -125,6 +126,11 @@ setup_hilink() {
 	uci -q set "network.$_hif=interface"
 	uci -q set "network.$_hif.proto=dhcp"
 	uci -q set "network.$_hif.device=$_hd"
+	if [ "$_hkind" = hilink ] && olax_mt60_usb "$_hp"; then
+		uci -q set "$CFG.$_hsec.hl_api=zte"
+		uci -q get "network.$_hif.sendclientid" >/dev/null ||
+			uci -q set "network.$_hif.sendclientid=hardware"
+	fi
 	for _hk in apn pdptype usbpath auth username password devpath allow_roaming; do
 		uci -q delete "network.$_hif.$_hk" 2>/dev/null
 	done
@@ -137,6 +143,7 @@ setup_hilink() {
 	fi
 	[ -n "$_h_off" ] || uci -q delete "network.$_hif.auto" 2>/dev/null
 	uci -q delete "network.$_hif.modem_swapped" 2>/dev/null
+	uci -q delete "network.$_hif.modem_parked" 2>/dev/null
 	uci -q delete "network.$_hif.modem_stale" 2>/dev/null
 	if [ "$_hkind" = tether ]; then
 		uci -q set "network.$_hif.modem_kind=tether"
@@ -217,6 +224,7 @@ _ad_hastty() {
 }
 
 try_at_debug() {
+	olax_mt60_usb "$1" && return 1
 	_ad_sec=$(secname "$1")
 	[ "$(uci -q get "$CFG.$_ad_sec.at_debug")" = "0" ] && return 1
 	hl_brovi "$_ad_sec" && return 1

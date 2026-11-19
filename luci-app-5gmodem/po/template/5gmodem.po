@@ -1915,3 +1915,6 @@ msgstr ""
 
 msgid "Could not save the modem web password."
 msgstr ""
+
+msgid "Could not change the APN."
+msgstr ""

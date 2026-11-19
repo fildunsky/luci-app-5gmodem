@@ -242,12 +242,17 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40008, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40009, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
 		return Promise.all([
-			Promise.resolve(''),
+			L.resolveDefault(uci.load('5gmodem')).then(function() {
+				var path = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
+				var sec = 'm_' + path.replace(/[^A-Za-z0-9]/g, '_');
+				if (uci.get('5gmodem', sec, 'vidpid') !== '05c6:9024') { return '{}'; }
+				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/hilink.sh', [ 'msmweb', 'identify', path ]), '{}');
+			}),
 			fs.list('/dev').then(function(devs) {
 				return devs.filter(function(dev) {
 					return dev.name.match(/^ttyUSB/) || dev.name.match(/^cdc-wdm/) || dev.name.match(/^ttyACM/) || dev.name.match(/^mhi_/) || dev.name.match(/^wwan/);
@@ -1063,6 +1068,45 @@ return view.extend({
 		// (that is plain DHCP): the APN tab reads and writes the stick instead (hilink.sh zteapn).
 		var activePath = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
 		var activeVp = activePath ? String(uci.get('5gmodem', 'm_' + activePath.replace(/[^A-Za-z0-9]/g, '_'), 'vidpid') || '') : '';
+		var activeMsmWeb = activeVp === '05c6:9024' && json.msm_web === true;
+		if (activeKind === 'tether' && activeMsmWeb) {
+			s.children = s.children.filter(function(c) { return c.option !== '_apn_mode' && c.option !== '_apn'; });
+			o = s.taboption('apn', form.DummyValue, '_msm_apn', _('APN in the modem'));
+			o.renderWidget = function() {
+				var profile = E('select', { 'class': 'cbi-input-select', 'disabled': true });
+				var save = E('button', { 'type': 'button', 'class': 'btn cbi-button', 'disabled': true }, [ _('Write to the modem') ]);
+				var status = E('span', {}, [ _('Reading…') ]);
+				var call = function(index) {
+					var args = [ 'msmweb', 'apn', activePath ];
+					if (index != null) { args.push(index); }
+					return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/hilink.sh', args), '{}')
+						.then(function(out) { try { return JSON.parse(out); } catch (e) { return {}; } });
+				};
+				var reload = function() {
+					return call().then(function(data) {
+						var profiles = data.profiles || [];
+						dom.content(profile, profiles.map(function(item) {
+							return E('option', { 'value': item.index }, [ [item.name, item.apn, item.pdp].filter(Boolean).join(' · ') ]);
+						}));
+						profile.value = data.current || '';
+						profile.disabled = !profiles.length;
+						save.disabled = !profile.value;
+						if (!profiles.length) { status.textContent = _('The stick did not return its APN settings.'); }
+					});
+				};
+				profile.addEventListener('change', function() { save.disabled = !profile.value; });
+				save.addEventListener('click', function() {
+					save.disabled = profile.disabled = true;
+					status.textContent = _('Writing and reconnecting the stick…');
+					call(profile.value).then(function(data) {
+						status.textContent = data.ok ? _('Saved. The stick is reconnecting.') : _('Could not change the APN.');
+						return reload();
+					});
+				});
+				window.setTimeout(function() { status.textContent = ''; reload(); }, 0);
+				return E('div', { 'class': 'tg-modem-zapn-row' }, [ profile, save, status ]);
+			};
+		}
 		if (activeKind === 'hilink' && /^19d2:/.test(activeVp)) {
 			s.children = s.children.filter(function(c) { return c.option !== '_apn_mode' && c.option !== '_apn'; });
 			o = s.taboption('apn', form.DummyValue, '_zte_apn', _('APN in the modem'),
@@ -1187,7 +1231,7 @@ return view.extend({
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
 			if (!p) { return false; }
 			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
-			return uci.get('5gmodem', sc, 'kind') === 'hilink';
+			return uci.get('5gmodem', sc, 'kind') === 'hilink' || activeMsmWeb;
 		})();
 		if (webPassHl) {
 			var webPassSection = 'm_' + activePath.replace(/[^A-Za-z0-9]/g, '_');

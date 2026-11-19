@@ -9,7 +9,7 @@ function extract(file, name) {
  return text.slice(start, text.indexOf('\n}', start)+2);
 }
 const icon = vm.runInNewContext('('+extract('mutil.js','operatorIcon')+')');
-const tabIcon = vm.runInNewContext('('+extract('modemtabs.js','operatorTabIcon')+')',{mutil:{operatorIcon:icon}});
+const tabBadge = vm.runInNewContext('('+extract('modemtabs.js','tabBadge')+')',{mutil:{operatorIcon:icon}});
 const cases = [
  ['CBN','op-china-broadnet'],['China Broadnet','op-china-broadnet'],['China Broadcasting Network','op-china-broadnet'],['中国广电','op-china-broadnet'],['中國廣電','op-china-broadnet'],['CHN-CBN','op-china-broadnet'],
  ['CHINA TELECOM','op-china-telecom'],['中国电信','op-china-telecom'],['中國電信','op-china-telecom'],['CHN-CT','op-china-telecom'],
@@ -33,6 +33,9 @@ const cases = [
 for (const [name, expected] of cases) {
  assert.equal(icon(name),expected,name);
  if (expected) assert.ok(fs.existsSync(path.resolve(root, '../../icons/5gmodem', expected+'.svg')), expected+' asset');
- assert.equal(tabIcon(name),expected,name+' tab');
+ assert.equal(tabBadge({operator:name}),expected,name+' tab');
 }
+assert.equal(tabBadge({sim_icon:true,operator:'China Mobile'}),'op-china-mobile');
+assert.equal(tabBadge({sim_icon:true,operator:'Unknown operator'}),'op-sim');
+assert.equal(tabBadge({tether:true}),'op-sim');
 console.log('Operator icons: '+cases.length+' names match on cards and tabs');

@@ -906,7 +906,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 40008,
+	API: 40009,
 	// Resolves to the rendered form node (no wrapper); the caller adds its own collapsible block.
 	tabbedPanel: function() {
 		var m = new form.Map('5gmodem');

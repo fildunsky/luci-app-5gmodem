@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # Web-API helpers (ZTE, Tenda, Yota) must reach the polled modem through its own interface, not the active one's.
+import json
 import os
+from pathlib import Path
 import re
 import tempfile
 import unittest
@@ -39,10 +41,11 @@ HELPERS = ('_netdev_for', '_srcip_for', '_addr_for', '_hl_ctx', '_hl_src',
            '_web_opt', '_zte_get', '_zte_set', '_zte_login',
            '_tenda_raw', '_tenda_post', '_yota_get')
 ONE_LINERS = ('_hl_path', '_web_pass', '_zte_pass', '_tk')
+MSM_CONFIG = {'reply': 'ok', 'simnum': 2, 'simhaspwd': False}
 
 
-def one_liner(name):
-    match = re.search(r'^' + re.escape(name) + r'\(\) \{.*\}$', (SHARE / 'hilink.sh').read_text(), re.M)
+def one_liner(name, filename='hilink.sh'):
+    match = re.search(r'^' + re.escape(name) + r'\(\) \{.*\}$', (SHARE / filename).read_text(), re.M)
     if not match:
         raise ValueError(name)
     return match[0]
@@ -74,10 +77,15 @@ read_auth() {
     if _web_set; then echo configured; else echo factory; fi
 }
 touch "$CACHE_DIR"/tendaauth_192_168_8_1_1_1.fail "$CACHE_DIR"/tendaauth_192_168_8_1_1_2.fail
+touch "$CACHE_DIR"/hilink_192_0_2_1_1_1.msmweb "$CACHE_DIR"/hilink_192_0_2_1_1_1.msmweb.fail
+touch "$CACHE_DIR"/hilink_192_0_2_1_1_2.msmweb.fail
 read_auth
 webpass webpass 1-1 empty
 test ! -e "$CACHE_DIR"/tendaauth_192_168_8_1_1_1.fail || exit 1
 test -e "$CACHE_DIR"/tendaauth_192_168_8_1_1_2.fail || exit 1
+test ! -e "$CACHE_DIR"/hilink_192_0_2_1_1_1.msmweb || exit 1
+test ! -e "$CACHE_DIR"/hilink_192_0_2_1_1_1.msmweb.fail || exit 1
+test -e "$CACHE_DIR"/hilink_192_0_2_1_1_2.msmweb.fail || exit 1
 (webpass webpass 1-1 get)
 read_auth
 webpass webpass 1-1 set 'synthetic password'
@@ -94,6 +102,129 @@ read_auth
             '{"ok":1}', '<admin>|<synthetic password> configured', '{"ok":1}',
             '<admin>|<admin> factory',
         ])
+
+    def test_msm_web_session_retry_keeps_credentials_on_stdin(self):
+        output, requests = self.run_msm_web(
+            'msm_web setmode 1-2 4 && [ "$(cat "$CACHE_DIR/session.msmweb")" = renewed.test ]',
+            [MSM_CONFIG, {'reply': 'SessionOut'}, {'session': 'renewed.test'}, {'reply': 'ok'}],
+            token='expired.test',
+        )
+        self.assertEqual(output.returncode, 0, output.stderr)
+        self.assertEqual([request['data'] for request in requests], [
+            {'cmdid': 'getconfig', 'sessionId': None},
+            {'cmdid': 'setnetworkmode', 'sessionId': 'expired.test', 'params': {'netmode': '1'}},
+            {'cmdid': 'login', 'sessionId': None, 'username': 'fixture user', 'password': 'fixture "pass" \\ word'},
+            {'cmdid': 'setnetworkmode', 'sessionId': 'renewed.test', 'params': {'netmode': '1'}},
+        ])
+        self.assertEqual([request['authorization'] for request in requests], [
+            'Authorization: null', 'Authorization: expired.test',
+            'Authorization: null', 'Authorization: renewed.test',
+        ])
+        for request in requests:
+            argv = request['argv']
+            self.assertEqual(argv[argv.index('-K') + 1], '-')
+            self.assertEqual(argv[argv.index('--interface') + 1], 'test-netdev')
+            self.assertEqual(argv[-1], 'http://192.0.2.1/himiapi/json')
+            for value in ('expired.test', 'renewed.test', 'fixture', 'sessionId'):
+                self.assertNotIn(value, ' '.join(argv))
+
+    def test_msm_web_retries_an_expired_session_only_once(self):
+        output, requests = self.run_msm_web(
+            'msm_web setmode 1-2 4',
+            [MSM_CONFIG, {'reply': 'SessionOut'}, {'session': 'renewed.test'}, {'reply': 'SessionOut'}],
+            token='expired.test',
+        )
+        self.assertNotEqual(output.returncode, 0)
+        self.assertEqual([request['data']['cmdid'] for request in requests], [
+            'getconfig', 'setnetworkmode', 'login', 'setnetworkmode',
+        ])
+
+    def test_msm_web_rejects_unidentified_device_before_using_web_api(self):
+        output, requests = self.run_msm_web('msm_web reboot 1-2', [], identified=False)
+        self.assertNotEqual(output.returncode, 0)
+        self.assertEqual(requests, [])
+
+    def test_msm_web_rejects_netdev_from_another_usb_device(self):
+        output, requests = self.run_msm_web('msm_web reboot 1-2', [], matching_netdev=False)
+        self.assertNotEqual(output.returncode, 0)
+        self.assertEqual(requests, [])
+
+    def test_msm_web_checks_firmware_before_using_credentials_or_cached_token(self):
+        for config in ({'reply': 'ok'}, dict(MSM_CONFIG, simnum=8), dict(MSM_CONFIG, simhaspwd=None)):
+            with self.subTest(config=config):
+                output, requests = self.run_msm_web('msm_web reboot 1-2', [config], token='cached.test')
+                self.assertNotEqual(output.returncode, 0)
+                self.assertEqual([request['data'] for request in requests], [
+                    {'cmdid': 'getconfig', 'sessionId': None},
+                ])
+                self.assertEqual(requests[0]['authorization'], 'Authorization: null')
+
+    def test_msm_web_identify_is_read_only(self):
+        output, requests = self.run_msm_web('msm_web identify 1-2', [MSM_CONFIG])
+        self.assertEqual(output.returncode, 0, output.stderr)
+        self.assertEqual(json.loads(output.stdout), {'msm_web': True})
+        self.assertEqual([request['data'] for request in requests], [
+            {'cmdid': 'getconfig', 'sessionId': None},
+        ])
+
+    def run_msm_web(self, action, replies, token='', identified=True, matching_netdev=True):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)
+            (path / 'replies').write_text(json.dumps(replies))
+            (path / 'session.msmweb').write_text(token)
+            (path / 'curl.py').write_text(r'''
+import json
+import os
+from pathlib import Path
+import sys
+
+directory = Path(os.environ['CACHE_DIR'])
+log = directory / 'requests'
+outstanding = json.loads((directory / 'replies').read_text())
+index = len(log.read_text().splitlines()) if log.exists() else 0
+config = dict((key, json.loads(value)) for key, value in
+              (line.rstrip('\n').split(' = ', 1) for line in sys.stdin))
+with log.open('a') as requests:
+    requests.write(json.dumps({'argv': sys.argv[1:], 'authorization': config['header'],
+                               'data': json.loads(config['data-binary'])}) + '\n')
+if index >= len(outstanding):
+    sys.exit(1)
+print(json.dumps(outstanding[index]))
+''')
+            (path / 'jshn.sh').write_text(r'''
+json_init() { :; }
+json_add_string() {
+	case "$1" in cmdid) cmdid="$2" ;; username) username="$2" ;; password) password="$2" ;; esac
+}
+json_add_null() { :; }
+json_dump() {
+	printf '%s\0%s\0%s' "$cmdid" "$username" "$password" |
+		python3 -c 'import json, sys; command, user, password = sys.stdin.read().split("\0"); print(json.dumps(dict(cmdid=command, username=user, password=password, sessionId=None)))'
+}
+''')
+            stubs = r'''
+curl() { python3 "$CACHE_DIR/curl.py" "$@"; }
+legacy_android_usb() { [ "$IDENTIFIED" = yes ] && [ "$1" = 1-2 ]; }
+_hl_ctx() { _HC_A=192.0.2.1; _HC_D=test-netdev; }
+_msm_web_netdev_matches() { [ "$MATCHING_NETDEV" = yes ] && [ "$_msm_dev" = test-netdev ]; }
+_sess_file() { printf '%s/session\n' "$CACHE_DIR"; }
+_web_user() { printf '%s' 'fixture user'; }
+_web_pass() { printf '%s' 'fixture "pass" \ word'; }
+jsonfilter() {
+	python3 -c 'import json, sys; v=json.load(sys.stdin).get(sys.argv[1][2:], ""); print(str(v).lower() if isinstance(v, bool) else v)' "$2"
+}
+'''
+            helpers = [function(name, 'hilink.sh') for name in (
+                '_msm_web_post', '_msm_web_config', '_msm_web_login', '_msm_web_request', 'msm_web',
+            )]
+            script = '\n'.join([stubs, one_liner('curl_kq', 'lib.sh'), *helpers, action])
+            script = script.replace('/usr/share/libubox/jshn.sh', '"$CACHE_DIR/jshn.sh"')
+            result = shell(script, dict(
+                os.environ, CACHE_DIR=temp, IDENTIFIED='yes' if identified else 'no',
+                MATCHING_NETDEV='yes' if matching_netdev else 'no',
+            ))
+            log = path / 'requests'
+            return result, [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
     def run_sh(self, body):
         with tempfile.TemporaryDirectory() as cache:

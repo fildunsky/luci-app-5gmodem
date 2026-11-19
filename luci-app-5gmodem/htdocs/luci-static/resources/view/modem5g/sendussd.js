@@ -437,7 +437,7 @@ return view.extend({
 		return { text: out, err: false };
 	},
 
-	handleUssdScript: function(code, ex) {
+	handleUssdScript: function(code, ex, native) {
 		var self = this;
 		var STAGES = {
 			starting: _('Preparing the request…'),
@@ -450,7 +450,8 @@ return view.extend({
 		self.setBusy(true);
 		ex.stage(STAGES.starting);
 
-		return fs.exec('/usr/share/5gmodem/ussd.sh', [ 'send', code ]).then(function(r) {
+		var action = native && self.ussdSessionActive ? 'reply' : 'send';
+		return fs.exec('/usr/share/5gmodem/ussd.sh', [ action, code ]).then(function(r) {
 			var j = {};
 			try { j = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
 			if (j.error) {
@@ -486,6 +487,13 @@ return view.extend({
 			self.setBusy(false);
 			if (st.status === 'done') {
 				var body = decB64(st.out);
+				if (st.native === 'mt60') {
+					var decoded = ussdDecodeHex(body, 72);
+					ex.answer(self.formatReply('', { stdout: decoded == null ? body : decoded, stderr: decB64(st.err) }));
+					self.setSession(st.continue === true);
+					if (self.ussdSessionActive) { ex.waiting(); }
+					return;
+				}
 				if (!body.trim()) {
 					if (st.unsupported) {
 						ex.answer({ text: _('This modem does not answer USSD requests: its firmware has no SS support. Verified on real hardware.'), err: true });
@@ -628,6 +636,8 @@ return view.extend({
 	ussdTransport: function() {
 		var amp = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
 		var ams = 'm_' + amp.replace(/[^A-Za-z0-9]/g, '_');
+		if (amp === 'mt60' && uci.get('5gmodem', ams, 'vidpid') === '0e8d:2004')
+			return { native: true, section: ams };
 		var port = uci.get('5gmodem', ams, 'ussd_port') || uci.get('5gmodem', 'sms', 'ussdport');
 		var mm = uci.get('5gmodem', 'sms', 'ussd_via_mm') == '1';
 		var proxy = false;
@@ -656,6 +666,9 @@ return view.extend({
 			if (keep && input) { input.value = ''; input.focus(); }
 			return self.startExchange(ussd);
 		};
+
+		if (tp.native)
+			return this.handleUssdScript(ussd, begin(), true);
 
 		if (tp.mm) {
 			self.setBusy(true);
@@ -710,7 +723,9 @@ return view.extend({
 		var ov = document.getElementById('cmdvalue');
 		if (ov) { ov.value = ''; }
 
-		if (this.ussdSessionActive && this.ussdModemNum != null) {
+		if (this.ussdSessionActive && this.ussdTransport().native) {
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/ussd.sh', [ 'cancel' ]), {});
+		} else if (this.ussdSessionActive && this.ussdModemNum != null) {
 			L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', this.ussdModemNum, '--timeout=8', '--3gpp-ussd-cancel' ]));
 		}
 		this.setSession(false);
@@ -763,7 +778,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40008, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40009, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

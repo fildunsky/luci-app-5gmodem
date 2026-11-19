@@ -10,7 +10,7 @@ _tmp="/tmp/5gmodem/providers.$$"
 
 . /usr/share/5gmodem/lib.sh 2>/dev/null
 _fetch() {
-	net_fetch 10 "$URL" "$_tmp"
+	net_fetch "$1" "$URL" "$_tmp" "" "$2"
 }
 
 _valid() {
@@ -29,7 +29,7 @@ case "${1:-check}" in
 		printf '{"ok":true,"version":"%s","count":%s}\n' "$(_ver "$_cur_db")" "$(_count "$_cur_db")"
 		;;
 	check)
-		_fetch || { echo '{"ok":false,"error":"no downloader / network"}'; exit 0; }
+		_fetch 15 check || { echo '{"ok":false,"error":"no downloader / network"}'; exit 0; }
 		if _valid "$_tmp"; then
 			_cur_db="$DB"; [ -s "$_cur_db" ] || _cur_db="$DB_PKG"
 			_new=$(_count "$_tmp"); _cur=$(_count "$_cur_db")
@@ -45,7 +45,7 @@ case "${1:-check}" in
 		rm -f "$_tmp"
 		;;
 	update)
-		_fetch || { echo '{"ok":false,"error":"download failed"}'; exit 0; }
+		_fetch 10 || { echo '{"ok":false,"error":"download failed"}'; exit 0; }
 		if _valid "$_tmp"; then
 			mkdir -p /etc/5gmodem 2>/dev/null
 			mv "$_tmp" "$DB"

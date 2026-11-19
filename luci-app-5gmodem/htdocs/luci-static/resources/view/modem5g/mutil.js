@@ -8,6 +8,7 @@ function ratLabel(mv) {
 		[/^5G[ \-]?SA\b/i,  '5G'],
 		[/^5G[ \-]?NSA\b/i, '5G'],
 		[/^5G\b/i,          '5G'],
+		[/^LTE_CA\b/i,      '4G+'],
 		[/^LTE-A\b/i,       '4G+'],
 		[/^LTE\b/i,         '4G'],
 		[/^HSPA\+/i,        'H+'],
@@ -488,7 +489,7 @@ function signalSvg(p) {
 
 return baseclass.extend({
 	icon: function(p) { return icons.url(p); },
-	API: 40008,
+	API: 40009,
 	signalSvg: signalSvg,
 	signalSet: signalSet,
 	QUAL_T: QUAL_T,

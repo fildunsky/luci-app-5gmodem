@@ -39,6 +39,110 @@ class AndroidMetrics(unittest.TestCase):
         return subprocess.run([*awk, '-v', 'path=1-2', '-v', 'sampled_at=123',
             '-f', str(SHARE / 'android-metrics.awk')], input=text, text=True, capture_output=True, timeout=5)
 
+    def test_msm8916_profile_is_scoped_to_the_attached_usb_device(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            device = root / 'usb' / '1-2'
+            device.mkdir(parents=True)
+            (root / 'cache').mkdir()
+            for name, value in {'idVendor': '05c6', 'idProduct': '9024', 'serial': 'test-device', 'devnum': '5'}.items():
+                (device / name).write_text(value + '\n')
+            (root / 'uptime').write_text('30.25 0\n')
+            check = (function('legacy_android_usb', 'lib.sh')
+                     .replace('/sys/bus/usb/devices/', '$FIXTURE/usb/')
+                     .replace('/tmp/5gmodem/', '$FIXTURE/cache/')
+                     .replace('/proc/uptime', '"$FIXTURE/uptime"'))
+            source = '\n'.join([
+                check, function('android_legacy_usb', 'android.sh'), r'''
+ls() { busybox ls "$@"; }
+stat() { exit 99; }
+android_usb_serial() { [ "$1" = '1-2' ] && echo "${ADB_SERIAL:-test-device}"; }
+android_adb() {
+	[ "$1:$2:$3" = '-s:test-device:shell' ] || exit 1
+	[ "$4" = 'getprop ro.board.platform; getprop ro.build.version.sdk' ] || exit 1
+	printf '%s %s\n' "$PLATFORM" "$SDK" >> "$FIXTURE/adb"
+	printf '%s\r\n%s\r\n' "$PLATFORM" "$SDK"
+	[ "$AUTHORIZED" = yes ]
+}
+PLATFORM='test-platform'; SDK=19; AUTHORIZED=yes
+if legacy_android_usb 1-2; then exit 1; fi
+PLATFORM=msm8916; SDK=34
+printf '6\n' > "$FIXTURE/usb/1-2/devnum"
+if legacy_android_usb 1-2; then exit 2; fi
+SDK=19; AUTHORIZED=no
+printf '7\n' > "$FIXTURE/usb/1-2/devnum"
+if android_legacy_usb 1-2; then exit 3; fi
+AUTHORIZED=yes
+if android_legacy_usb 1-2; then exit 4; fi
+printf '36.00 0\n' > "$FIXTURE/uptime"
+android_legacy_usb 1-2 || exit 5
+android_legacy_usb 1-2 || exit 6
+# A replacement with the same product ID, serial and device number is still a different enumeration.
+mv "$FIXTURE/usb/1-2" "$FIXTURE/usb/previous"
+cp -R "$FIXTURE/usb/previous" "$FIXTURE/usb/1-2"
+PLATFORM='test-platform'
+if android_legacy_usb 1-2; then exit 7; fi
+printf '1234\n' > "$FIXTURE/usb/1-2/idProduct"
+if android_legacy_usb 1-2; then exit 8; fi
+printf '9024\n' > "$FIXTURE/usb/1-2/idProduct"
+printf '8\n' > "$FIXTURE/usb/1-2/devnum"
+PLATFORM=msm8916; ADB_SERIAL=another-test-device
+if android_legacy_usb 1-2; then exit 9; fi
+'''])
+            result = shell(source, dict(os.environ, FIXTURE=temp))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / 'adb').read_text().splitlines(), [
+                'test-platform 19', 'msm8916 34', 'msm8916 19', 'msm8916 19', 'test-platform 19',
+            ])
+
+    def test_msm8916_kitkat_signal_temperatures_and_web_fields(self):
+        sample = '\n'.join([
+            '__5GM_LEGACY__', 'msm8916', '19', 'test-build', 'READY', 'LTE', 'Test Carrier', '00101',
+            '  mServiceState=0 0 home Test Carrier EmergOnly=false',
+            '  mSignalStrength=SignalStrength: 99 0 -120 -160 -120 -1 -1 26 -92 -14 -28 2147483647 2147483647 gsm|lte',
+            '  mDataConnectionState=2', '  level: 60', '  status: 2', '  temperature: 253',
+            '__5GM_LEGACY_THERMAL__', 'tsens_tz_sensor0 38', 'tsens_tz_sensor2 43', 'pm8916_tz 43400',
+            '__5GM_LEGACY_WEB__', 'web 1', 'cid 12345678', 'IMEI 000000000000000',
+            'IMSI 001010000000000', 'ICCID 0000000000000000000F', 'slots 2', 'slot 1', 'simlock false',
+            '__5GM_LEGACY_CELLS__', '301.25',
+            'D/RILJ: [1234]< RIL_REQUEST_GET_CELL_INFO_LIST ['
+            'CellInfoLte:{mRegistered=YES mTimeStamp=300000000000ns '
+            'CellIdentityLte:{ mCi=12345678 mPci=125 mTac=4242} CellSignalStrengthLte: ss=26 rsrp=-92 rsrq=-14}, '
+            'CellInfoLte:{mRegistered=NO mTimeStamp=300000000000ns '
+            'CellIdentityLte:{ mCi=2147483647 mPci=317 mTac=2147483647} CellSignalStrengthLte: ss=20 rsrp=-101 rsrq=-16}]',
+            '__5GM_END__', '',
+        ])
+        for awk in [('busybox', 'awk'), ('awk',)]:
+            with self.subTest(awk=awk):
+                data = json.loads(self.parse(sample, awk).stdout)
+                self.assertEqual(data['modem'], 'MSM8916')
+                self.assertIs(data['msm_web'], True)
+                self.assertEqual((data['registration'], data['csq'], data['rssi']), ('1', '26', '-61'))
+                self.assertEqual((data['rsrp'], data['rsrq'], data['sinr']), ('-92', '-14', '-2.8'))
+                self.assertEqual(data['temps'], 'bat=25.3 cpu=43 pmic=43.4')
+                self.assertEqual(data['cid_hex'], 'BC614E')
+                self.assertEqual((data['pci'], data['tac_dec']), ('125', '4242'))
+                self.assertEqual([cell['pci'] for cell in data['neighbors']], ['125', '317'])
+                self.assertEqual(data['iccid'], '0000000000000000000')
+                self.assertEqual((data['android_slot'], data['android_sim_switch']), ('1', '1'))
+                self.assertNotIn('cqi', data)
+                absent = json.loads(self.parse(sample.replace('READY', 'ABSENT'), awk).stdout)
+                self.assertEqual(absent['sim_state'], 'absent')
+                self.assertNotIn('cid_dec', absent)
+                self.assertNotIn('imsi', absent)
+                stale = json.loads(self.parse(sample.replace('301.25', '330.25'), awk).stdout)
+                self.assertNotIn('neighbors', stale)
+                self.assertEqual(stale['cid_hex'], 'BC614E')
+                self.assertNotEqual(self.parse(sample.replace('msm8916', 'test-platform'), awk).returncode, 0)
+                unsupported_web = json.loads(self.parse(sample.replace('web 1', 'web 0'), awk).stdout)
+                self.assertNotIn('msm_web', unsupported_web)
+                self.assertNotIn('android_slot', unsupported_web)
+                self.assertNotIn('imei', unsupported_web)
+                self.assertEqual(unsupported_web['android_sim_switch'], '0')
+                incomplete_signal = json.loads(self.parse(sample.replace('99 0 -120 -160', 'fields missing'), awk).stdout)
+                self.assertNotIn('csq', incomplete_signal)
+                self.assertNotIn('rsrp', incomplete_signal)
+
     def test_both_sims_active_subscription_units_and_current_temperatures(self):
         for awk in [('busybox', 'awk'), ('awk',)]:
             with self.subTest(awk=awk):

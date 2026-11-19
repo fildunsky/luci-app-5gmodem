@@ -32,7 +32,7 @@ class UpdateAssetUrl(unittest.TestCase):
         self.assertIn('ACC="Accept: application/octet-stream"', src)
         self.assertIn('net_fetch 120 "$URL" "$F" "$ACC"', src)
         self.assertRegex(src, r"notes-\$2\.txt'\]\.url\"")
-        self.assertIn('net_fetch 10 "$_nl_url" "" "Accept: application/octet-stream"', src)
+        self.assertIn('net_fetch 4 "$_nl_url" "" "Accept: application/octet-stream" check', src)
 
     def run_fetch(self, mode, out, header='Accept: application/octet-stream'):
         with tempfile.TemporaryDirectory() as d:
@@ -49,7 +49,7 @@ class UpdateAssetUrl(unittest.TestCase):
                 f'wget() {{ {d / "bin" / "wget"} "$@"; }}',  # busybox ash prefers its own wget applet
                 'net_proxy_port() { echo 7890; }',
                 'net_alt_paths() { echo "-x http://127.0.0.1:7890"; }',
-                function('_nf_wget', 'lib.sh'), function('net_fetch', 'lib.sh'),
+                function('_nf_wget', 'lib.sh'), function('_nf_remaining', 'lib.sh'), function('net_fetch', 'lib.sh'),
                 f'net_fetch 120 https://api.example/assets/1 "{target}" {'"' + header + '"' if header else ''}; echo "rc=$?"',
             ])
             r = shell(src, env)

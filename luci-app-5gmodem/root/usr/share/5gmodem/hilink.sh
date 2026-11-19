@@ -940,6 +940,11 @@ zte_metrics_json() {
 	_hl_ctx "$_HLP" || return 1
 	_a="$_HC_A"
 	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,cr_version,wan_apn,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes,nv_rsrp,nv_rsrq,nv_sinr,nv_pci,nv_arfcn,mcc,mnc,tac_code"
+	_z_mt60=""
+	if olax_mt60_usb "$_HLP"; then
+		_z_mt60=1
+		_zm_cmd="$_zm_cmd,rsrp,rsrq,sinr"
+	fi
 	_r=$(_zte_get "$_a" "$_zm_cmd" "$_HLP")
 	case "$_r" in
 		*'"modem_main_state"'*|*'"ppp_status"'*) ;;
@@ -951,7 +956,9 @@ zte_metrics_json() {
 		    fi
 		    return 1 ;;
 	esac
-	case "$(_zj "$_r" lte_rsrp)$(_zj "$_r" rssi)" in
+	_zm_signal="$(_zj "$_r" lte_rsrp)$(_zj "$_r" rssi)"
+	[ -z "$_z_mt60" ] || _zm_signal="$_zm_signal$(_zj "$_r" rsrp)"
+	case "$_zm_signal" in
 		'') if _zte_login "$_a" "$_HLP" >/dev/null 2>&1; then
 			_r2=$(_zte_get "$_a" "$_zm_cmd" "$_HLP")
 			case "$_r2" in *'"modem_main_state"'*|*'"ppp_status"'*) _r="$_r2" ;; esac
@@ -968,6 +975,13 @@ zte_metrics_json() {
 	_rsrq=$(_zj "$_r" lte_rsrq | tr -cd '0-9.-')
 	_sinr=$(_zj "$_r" lte_snr | tr -cd '0-9.-')
 	_rssi=$(_zj "$_r" lte_rssi | grep -oE -- '-?[0-9]+' | head -1)
+	if [ -n "$_z_mt60" ]; then
+		case "$_ntype" in *LTE*)
+			[ -n "$_rsrp" ] || _rsrp=$(_zj "$_r" rsrp | tr -cd '0-9.-')
+			[ -n "$_rsrq" ] || _rsrq=$(_zj "$_r" rsrq | tr -cd '0-9.-')
+			[ -n "$_sinr" ] || _sinr=$(_zj "$_r" sinr | awk '/^-?[0-9]+$/ && $0 >= -200 && $0 <= 300 { print $0 / 10 }')
+		esac
+	fi
 	[ -n "$_rssi" ] && [ "$_rssi" = "$_rsrp" ] && _rssi=""
 	case "$_ntype" in *LTE*)
 		_znv=$(_zj "$_r" nv_rsrp | tr -cd '0-9')
@@ -995,6 +1009,7 @@ zte_metrics_json() {
 	_zearfcn=""; case "$_ntype" in *LTE*) _zearfcn=$(_zj "$_r" nv_arfcn | tr -cd '0-9') ;; esac
 	_zband=$(_zj "$_r" lte_band | tr -cd '0-9')
 	[ -n "$_zband" ] || _zband=$(_zj "$_r" wan_active_band | sed -n 's/^LTE[^0-9]*\([0-9][0-9]*\).*/\1/p')
+	# The MT60's band_reg may keep the old band after a handover or RAT change.
 	_zpband=""; [ -n "$_zband" ] && _zpband="B$_zband"
 	_mcc=$(_zj "$_r" rmcc); [ -n "$_mcc" ] || _mcc=$(_zj "$_r" hmcc)
 	_mnc=$(_zj "$_r" rmnc); [ -n "$_mnc" ] || _mnc=$(_zj "$_r" hmnc)
@@ -1019,12 +1034,13 @@ zte_metrics_json() {
 		case "$_mfm" in GW510U) _mfm="GW510-U" ;; esac
 	fi
 	[ -n "$_mfm" ] && _model="${_model:+$_model }$_mfm"
+	[ -n "$_z_mt60" ] && _model="Olax MT60"
 	_zbat=$(_zj "$_r" battery_vol_percent | tr -cd '0-9')
 	_zchg=$(_zj "$_r" battery_charging | tr -cd '0-9')
 	[ -n "$_zbat" ] || _zbat=$(zx_battery "$_HLP")
 	_zat_ok=""
-	case "$(_vidpid_for "$_HLP")" in
-		0e8d:2004|0e8d:2008)
+	case "$_z_mt60:$(_vidpid_for "$_HLP")" in
+		:0e8d:2004|:0e8d:2008)
 			_zat=$(mtk_cell "$_a" "$_HLP")
 			_zes=$(printf '%s\n' "$_zat" | sed -n 's/^+ECSQ: *//p' | head -1)
 			if [ -n "$_zes" ]; then
@@ -1170,8 +1186,11 @@ ZX_EOF
 	[ -n "$_zapn" ] && printf '"iface_apn":"%s",' "$(jsafe "$_zapn")"
 	printf '"csq":"%s",' "$_csq"
 	printf '"battery":"%s","battery_charging":"%s","hl_modes":"1",' "$_zbat" "$_zchg"
-	case "$(_vidpid_for "$_HLP")" in
-		0e8d:2004|0e8d:2008)
+	if [ -n "$_z_mt60" ] && [ -z "$_rssi" ]; then
+		printf '"na":"csq rssi",'
+	fi
+	case "$_z_mt60:$(_vidpid_for "$_HLP")" in
+		:0e8d:2004|:0e8d:2008)
 			[ -n "$_zat_ok" ] || printf '"na":"csq rssi sinr rsrq pband",'
 			_ztm=$(mtk_temps "$_a" "$_HLP")
 			[ -n "$_ztm" ] && printf '"temps":"%s",' "$_ztm" ;;
@@ -2290,6 +2309,56 @@ _zte_post_auth() {
 	return 1
 }
 
+mt60_band_data() {
+	olax_mt60_usb "$1" || return 1
+	_hl_ctx "$1" || return 1
+	_zte_get "$_HC_A" 'band_list&nomd' "$1"
+}
+
+mt60_band_numbers() {
+	jsonfilter -s "$1" -e "@.$2[*].band_key" 2>/dev/null |
+		sed -n 's/^Band\([1-9][0-9]\{0,2\}\)$/\1/p' | sort -nu |
+		awk '{ printf "%s%s", sep, $0; sep=" " }'
+}
+
+mt60_bands() {
+	local reply supported enabled
+	reply=$(mt60_band_data "$1") || return 1
+	supported=$(mt60_band_numbers "$reply" band_list)
+	[ -n "$supported" ] || return 1
+	enabled=$(mt60_band_numbers "$reply" current_band_list)
+	[ -n "$enabled" ] || return 1
+	enabled=$(awk -v supported="$supported" -v enabled="$enabled" 'BEGIN {
+		n=split(enabled, enabled_bands, " "); for (i=1; i<=n; i++) active[enabled_bands[i]]=1
+		n=split(supported, bands, " "); for (i=1; i<=n; i++) if (active[bands[i]]) { printf "%s%s", sep, bands[i]; sep=" " }
+	}')
+	[ -n "$enabled" ] || return 1
+	printf '%s|%s\n' "$supported" "$enabled"
+}
+
+mt60_setbands() {
+	local wanted="$1" path="$2" reply supported sim band payload="" sep="" jar result
+	reply=$(mt60_band_data "$path") || return 1
+	supported=$(mt60_band_numbers "$reply" band_list)
+	[ -n "$supported" ] || return 1
+	sim=$(_zj "$reply" simId)
+	case "$sim" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$wanted" != default ] || wanted="$supported"
+	case "$wanted" in *[!0-9\ ]*) return 1 ;; esac
+	for band in $wanted; do
+		case " $supported " in *" $band "*) ;; *) return 1 ;; esac
+		payload="$payload${sep}%22Band$band%22"
+		sep=%2C
+	done
+	[ -n "$payload" ] || return 1
+	_hl_ctx "$path" || return 1
+	_zte_login_jar "$_HC_A" "$path" 1 || return 1
+	jar="$CACHE_DIR/ztejar_$(_sk "$_HC_A" "$path")"
+	result=$(_zte_set "$_HC_A" "goformId=SET_BAND&band_list=%5B$payload%5D&simId=$sim" "$jar" "$path") || return 1
+	[ "$(_zj "$result" result)" = success ] || return 1
+	echo '{"success":true}'
+}
+
 _adb_to() {
 	_at_t="$1"; shift
 	_5GM_ADB=1 adb "$@" 2>/dev/null 1000>&- 6>&- 7>&- 8>&- 9>&- &
@@ -2670,7 +2739,194 @@ hl_setmode() {
 	esac
 }
 
+_msm_web_post() {
+	{
+		printf 'header = "Authorization: %s"\n' "$(curl_kq "${_msm_token:-null}")"
+		printf 'data-binary = "%s"\n' "$(curl_kq "$(printf '%s' "$1" | tr -d '\r\n')")"
+	} | curl -fsS --noproxy '*' --max-time 3 --interface "$_msm_dev" -K - \
+		-H 'Content-Type: application/json;charset=UTF-8' "http://$_msm_addr/himiapi/json" 2>/dev/null
+}
+
+_msm_web_netdev_matches() {
+	[ -n "$_msm_dev" ] || return 1
+	local iface
+	for iface in /sys/bus/usb/devices/"$_msm_path":*/net/"$_msm_dev"; do
+		[ ! -d "$iface" ] || return 0
+	done
+	return 1
+}
+
+_msm_web_config() {
+	local config
+	config=$(_msm_web_post '{"cmdid":"getconfig","sessionId":null}') || return 1
+	[ "$(printf '%s' "$config" | jsonfilter -e '@.reply')" = ok ] || return 1
+	_msm_slots=$(printf '%s' "$config" | jsonfilter -e '@.simnum')
+	_msm_simlock=$(printf '%s' "$config" | jsonfilter -e '@.simhaspwd')
+	case "$_msm_slots:$_msm_simlock" in [123]:true|[123]:false) return 0 ;; *) return 1 ;; esac
+}
+
+_msm_web_login() {
+	local request reply temp
+	[ ! -f "$_msm_session.fail" ] || [ -n "$(find "$_msm_session.fail" -mmin +15 2>/dev/null)" ] || return 1
+	request=$(
+		. /usr/share/libubox/jshn.sh
+		json_init
+		json_add_string cmdid login
+		json_add_string username "$(_web_user "$_msm_path")"
+		json_add_string password "$(_web_pass "$_msm_path")"
+		json_add_null sessionId
+		json_dump
+	)
+	reply=$(_msm_web_post "$request") || return 1
+	_msm_token=$(printf '%s' "$reply" | jsonfilter -e '@.session')
+	case "$_msm_token" in
+		''|null|*[!a-zA-Z0-9._-]*) (umask 077; : > "$_msm_session.fail"); return 1 ;;
+	esac
+	rm -f "$_msm_session.fail"
+	temp=$(mktemp "$_msm_session.XXXXXX") || return 1
+	printf '%s\n' "$_msm_token" > "$temp" && mv -f "$temp" "$_msm_session" && return 0
+	rm -f "$temp"
+	return 1
+}
+
+_msm_web_request() {
+	local payload reply _msm_token
+	_msm_token=$(cat "$_msm_session" 2>/dev/null)
+	case "$_msm_token" in null|*[!a-zA-Z0-9._-]*) _msm_token= ;; esac
+	[ -n "$_msm_token" ] || _msm_web_login || return 1
+	payload=$(printf '{"cmdid":"%s","sessionId":"%s"%s}' "$1" "$_msm_token" "${2:-}")
+	reply=$(_msm_web_post "$payload") || return 1
+	if [ "$(printf '%s' "$reply" | jsonfilter -e '@.reply')" = SessionOut ]; then
+		rm -f "$_msm_session"
+		_msm_token=
+		_msm_web_login || return 1
+		payload=$(printf '{"cmdid":"%s","sessionId":"%s"%s}' "$1" "$_msm_token" "${2:-}")
+		reply=$(_msm_web_post "$payload") || return 1
+	fi
+	[ "$(printf '%s' "$reply" | jsonfilter -e '@.reply')" = ok ] || return 1
+	printf '%s\n' "$reply"
+}
+
+_msm_web_slots() {
+	local status
+	status=$(_msm_web_request getsimset) || return 1
+	_msm_active=$(printf '%s' "$status" | jsonfilter -e '@.params.simcurrent')
+	_msm_selected=$(printf '%s' "$status" | jsonfilter -e '@.params.simset')
+	case "$_msm_slots:$_msm_active" in 1:0|2:[01]|3:[012]) return 0 ;; *) return 1 ;; esac
+}
+
+_msm_web_apn() (
+	local reply current profile name apn pdp i
+	reply=$(_msm_web_request getapninfo) || exit 1
+	current=$(printf '%s' "$reply" | jsonfilter -e '@.params.apncurrent')
+	case "$1" in
+		'')
+			. /usr/share/libubox/jshn.sh
+			json_init
+			json_add_string current "$current"
+			json_add_array profiles
+			i=0
+			while [ "$i" -lt 100 ]; do
+				profile=$(printf '%s' "$reply" | jsonfilter -e "@.params.apnlist[$i]")
+				[ -n "$profile" ] || break
+				name=$(printf '%s' "$profile" | jsonfilter -e '@.apnname')
+				apn=$(printf '%s' "$profile" | jsonfilter -e '@.apn')
+				pdp=$(printf '%s' "$profile" | jsonfilter -e '@.pdptype')
+				json_add_object ''
+				json_add_string index "$i"
+				json_add_string name "$name"
+				json_add_string apn "$apn"
+				json_add_string pdp "$pdp"
+				json_close_object
+				i=$((i + 1))
+			done
+			json_close_array
+			json_dump
+			;;
+		*[!0-9]*|???*) exit 1 ;;
+		*)
+			profile=$(printf '%s' "$reply" | jsonfilter -e "@.params.apnlist[$1]")
+			[ -n "$profile" ] || exit 1
+			[ "$1" = "$current" ] || _msm_web_request setcurrentapn ",\"params\":$profile" >/dev/null || exit 1
+			echo '{"ok":true}'
+			;;
+	esac
+)
+
+msm_web() {
+	local _msm_path="$2" _msm_addr _msm_dev _msm_session _msm_token="" _msm_slots _msm_simlock _msm_active _msm_selected
+	local sys overview mode field target i writable
+	legacy_android_usb "$_msm_path" || return 1
+	_hl_ctx "$_msm_path" || return 1
+	_msm_addr=$_HC_A; _msm_dev=$_HC_D
+	# Prove that the selected RNDIS device speaks this API before sending credentials or controls.
+	_msm_web_netdev_matches && _msm_web_config || return 1
+	_msm_session="$(_sess_file "$_msm_addr" "$_msm_path").msmweb"
+	case "$1" in
+		identify) echo '{"msm_web":true}' ;;
+		metrics)
+			echo 'web 1'
+			sys=$(_msm_web_request getsysinfo)
+			overview=$(_msm_web_request getoverview)
+			printf 'cid %s\n' "$(printf '%s' "$sys" | jsonfilter -e '@.params.cellid')"
+			for field in IMEI IMSI ICCID; do
+				printf '%s %s\n' "$field" "$(printf '%s' "$overview" | jsonfilter -e "@.params.$field")"
+			done
+			if _msm_web_slots; then
+				printf 'slots %s\nslot %s\nsimlock %s\n' "$_msm_slots" "$_msm_active" "$_msm_simlock"
+			fi
+			;;
+		mode)
+			mode=$(_msm_web_request getnetworkmode | jsonfilter -e '@.params.netmode')
+			case "$mode" in 0) echo 1 ;; 1) echo 4 ;; 2) echo 2 ;; *) return 1 ;; esac
+			;;
+		setmode)
+			case "$3" in 1) mode=0 ;; 4) mode=1 ;; 2) mode=2 ;; *) return 1 ;; esac
+			_msm_web_request setnetworkmode ",\"params\":{\"netmode\":\"$mode\"}" >/dev/null
+			;;
+		slots)
+			_msm_web_slots || return 1
+			writable=false
+			[ "$_msm_simlock" = false ] && [ "$_msm_slots" -gt 1 ] && writable=true
+			printf '{"type":"android","active":"%s","writable":%s,"slots":[' "$((_msm_active + 1))" "$writable"
+			for i in 1 2 3; do
+				[ "$i" -le "$_msm_slots" ] || break
+				[ "$i" = 1 ] || printf ','
+				printf '{"id":"%s","label":"SIM %s"}' "$i" "$i"
+			done
+			printf ']}\n'
+			;;
+		setslot)
+			case "$3" in 1|2|3) target=$(( $3 - 1 )) ;; *) return 1 ;; esac
+			_msm_web_slots && [ "$_msm_simlock" = false ] && [ "$target" -lt "$_msm_slots" ] || return 1
+			[ "$target" = "$_msm_selected" ] || _msm_web_request setsimnum ",\"params\":$target,\"params1\":\"\"" >/dev/null
+			;;
+		apn)
+			_msm_web_apn "$3" || { echo '{"ok":false}'; return 1; }
+			;;
+		reboot)
+			_msm_web_request rebootcmd ',"params":"reboot"' >/dev/null
+			;;
+		*) return 1 ;;
+	esac
+}
+
+if [ "$2" = mt60 ] && [ -r "$RES/mt60-web.sh" ]; then
+	. "$RES/mt60-web.sh"
+	if mt60_native; then
+		case "$1" in
+			json|metrics) exec ubus -t 4 call mt60 radio ;;
+			addr) printf '%s\n' "${MT60_ORIGIN#http://}" ;;
+			devname) echo 'OLAX MT60' ;;
+			probe) printf '{"hilink":1,"addr":"%s"}\n' "${MT60_ORIGIN#http://}" ;;
+			*) printf '%s\n' '{"success":false}'; exit 1 ;;
+		esac
+		exit 0
+	fi
+fi
+
 case "$1" in
+	msmweb)       msm_web "$2" "$3" "$4"; exit $? ;;
 	devname)     api_get /api/device/information "$2" 2>/dev/null | xval DeviceName ;;
 	probe)
 		_a=$(_addr_for "$2") || { echo '{"hilink":0}'; exit 0; }
@@ -2802,6 +3058,8 @@ case "$1" in
 			set) zte_apn_set "$3" "$4" "$5" ;;
 			*) echo '{"error":"usage: zteapn get [path] | set <apn> <IP|IPv4v6> [path]"}'; exit 1 ;;
 		esac ;;
+	mt60bands)   mt60_bands "$2"; exit $? ;;
+	mt60setbands) mt60_setbands "$2" "$3"; exit $? ;;
 	zgetmode)    zte_getmode "$2" ;;
 	mtkbands)    mtk_bands_json "$2" ;;
 	mtksetbands) mtk_setbands "$2" "$3" ;;

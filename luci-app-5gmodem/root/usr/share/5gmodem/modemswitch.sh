@@ -815,12 +815,20 @@ resolve)
 		fi
 		[ "$(uci -q get "network.$_nc_if.modem_parked")" = "1" ] && continue
 		_nc_dev=$(uci -q get "network.$_nc_if.device")
-		case "$_nc_dev" in /dev/tty*) : ;; *) continue ;; esac
-		[ -e "$_nc_dev" ] || continue
 		_nc_own=""
-		for _nc_pp in $PRESENT; do
-			modem_ttys "$_nc_pp" 2>/dev/null | grep -qxF "$_nc_dev" && { _nc_own="$_nc_pp"; break; }
-		done
+		case "$_nc_dev" in
+			/dev/tty*)
+				[ -e "$_nc_dev" ] || continue
+				for _nc_pp in $PRESENT; do
+					modem_ttys "$_nc_pp" 2>/dev/null | grep -qxF "$_nc_dev" && { _nc_own="$_nc_pp"; break; }
+				done ;;
+			?*)
+				[ "$(uci -q get "network.$_nc_if.proto")" = dhcp ] || continue
+				iface_user_off "$_nc_if" && continue
+				for _nc_pp in $PRESENT; do
+					[ "$(hilink_netdev "$_nc_pp")" = "$_nc_dev" ] && { _nc_own="$_nc_pp"; break; }
+				done ;;
+		esac
 		[ -n "$_nc_own" ] || continue
 		logger -t 5gmodem "resolve: interface $_nc_if has no modem (path $_nc_p) and its node $_nc_dev belongs to live $_nc_own - disabling until the modem returns"
 		ifdown "$_nc_if" 2>/dev/null
@@ -1146,6 +1154,8 @@ webpass)
 			for _wp_prefix in hilink tendaauth ztestok tendaapi asrsid; do
 				rm -f /tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key" \
 					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".fail \
+					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".msmweb \
+					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".msmweb.fail \
 					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".sid \
 					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".who 2>/dev/null
 			done

@@ -88,7 +88,139 @@ function sim(i, l,n,s,p,r,t,b,j,records,count,band,widths,total) {
   }
  }
 }
+function legacy_lte_cells(  cells, valid, cell, stamp, age, pci, ci, tac, count, serving, i, n, asu) {
+ n=split(legacy_cells,cells,/CellInfoLte:/)
+ for(i=2;i<=n && count<16;i++) {
+  cell=cells[i]; stamp=val(cell,"mTimeStamp"); sub(/ns$/,"",stamp)
+  if(!num(stamp,1,9999999999999999) || !num(legacy_uptime,0,99999999)) continue
+  age=legacy_uptime-stamp/1000000000
+  pci=val(cell,"mPci")
+  if(age< -1 || age>20 || !num(pci,0,503)) continue
+  valid[++count]=cell
+  if(!serving && val(cell,"mRegistered")=="YES") serving=count
+ }
+ if(!serving) return ""
+ cell=valid[serving]
+ ci=val(cell,"mCi")
+ if(num(legacy_web["cid"],1,268435455) && ci!=legacy_web["cid"]) return ""
+ str("android_cell_source","radio_log")
+ metric("pci",val(cell,"mPci"),0,503)
+ tac=val(cell,"mTac")
+ if(num(tac,0,65535)) {
+  str("tac_dec",tac); str("tac_hex",sprintf("%X",tac)); str("tac_d",tac); str("tac_h",sprintf("%X",tac))
+ }
+ printf ",\"neighbors\":["
+ for(i=1;i<=count;i++) {
+  cell=valid[i]
+  printf "%s{",i==1 ? "" : ","; sep=""
+  str("serving",i==serving ? "1" : "0")
+  str("pci",val(cell,"mPci"))
+  metric("rsrp",val(cell,"rsrp"),-140,-44); metric("rsrq",val(cell,"rsrq"),-34,-3)
+  asu=val(cell,"ss"); if(num(asu,0,31)) str("rssi",2*asu-113)
+  printf "}"
+ }
+ printf "]"; sep=","
+ return ci
+}
+function legacy_json(  fields, report, asu, csq, sinr, temps, ci, iccid, slot, slots, i, n) {
+ if(legacy[1]!="msm8916" || legacy[2]!="19" || legacy_signal=="") return 0
+ report=legacy_signal; sub(/^.*SignalStrength:[[:space:]]*/,"",report)
+ n=split(report,fields,/[[:space:]]+/)
+ printf "{"; sep=""
+ str("backend","android"); str("protocol","Android (ADB)"); str("no_at","1")
+ if(legacy_web_ready) { printf "%s\"msm_web\":true",sep; sep="," }
+ slot=legacy_web["slot"]
+ slots=legacy_web["slots"]; if(slots!~/^[123]$/) slots=0
+ str("android_adb","ready")
+ if(slot~/^[012]$/ && (!slots || slot<slots)) {
+  str("android_slot",slot); str("simslot","SIM " (slot+1))
+ } else slot=-1
+ str("android_sim_switch",slot>=0 && slots>1 && legacy_web["simlock"]=="false" ? "1" : "0")
+ str("path",path); str("vidpid",vidpid); str("onbus","1"); str("age","0")
+ str("modem","MSM8916"); str("firmware",legacy[3])
+ if(slot>=0 && slots>1) {
+  printf ",\"android_sims\":["
+  for(i=0;i<slots;i++) {
+   printf "%s{",i==0 ? "" : ","; sep=""
+   str("slot",i)
+   if(i==slot) str("sim_state",legacy[4]=="READY" ? "ready" : legacy[4]=="ABSENT" ? "absent" : "unknown")
+   printf "}"
+  }
+  printf "]"; sep=","
+ }
+ str("iface",iface); str("ipaddr",ip); str("netdev",netdev)
+ str("tether","android"); str("tether_state",netdev!="" ? "ready" : "no_netdev")
+ str("sampled_at",sampled_at); str("data_state",legacy_data)
+ str("mode",legacy[5]); str("operator_name",legacy[6])
+ if(legacy[7]~/^[0-9]+$/ && length(legacy[7])>=5 && length(legacy[7])<=6) {
+  str("operator_mcc",substr(legacy[7],1,3)); str("operator_mnc",substr(legacy[7],4))
+ }
+ if(legacy[4]=="ABSENT") { str("registration","SIM not inserted"); str("sim_state","absent") }
+ else if(legacy[4]=="READY") {
+  str("sim_state","ready")
+  if(legacy_reg ~ /^[0-9]+ 0 (home|roaming) /) str("registration",legacy_reg ~ /^[0-9]+ 0 roaming / ? "5" : "1")
+ }
+ else if(legacy[4]~/^(PIN|PUK)_REQUIRED$/) str("sim_state","locked")
+ if(legacy[5]=="LTE") {
+  for(i=1;i<=12 && fields[i]~/^-?[0-9]+$/;i++) {}
+  if(n>=12 && i==13) {
+   asu=fields[8]; metric("rsrp",fields[9],-140,-44); metric("rsrq",fields[10],-34,-3)
+   sinr=fields[11]; if(num(sinr,-200,300)) str("sinr",sinr/10)
+   metric("cqi",fields[12],0,15)
+  }
+  if(legacy[4]=="READY") {
+   ci=legacy_lte_cells()
+   if(!num(ci,1,268435455)) ci=legacy_web["cid"]
+   if(num(ci,1,268435455) && ci~/^[0-9]+$/) {
+    str("cid_dec",ci); str("cid_hex",sprintf("%X",ci)); str("enbid",int(ci/256))
+   }
+  }
+ } else if(legacy[5]~/^(GPRS|EDGE|UMTS|HSDPA|HSUPA|HSPA|HSPA[+])$/) {
+  asu=fields[1]
+ }
+ if(num(asu,0,31)) { csq=asu+0; str("csq",csq); str("csq_source","rssi"); str("rssi",2*csq-113); str("signal",int(csq*100/31+0.5)) }
+ if(legacy_web["IMEI"]~/^[0-9]+$/ && length(legacy_web["IMEI"])==15) str("imei",legacy_web["IMEI"])
+ if(legacy[4]=="READY") {
+  if(legacy_web["IMSI"]~/^[0-9]+$/ && length(legacy_web["IMSI"])==15) str("imsi",legacy_web["IMSI"])
+  iccid=legacy_web["ICCID"]; sub(/[Ff]$/,"",iccid)
+  if(iccid~/^[0-9]+$/ && length(iccid)>=18 && length(iccid)<=22) str("iccid",iccid)
+ }
+ metric("battery",battery,0,100)
+ str("battery_charging",charging)
+ if(bat!="") temps="bat=" bat
+ if(legacy_cpu!="") temps=temps (temps=="" ? "" : " ") "cpu=" legacy_cpu
+ if(legacy_pmic!="") temps=temps (temps=="" ? "" : " ") "pmic=" legacy_pmic
+ if(temps!="") str("temps",temps)
+ print "}"
+ return 1
+}
 /^__5GM_/ { section=$0; line=0; next }
+section=="__5GM_LEGACY__" {
+ line++
+ if(line<=7) legacy[line]=$0
+ else if(/^[[:space:]]*mSignalStrength=SignalStrength:/) legacy_signal=$0
+ else if(/^[[:space:]]*mDataConnectionState=/) { legacy_data=$0; sub(/^.*=/,"",legacy_data) }
+ else if(/^[[:space:]]*mServiceState=/) { legacy_reg=$0; sub(/^[^=]*=/,"",legacy_reg) }
+ else if($1=="level:" && num($2,0,100)) battery=$2
+ else if($1=="temperature:" && num($2,-400,1000)) bat=$2/10
+ else if($1=="status:") charging=($2==2 ? "1" : "0")
+ next
+}
+section=="__5GM_LEGACY_THERMAL__" {
+ if($1~/^tsens_tz_sensor[0-9]+$/ && num($2,-40,125) && (legacy_cpu=="" || $2+0>legacy_cpu)) legacy_cpu=$2+0
+ if($1=="pm8916_tz" && num($2,-40000,125000)) legacy_pmic=$2/1000
+ next
+}
+section=="__5GM_LEGACY_WEB__" {
+ if(++line==1) legacy_web_ready=($0=="web 1")
+ else if(legacy_web_ready) legacy_web[$1]=$2
+ next
+}
+section=="__5GM_LEGACY_CELLS__" {
+ if(++line==1) legacy_uptime=$1
+ else if(/< RIL_REQUEST_GET_CELL_INFO_LIST \[/) legacy_cells=$0
+ next
+}
 section=="__5GM_DEVICE__" {
  line++; if(line==1) market=$0; if(line==2) model=$0; if(line==3) firmware=$0; if(line==4) baseband=$0; if(line==5) brand=$0; next
 }
@@ -154,6 +286,7 @@ section=="__5GM_DATA__" && /InterfaceName: / {
 }
 END {
  if(section!="__5GM_END__") exit 1
+ if(1 in legacy) { if(legacy_json()) exit 0; exit 1 }
  chosen=""
  for(i in seen) if(active!="" && subid[i]==active) chosen=i
  if(chosen=="" || signal[chosen]=="") exit 1
