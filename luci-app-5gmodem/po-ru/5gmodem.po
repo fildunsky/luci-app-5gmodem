@@ -2301,6 +2301,9 @@ msgstr "К этому модему он привязался лишь потом
 msgid "Loading messages…"
 msgstr "Загрузка сообщений…"
 
+msgid "Receive chains"
+msgstr "Приёмные цепи"
+
 msgid "Antenna ports"
 msgstr "Антенные порты"
 
@@ -7789,3 +7792,66 @@ msgstr "Не удалось сохранить пароль веб-интерф�
 
 msgid "Could not change the APN."
 msgstr "Не удалось изменить APN."
+
+msgid "Switching antennas"
+msgstr "Переключение антенн"
+
+msgid "Change PIN"
+msgstr "Сменить PIN"
+
+msgid "Could not read the SIM PIN status"
+msgstr "Не удалось прочитать состояние SIM PIN"
+
+msgid "Current PIN"
+msgstr "Текущий PIN"
+
+msgid "Disable PIN protection"
+msgstr "Отключить защиту PIN"
+
+msgid "Enable PIN protection"
+msgstr "Включить защиту PIN"
+
+msgid "Enter PIN"
+msgstr "Ввести PIN"
+
+msgid "Incorrect SIM PIN"
+msgstr "Неверный PIN SIM-карты"
+
+msgid "New PIN"
+msgstr "Новый PIN"
+
+msgid "No SIM card"
+msgstr "SIM-карта отсутствует"
+
+msgid "Please wait…"
+msgstr "Подождите…"
+
+msgid "SIM PIN"
+msgstr "PIN SIM-карты"
+
+msgid "SIM PIN operation"
+msgstr "Операция с PIN SIM-карты"
+
+msgid "SIM PIN operation completed"
+msgstr "Операция с PIN выполнена"
+
+msgid "SIM is locked"
+msgstr "SIM-карта заблокирована"
+
+msgid "SIM is ready"
+msgstr "SIM-карта готова"
+
+msgid "SIM requires PIN"
+msgstr "SIM-карта запрашивает PIN"
+
+msgid "SIM requires PUK"
+msgstr "SIM-карта запрашивает PUK"
+
+msgid "The PIN must contain 4–8 digits"
+msgstr "PIN должен содержать от 4 до 8 цифр"
+
+msgid "The modem did not confirm the SIM PIN operation"
+msgstr "Модем не подтвердил операцию с PIN"
+
+msgid "The modem is busy"
+msgstr "Модем занят"

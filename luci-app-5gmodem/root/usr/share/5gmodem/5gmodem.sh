@@ -261,6 +261,7 @@ _active_path() { uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null; }
 
 _POLL_AM=$(_active_path)
 _ACT_AM="$_POLL_AM"
+[ -n "$_POLL_AM" ] || ! fg360_native || _POLL_AM=ccci
 
 case "$1" in
 	cached) _pm_arg="$3" ;;
@@ -282,7 +283,7 @@ if [ -n "$POLL_MODEM" ]; then
 	case "$POLL_MODEM" in
 		*[!A-Za-z0-9.:_-]*) ;;
 		*)
-			if [ -d "/sys/bus/usb/devices/$POLL_MODEM" ] \
+			if [ -d "/sys/bus/usb/devices/$POLL_MODEM" ] || fg360_native "$POLL_MODEM" \
 			   || "$RES/registry.sh" paths 2>/dev/null | grep -qx "$POLL_MODEM"; then
 				_POLL_AM="$POLL_MODEM"
 				_PINNED=1
@@ -328,6 +329,27 @@ _snapshot_age() {
 	_a=$((_n - _t)); [ "$_a" -ge 0 ] || return 1
 	printf '%s' "$_a"
 }
+
+_fg360_csq() (
+	file=/tmp/5gmodem/fg360-csq
+	now=$(uptime_s)
+	read -r stamp value 2>/dev/null < "$file" || :
+	case "$stamp" in ''|*[!0-9]*) stamp=0 ;; esac
+	if [ "$stamp" -gt 0 ] && [ "$((now - stamp))" -lt 30 ]; then
+		printf '%s' "$value"
+		exit 0
+	fi
+	exec 6>/tmp/5gmodem/fg360-csq.lock
+	flock -n 6 || exit 0
+	read -r stamp value 2>/dev/null < "$file" || :
+	case "$stamp" in ''|*[!0-9]*) stamp=0 ;; esac
+	if [ "$stamp" -eq 0 ] || [ "$((now - stamp))" -ge 30 ]; then
+		value=$(fg360_at 'AT+CSQ' low 2 0 6>&- 2>/dev/null \
+			| tr -d '\r' | sed -n 's/^+CSQ:[[:space:]]*\([0-9][0-9]*\),.*/\1/p' | head -1)
+		printf '%s %s\n' "$now" "$value" > "$file"
+	fi
+	printf '%s' "$value"
+)
 
 _take_lock() {
 	if mkdir "$LOCKDIR" 2>/dev/null; then return 0; fi
@@ -390,6 +412,26 @@ if [ "$1" = "peek" ]; then
 	_age=$(_snapshot_age) && { serve_cache "$_age"; exit 0; }
 	[ -s "$CACHE" ] && { serve_cache 9999; exit 0; }
 	echo '{}'
+	exit 0
+fi
+
+if fg360_native "$_POLL_AM"; then
+	if [ "$1" = cached ] && _fg_age=$(_snapshot_age) && [ "$_fg_age" -lt 5 ] \
+	   && [ "$(jsonfilter -i "$CACHE" -e '@.backend' 2>/dev/null)" = fg360 ]; then
+		serve_cache "$_fg_age"
+		exit 0
+	fi
+	_fg_iface=$(fg360_native_iface)
+	_fg_netdev=$(fg360_native_netdev "$_fg_iface")
+	if FG360_STATUS_LIBRARY=1 /usr/bin/lua "$RES/fg360-status.lua" "$_fg_iface" "$_fg_netdev" "$(_fg360_csq)" > "$CACHE.p$$" 2>/dev/null \
+	   && [ "$(jsonfilter -i "$CACHE.p$$" -e '@.backend' 2>/dev/null)" = fg360 ]; then
+		mv "$CACHE.p$$" "$CACHE" && uptime_s > "$STAMP"
+		_fg_operator=$(jsonfilter -i "$CACHE" -e '@.operator_name' 2>/dev/null)
+		[ -z "$_fg_iface" ] || [ -z "$_fg_operator" ] || operator_clean "$_fg_operator" > "/tmp/5gmodem/op_$_fg_iface" 2>/dev/null
+		serve_cache 0
+	else
+		printf '{"backend":"fg360","path":"ccci","onbus":"1","modem":"Fibocom FG360","error":"Modem status unavailable"}\n'
+	fi
 	exit 0
 fi
 

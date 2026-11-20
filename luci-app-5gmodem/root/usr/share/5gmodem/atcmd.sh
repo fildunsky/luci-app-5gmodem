@@ -8,6 +8,21 @@ TMO="${3:-10}"
 
 command -v is_devpath >/dev/null 2>&1 || { echo "lib unavailable" >&2; exit 1; }
 
+if [ "$PORT" = ccci ] && fg360_native "$PORT"; then
+	if ! is_atcmd "$CMD" || [ "${#CMD}" -gt 256 ]; then echo 'bad command' >&2; exit 2; fi
+	canonical=$(printf '%s' "$CMD" | tr -d '[:blank:]' | tr '[:lower:]' '[:upper:]')
+	case "$canonical" in
+		*';'*|AT+EGMR*'='*) echo 'unsupported command' >&2; exit 2 ;;
+		AT*) ;;
+		*) echo 'bad command' >&2; exit 2 ;;
+	esac
+	case "$TMO" in ''|*[!0-9]*) TMO=10 ;; esac
+	[ "$TMO" -le 40 ] 2>/dev/null || TMO=40
+	CMD="AT${CMD#??}"
+	fg360_at "$CMD" normal "$TMO" 5
+	exit $?
+fi
+
 if ! is_devpath "$PORT"; then
 	logger -t 5gmodem "atcmd: device path rejected"
 	echo "bad port" >&2; exit 2

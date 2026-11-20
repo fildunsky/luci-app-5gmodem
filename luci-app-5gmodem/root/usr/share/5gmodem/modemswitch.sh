@@ -566,6 +566,9 @@ autoapn)
 	note_foreign_uci network "modemswitch autoapn"
 	IFACE="${2:-$(uci -q get "$CFG.@5gmodem[0].network")}"
 	[ -n "$IFACE" ] || exit 0
+	if fg360_native && [ "$IFACE" = "$(fg360_native_iface)" ]; then
+		exit 0
+	fi
 
 	_am_sec=$(sec_for_iface "$IFACE")
 	case "$(uci -q get "$CFG.$_am_sec.kind")" in

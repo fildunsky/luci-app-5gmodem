@@ -121,7 +121,14 @@ if command -v pci_data_netdev >/dev/null 2>&1; then
 	done
 fi
 
-if [ -e /dev/ttyMTK0 ] && command -v soc_modem_node >/dev/null 2>&1 && soc_modem_node ccci >/dev/null; then
+_lm_fg360=""
+if command -v fg360_native >/dev/null 2>&1 && fg360_native; then
+	_lm_fg360=1
+	NCNT=$((NCNT + 1))
+	NODES="$NODES /sys/kernel/ccci"
+	_fg_net=$(fg360_native_netdev "$(fg360_native_iface ccci)")
+	[ -n "$_fg_net" ] && PORTREC="${PORTREC}${NCNT} net ${_fg_net}${NL}"
+elif [ -e /dev/ttyMTK0 ] && command -v soc_modem_node >/dev/null 2>&1 && soc_modem_node ccci >/dev/null; then
 	NCNT=$((NCNT + 1))
 	NODES="$NODES /sys/kernel/ccci"
 	PORTREC="${PORTREC}${NCNT} tty /dev/ttyMTK0${NL}"
@@ -267,12 +274,18 @@ for n in $NODES; do
 		pid=$(cat "$n/device" 2>/dev/null); pid="${pid#0x}"
 	fi
 	_soc=""
-	if [ -z "$vid" ] && { [ -d "$n/remoteproc" ] || [ "$n" = /sys/kernel/ccci ]; } && command -v soc_modem_vidpid >/dev/null 2>&1; then
+	_native=""
+	if [ "$path" = ccci ] && [ "$_lm_fg360" = 1 ]; then
+		_native=1
+		_soc=1
+	elif [ -z "$vid" ] && { [ -d "$n/remoteproc" ] || [ "$n" = /sys/kernel/ccci ]; } && command -v soc_modem_vidpid >/dev/null 2>&1; then
 		_soc=1
 		vid=$(soc_modem_vidpid); pid="${vid#*:}"; vid="${vid%%:*}"
 	fi
+	vp="$vid:$pid"
+	[ -n "$_native" ] && vp=""
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
-	[ -n "$_soc" ] && prod=$(esc "$(soc_modem_model)")
+	[ -n "$_soc" ] && prod=$(esc "$(soc_modem_model "$path")")
 	ttys=""; wdms=""; nets=""
 	while read -r _ri _rt _rp; do
 		[ "$_ri" = "$i" ] || continue
@@ -317,6 +330,7 @@ PORTREC_EOF
 		esac
 	fi
 	[ -z "$model" ] && [ -n "$_soc" ] && model="$prod"
+	[ -n "$_native" ] && model="$prod"
 	[ -z "$model" ] && [ -n "$vid" ] && [ ! -f "$n/product" ] && model="$vid:$pid"
 	model=$(esc "$model")
 	_opname=""
@@ -342,7 +356,9 @@ PORTREC_EOF
 	fi
 	_alias=$(esc "$_alias")
 	_tx=""
-	if [ "$vid" = 05ac ] && command -v is_iphone >/dev/null 2>&1 && is_iphone "$path"; then
+	if [ -n "$_native" ]; then
+		_tx=',"backend":"fg360","sim_icon":true'
+	elif [ "$vid" = 05ac ] && command -v is_iphone >/dev/null 2>&1 && is_iphone "$path"; then
 		_tx=",\"tether\":\"iphone\",\"tether_state\":\"$(iphone_state "$path")\""
 	else
 		case "$_UCISNAP" in
@@ -354,7 +370,7 @@ PORTREC_EOF
 				fi ;;
 		esac
 	fi
-	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"alias\":\"$_alias\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]$_tx}"
+	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vp\",\"product\":\"$prod\",\"model\":\"$model\",\"alias\":\"$_alias\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]$_tx}"
 done
 OUT="[$OUT]"
 

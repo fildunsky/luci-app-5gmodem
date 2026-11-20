@@ -2110,6 +2110,9 @@ msgstr "它与此调制解调器绑定只是因为内核复用了设备节点，
 msgid "Loading messages…"
 msgstr "正在加载短信…"
 
+msgid "Receive chains"
+msgstr "接收链路"
+
 msgid "Antenna ports"
 msgstr "天线端口"
 

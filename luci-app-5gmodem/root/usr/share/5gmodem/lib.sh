@@ -166,9 +166,44 @@ mtk_soc_modem() {
 	[ -S /dev/socket/rild-atci ] || { [ ! -d /dev/socket ] && [ -c /dev/ttyC0 ]; }
 }
 
+fg360_native() {
+	[ "${1-ccci}" = ccci ] && [ -d /sys/kernel/ccci ] &&
+		[ -x /usr/bin/mipc_wan_cli ] && [ -r /lib/netifd/proto/mipc.sh ] &&
+		grep -Fq 'FG360_STATUS_LIBRARY' /usr/libexec/fg360-mea-webui/fg360_api.lua 2>/dev/null
+}
+
+fg360_at() {
+	local helper=/usr/share/fg360-modem
+	AT_TCP_TIMEOUT="${3:-8}" FG360_MODEM_LOCK_WAIT="${4:-8}" \
+		"$helper/fg360_modem_lock.sh" --priority "${2:-normal}" -- \
+		"$helper/fg360_at_debug.sh" 127.0.0.1:17171 "$1"
+}
+
+fg360_native_iface() {
+	local iface
+	fg360_native "${1-ccci}" || return 1
+	if [ "$(uci -q get network.wan.proto)" = mipc ]; then
+		echo wan
+		return 0
+	fi
+	iface=$(uci -q show network | sed -n "s/^network\.\([A-Za-z0-9_][A-Za-z0-9_]*\)\.proto='\?mipc'\?\$/\1/p" |
+		awk '$0 != "lan" && $0 != "loopback" && $0 != "wan6" { print; exit }')
+	[ -n "$iface" ] && printf '%s\n' "$iface"
+}
+
+fg360_native_netdev() {
+	local dev
+	case "$1" in ''|*[!A-Za-z0-9_]*) return 1 ;; esac
+	fg360_native && [ "$(uci -q get "network.$1.proto")" = mipc ] || return 1
+	dev=$(ubus call "network.interface.$1" status 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
+	case "$dev" in ccmni[0-9]*) ;; *) return 1 ;; esac
+	case "${dev#ccmni}" in *[!0-9]*) return 1 ;; esac
+	[ -d "/sys/class/net/$dev" ] && printf '%s\n' "$dev"
+}
+
 soc_modem_node() {
 	if [ "$1" = ccci ]; then
-		mtk_soc_modem || return 1
+		fg360_native "$1" || mtk_soc_modem || return 1
 		echo /sys/kernel/ccci
 		return 0
 	fi
@@ -190,6 +225,10 @@ soc_modem_vidpid() {
 }
 
 soc_modem_model() {
+	if [ "$1" = ccci ] && fg360_native "$1"; then
+		echo 'Fibocom FG360'
+		return 0
+	fi
 	if mtk_soc_modem; then
 		_smm_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null)
 		[ -n "$_smm_m" ] || _smm_m=$(sed -n 's/^Hardware[^:]*: *//p' /proc/cpuinfo 2>/dev/null | head -1)

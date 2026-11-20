@@ -417,8 +417,10 @@ var CELL_ROWS = [
 		var d = mutil.cellVal(j.maxdl), u = mutil.cellVal(j.maxul);
 		return (d && u) ? (d + ' / ' + u + ' ' + _('Mbps')) : ''; } },
 	{ id: 'ambr',     text: function(j) {
-		var d = mutil.cellVal(j.ambrdl), u = mutil.cellVal(j.ambrul), q = mutil.cellVal(j.qci);
-		return (d && u) ? (d + ' / ' + u + ' ' + _('Mbps') + (q ? ' · QCI ' + q : '')) : ''; } },
+		var d = mutil.cellVal(j.ambrdl), u = mutil.cellVal(j.ambrul);
+		var label = j.backend === 'fg360' ? '5QI' : 'QCI';
+		var q = mutil.cellVal(j.backend === 'fg360' ? j.qos_5qi : j.qci);
+		return (d && u) ? (d + ' / ' + u + ' ' + _('Mbps') + (q ? ' · ' + label + ' ' + q : '')) : ''; } },
 	{ id: 'volte',    text: function(j) {
 		if (j.backend === 'android') { return j.volte === '1' ? _('Yes') : (j.volte === '0' ? _('No') : ''); }
 		return mutil.cellVal(j.volte); } },
@@ -534,7 +536,7 @@ function renderNeighbors(json) {
 	if (!wrap || !tbl) { return; }
 	var list = (json && Array.isArray(json.neighbors)) ? json.neighbors : [];
 	if (!list.length) {
-		if (json && json.backend === 'android') { wrap.style.display = 'none'; return; }
+		if (json && (json.backend === 'android' || json.backend === 'fg360')) { wrap.style.display = 'none'; return; }
 		if (wrap.getAttribute('data-hadata') !== '1') { wrap.style.display = 'none'; }
 		else { nbLockNote(json); }
 		return;
@@ -566,7 +568,7 @@ function renderNeighbors(json) {
 		var serving = (String(c.serving) === '1' || c.serving === true);
 		row.className = 'tr nb-row' + (serving ? ' nb-serving' : '');
 		td[0].textContent = serving ? _('serving') : _('neighbour');
-		td[1].textContent = c.band ? ('B' + c.band) : '-';
+		td[1].textContent = c.band ? (/^[Bn]\d+$/.test(c.band) ? c.band : 'B' + c.band) : '-';
 		td[2].textContent = dash(c.pci);
 		td[3].textContent = dash(c.earfcn);
 		paintMetricCell(td[4], 'rsrp', c.rsrp);
@@ -1240,25 +1242,56 @@ function renderWebPassHint(json) {
 	}, _('Password needed')));
 }
 
+var TEMP_SENSOR_ICONS = {
+	modem: '<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M8 9V4M8 13h8M8 16.5h5"/>',
+	pa: '<path d="M12 11v10M8.5 21h7"/><circle cx="12" cy="9" r="1.6"/><path d="M8.6 5.6a4.8 4.8 0 0 0 0 6.8M15.4 5.6a4.8 4.8 0 0 1 0 6.8M5.8 2.8a8.8 8.8 0 0 0 0 12.4M18.2 2.8a8.8 8.8 0 0 1 0 12.4"/>',
+	cpu: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".6"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>',
+	board: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h4v4M17 8v4h-4M7 16h10"/><circle cx="7" cy="8" r=".8"/><circle cx="17" cy="8" r=".8"/><circle cx="7" cy="16" r=".8"/>',
+	pmic: '<path d="M13 2 5 13.5h6L10 22l8-11.5h-6z"/>',
+	rf: '<path d="M2 12h4l3-7 6 14 3-7h4"/>',
+	crystal: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+	gnss: '<path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/>'
+};
+
+var FG360_TEMP_SENSORS = [
+	[ 'md_4g', 'LTE', TEMP_SENSOR_ICONS.modem ],
+	[ 'md_5g', '5G', TEMP_SENSOR_ICONS.modem ],
+	[ 'md_rf', 'RF', TEMP_SENSOR_ICONS.rf ],
+	[ 'ltepa_ntc', 'LTE PA', TEMP_SENSOR_ICONS.pa ],
+	[ 'nrpa_ntc', 'NR PA', TEMP_SENSOR_ICONS.pa ],
+	[ 'rf_ntc', 'RF NTC', TEMP_SENSOR_ICONS.rf ],
+	[ 'soc_max', 'SoC', TEMP_SENSOR_ICONS.cpu ],
+	[ 'dramc', 'DRAM', TEMP_SENSOR_ICONS.board ],
+	[ 'soc_dram_ntc', 'DRAM NTC', TEMP_SENSOR_ICONS.board ],
+	[ 'pmic', 'PMIC', TEMP_SENSOR_ICONS.pmic ],
+	[ 'crystal', 'XO', TEMP_SENSOR_ICONS.crystal ],
+	[ 'conn_gps', 'GNSS', TEMP_SENSOR_ICONS.gnss ]
+];
+
 var TEMP_SENSORS = [
-	[ 'modem', _('Modem'), '<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M8 9V4M8 13h8M8 16.5h5"/>' ],
-	[ 'pa', _('Radio amplifier'), '<path d="M12 11v10M8.5 21h7"/><circle cx="12" cy="9" r="1.6"/><path d="M8.6 5.6a4.8 4.8 0 0 0 0 6.8M15.4 5.6a4.8 4.8 0 0 1 0 6.8M5.8 2.8a8.8 8.8 0 0 0 0 12.4M18.2 2.8a8.8 8.8 0 0 1 0 12.4"/>' ],
+	[ 'modem', _('Modem'), TEMP_SENSOR_ICONS.modem ],
+	[ 'pa', _('Radio amplifier'), TEMP_SENSOR_ICONS.pa ],
 	[ 'gpu', 'GPU', '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="4"/>' ],
-	[ 'cpu', _('Processor'), '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".6"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>' ],
+	[ 'cpu', _('Processor'), TEMP_SENSOR_ICONS.cpu ],
 	[ 'wifi', _('Wi-Fi'), '<path d="M2.5 9a14 14 0 0 1 19 0M5.8 12.4a9.2 9.2 0 0 1 12.4 0M9.1 15.8a4.4 4.4 0 0 1 5.8 0"/><circle cx="12" cy="19" r="1.2"/>' ],
-	[ 'pmic', _('Power controller'), '<path d="M13 2 5 13.5h6L10 22l8-11.5h-6z"/>' ],
+	[ 'pmic', _('Power controller'), TEMP_SENSOR_ICONS.pmic ],
 	[ 'skin', _('Surface temperature'), '<rect x="5" y="2" width="14" height="20" rx="3"/><path d="M10 18h4"/>' ],
 	[ 'bat', _('Battery'), '<rect x="7" y="4" width="10" height="17" rx="2"/><path d="M10 2h4M10 9h4M10 13h4M10 17h4"/>' ],
 	[ 'charger', _('Charger'), '<path d="M9 2v5M15 2v5M6.5 7h11v4a5.5 5.5 0 0 1-11 0zM12 16.5V22"/>' ],
-	[ 'board', _('Board'), '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h4v4M17 8v4h-4M7 16h10"/><circle cx="7" cy="8" r=".8"/><circle cx="17" cy="8" r=".8"/><circle cx="7" cy="16" r=".8"/>' ]
+	[ 'board', _('Board'), TEMP_SENSOR_ICONS.board ]
 ];
 
 function renderTemps(json) {
 	var box = document.getElementById('tempsn');
 	if (!box) { return; }
+	var fg360 = json.backend === 'fg360';
+	box.classList[fg360 ? 'add' : 'remove']('tginfo-temps-fg360');
 	var raw = String(json.temps || '').trim();
+	var v = {};
+	raw.split(/\s+/).forEach(function(p) { var kv = p.split('='); if (kv.length === 2) { v[kv[0]] = kv[1]; } });
+	var sensors = (fg360 ? FG360_TEMP_SENSORS : TEMP_SENSORS).filter(function(s) { return v[s[0]] != null; });
 	var mainEl = document.getElementById('tempn');
-	if (!raw || raw === '-') {
+	if (!sensors.length) {
 		box.style.display = 'none';
 		if (mainEl) { mainEl.classList.remove('tg-texp'); mainEl.title = _('Modem temperature'); var op = mainEl.querySelector('.tg-tpop'); if (op) { op.remove(); } }
 		box.removeAttribute('data-k');
@@ -1266,25 +1299,25 @@ function renderTemps(json) {
 	}
 	box.style.display = '';
 	if (mainEl) { mainEl.classList.add('tg-texp'); mainEl.removeAttribute('title'); }
-	if (box.getAttribute('data-k') === raw) { return; }
-	box.setAttribute('data-k', raw);
-	var v = {};
-	raw.split(/\s+/).forEach(function(p) { var kv = p.split('='); if (kv.length === 2) { v[kv[0]] = kv[1]; } });
+	var key = fg360 ? 'fg360:' + sensors.map(function(s) { return s[0] + '=' + v[s[0]]; }).join(' ') : raw;
+	if (box.getAttribute('data-k') === key) { return; }
+	box.setAttribute('data-k', key);
 	box.innerHTML = '';
 	var pop = E('div', { 'class': 'tg-tpop' });
-	TEMP_SENSORS.forEach(function(s) {
-		if (v[s[0]] == null) { return; }
+	sensors.forEach(function(s) {
 		var t = parseFloat(v[s[0]]);
-		var ico = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + s[2] + '</svg>';
-		var chip = E('span', { 'class': 'tg-tchip', 'title': s[1] + ': ' + v[s[0]] + ' °C' });
-		chip.innerHTML = ico;
-		chip.appendChild(E('span', { 'class': 'tg-tval' }, Math.round(t) + '°'));
-		box.appendChild(chip);
+		var ico = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + s[2] + '</svg>';
+		if (!fg360) {
+			var chip = E('span', { 'class': 'tg-tchip', 'title': s[1] + ': ' + v[s[0]] + ' °C' });
+			chip.innerHTML = ico;
+			chip.appendChild(E('span', { 'class': 'tg-tval' }, Math.round(t) + '°'));
+			box.appendChild(chip);
+		}
 		var row = E('div', { 'class': 'tg-tpop-row' });
 		row.innerHTML = ico;
 		row.appendChild(E('span', { 'class': 'tg-tpop-name' }, s[1]));
 		row.appendChild(E('span', { 'class': 'tg-tval' }, (isNaN(t) ? v[s[0]] : t.toFixed(1)) + ' °C'));
-		pop.appendChild(row);
+		(fg360 ? box : pop).appendChild(row);
 	});
 	var main = document.getElementById('tempn');
 	if (main) {
@@ -1689,7 +1722,7 @@ function updateSimIcon(name) {
 	if (si.getAttribute('src') != want) { si.setAttribute('src', want); }
 }
 
-function fillAntPorts(raw, rxdiv) {
+function fillAntPorts(raw, rxdiv, isFg360, antennaMode) {
 	var block = document.getElementById('antports-block');
 	var tbl = document.getElementById('antports-table');
 	if (!block || !tbl) { return; }
@@ -1701,11 +1734,15 @@ function fillAntPorts(raw, rxdiv) {
 		else if (rxdiv === '2rx') { txt = _('Receive diversity: on (2RX)'); }
 		else if (rxdiv === 'off') { txt = _('Receive diversity: off - the second antenna is not used'); red = true; }
 		else if (rxdiv === 'noant') { txt = _('Receive diversity: on, but the second antenna is not connected'); red = true; }
+		if (isFg360) {
+			var modeLabel = { internal: _('Internal antennas'), external: _('External antennas'), switching: _('Switching antennas') }[antennaMode];
+			if (modeLabel) { txt = txt ? txt + ' · ' + modeLabel : modeLabel; }
+		}
 		if (txt) {
 			rxl.style.display = '';
 			rxl.style.color = red ? '#c00' : '';
 			rxl.textContent = txt;
-		} else if (rxl.getAttribute('data-hadata') !== '1') {
+		} else if (isFg360 || rxl.getAttribute('data-hadata') !== '1') {
 			rxl.style.display = 'none';
 		}
 		if (txt) { rxl.setAttribute('data-hadata', '1'); }
@@ -1714,30 +1751,36 @@ function fillAntPorts(raw, rxdiv) {
 		return (/^\d+:(-?\d+(\.\d+)?)?:(-?\d+(\.\d+)?)?(:(-?\d+(\.\d+)?)?)?$/).test(l)
 			&& /:-?\d/.test(l);
 	});
+	var hasRsrq = !isFg360 || rows.some(function(l) { return !!l.split(':')[2]; });
 	var hasRssi = rows.some(function(l) { return (/^[^:]*:[^:]*:[^:]*:-?\d/).test(l); });
 	if (!rows.length) {
-		if (block.getAttribute('data-hadata') !== '1') { block.style.display = 'none'; }
+		if (isFg360 || block.getAttribute('data-hadata') !== '1') { block.style.display = 'none'; }
 		return;
 	}
 	block.style.display = '';
 	block.setAttribute('data-hadata', '1');
 
-	var ports = rows.map(function(l) { return l.split(':')[0]; }).join(',') + (hasRssi ? '+rssi' : '');
-	if (!sameRender(tbl, ports)) {
+	var ports = rows.map(function(l) { return l.split(':')[0]; }).join(',')
+		+ (hasRsrq ? '+rsrq' : '') + (hasRssi ? '+rssi' : '');
+	if (!sameRender(tbl, (isFg360 ? 'rx:' : '') + ports)) {
+		var title = document.getElementById('antports-title');
+		if (title) { title.textContent = isFg360 ? _('Receive chains') : _('Antenna ports'); }
 		tbl.innerHTML = '';
 		tbl.appendChild(E('tr', { 'class': 'tr table-titles' }, [
-			E('th', { 'class': 'th left' }, _('Antenna port')),
+			E('th', { 'class': 'th left' }, isFg360 ? 'RX' : _('Antenna port')),
 			E('th', { 'class': 'th left' }, [ gl('RSRP') ]),
-			E('th', { 'class': 'th left' }, [ gl('RSRQ') ]),
-		].concat(hasRssi ? [ E('th', { 'class': 'th left' }, [ gl('RSSI') ]) ] : []).concat([
+		].concat(hasRsrq ? [ E('th', { 'class': 'th left' }, [ gl('RSRQ') ]) ] : [])
+			.concat(hasRssi ? [ E('th', { 'class': 'th left' }, [ gl('RSSI') ]) ] : []).concat([
 			E('th', { 'class': 'th left' }, _('State'))
 		])));
 		rows.forEach(function(l) {
+			var port = parseInt(l.split(':')[0], 10);
+			var label = isFg360 ? 'RX' + (port - 1) : _('Port %d').format(port);
 			tbl.appendChild(E('tr', { 'class': 'tr ant-row' }, [
-				E('td', { 'class': 'td left ant-port' }, _('Port %d').format(parseInt(l.split(':')[0], 10))),
+				E('td', { 'class': 'td left ant-port' }, label),
 				E('td', { 'class': 'td left', 'data-l': _('RSRP') }, '-'),
-				E('td', { 'class': 'td left', 'data-l': _('RSRQ') }, '-'),
-			].concat(hasRssi ? [ E('td', { 'class': 'td left', 'data-l': _('RSSI') }, '-') ] : []).concat([
+			].concat(hasRsrq ? [ E('td', { 'class': 'td left', 'data-l': _('RSRQ') }, '-') ] : [])
+				.concat(hasRssi ? [ E('td', { 'class': 'td left', 'data-l': _('RSSI') }, '-') ] : []).concat([
 				E('td', { 'class': 'td left', 'data-l': _('State') }, '-')
 			])));
 		});
@@ -1765,9 +1808,9 @@ function fillAntPorts(raw, rxdiv) {
 			paintMetricCell(cell, key, v, text, undefined, cap);
 		};
 		if (td[1]) { paint(td[1], 'rsrp', p[1], p[1] + ' dBm'); }
-		if (td[2]) { paint(td[2], 'rsrq', p[2], p[2] + ' dB'); }
-		var stCell = 3;
-		if (hasRssi) { if (td[3]) { paint(td[3], 'rssi', p[3], p[3] + ' dBm', p[2]); } stCell = 4; }
+		var stCell = 2;
+		if (hasRsrq) { paint(td[stCell++], 'rsrq', p[2], p[2] + ' dB'); }
+		if (hasRssi) { paint(td[stCell++], 'rssi', p[3], p[3] + ' dBm', p[2]); }
 		if (td[stCell]) {
 			td[stCell].textContent = st;
 			td[stCell].style.color = col ? CA_COLOR[col] : '';
@@ -2237,7 +2280,7 @@ function applyMetrics(json) {
 					}
 
 			bandsui.pollTick();
-				fillAntPorts(json.antports, json.rxdiv);
+				fillAntPorts(json.antports, json.rxdiv, json.backend === 'fg360', json.antenna_mode);
 
 					var wicon, ticon, t;
 					var wicon = mutil.icon('icons/5gmodem/cloading.svg');
@@ -2990,7 +3033,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40012, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40013, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -3502,7 +3545,7 @@ simDialog: baseclass.extend({
 				]),
 
 				E('div', { 'id': 'antports-block', 'style': 'display:none;margin-top:.6em' }, [
-					E('h4', { 'style': 'margin:.2em 0 .4em 0' }, _('Antenna ports')),
+					E('h4', { 'id': 'antports-title', 'style': 'margin:.2em 0 .4em 0' }, _('Antenna ports')),
 					E('table', { 'class': 'table', 'id': 'antports-table' }, [])
 				]),
 				E('div', { 'id': 'rxdiv-line',

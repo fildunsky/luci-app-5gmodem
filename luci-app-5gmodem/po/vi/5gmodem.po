@@ -2110,6 +2110,9 @@ msgstr "Nó được gắn với modem này chỉ vì kernel đã dùng lại n�
 msgid "Loading messages…"
 msgstr "Đang tải tin nhắn…"
 
+msgid "Receive chains"
+msgstr "Chuỗi thu"
+
 msgid "Antenna ports"
 msgstr "Cổng ăng-ten"
 

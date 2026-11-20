@@ -209,6 +209,7 @@ _tg_paths() { "$RES/registry.sh" paths 2>/dev/null; }
 _tg_sec() { printf 'm_%s' "$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/_/g')"; }
 
 _tg_port() {
+	fg360_native "$1" && { echo fg360; return; }
 	[ "$1" = "$(uci -q get "$CFG.@5gmodem[0].active_modem")" ] && { printf '%s' "$PORT"; return; }
 	uci -q get "$CFG.$(_tg_sec "$1").at_port"
 }
@@ -241,6 +242,7 @@ tick() {
 
 _TG_LM=""
 _tg_has_sms() {
+	fg360_native "$1" && return 0
 	[ "$(uci -q get "$CFG.$(_tg_sec "$1").kind")" = "hilink" ] && return 0
 	[ -n "$_TG_LM" ] || _TG_LM=$("$RES/listmodems.sh" 2>/dev/null)
 	printf '%s' "$_TG_LM" \

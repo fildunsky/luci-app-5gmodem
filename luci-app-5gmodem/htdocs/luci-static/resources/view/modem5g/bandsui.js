@@ -311,6 +311,7 @@ function applyPureModes(modes) {
 }
 
 function applyMgmtMM(j) {
+			renderFg360Power(false);
 		bandSource = 'mmcli';
 		bandsReadOnly = false; bandsTakeover = false;
 		bandsStaticNote = false;
@@ -748,8 +749,64 @@ function mtkPackagePrompt() {
 	]);
 }
 
+function renderFg360Power(enabled) {
+	var row = document.getElementById('nrpowern');
+	if (!enabled) {
+		if (row) { row.style.display = 'none'; }
+		var old = document.getElementById('nrpower-cell');
+		if (old) { old.textContent = ''; old.removeAttribute('data-sig'); }
+		return;
+	}
+	row = _ensureRow('nrpowern', 'nrpower-cell', '5G ' + _('TX power') + ' (max.)', 'celllockn');
+	var cell = document.getElementById('nrpower-cell');
+	if (!row || !cell) { return; }
+	row.style.display = '';
+	if (ctx.sameRender(cell, 'fg360-power')) { return; }
+	var controls = E('span', { 'style': 'margin-right:.6em' });
+	var read = E('button', { 'class': 'btn cbi-button', 'type': 'button',
+		'click': ui.createHandlerFn(this, load) }, _('Refresh'));
+	cell.replaceChildren(controls, read);
+
+	function load() {
+		read.disabled = true;
+		controls.textContent = '…';
+		return L.resolveDefault(execW('/usr/share/5gmodem/bands.sh', [ 'txpowerjson' ]), {}).then(ctx.forPage(function(res) {
+			var data = {};
+			try { data = JSON.parse(res.stdout || '{}'); } catch (e) {}
+			read.disabled = false;
+			var live = data.current_nr_bands || [];
+			if (!live.length) { controls.textContent = _('unavailable'); return; }
+			var selected = E('select', { 'class': 'cbi-input-select', 'aria-label': _('5G bands') },
+				live.map(function(band) { return E('option', { 'value': String(band) }, 'n' + band); }));
+			var limits = E('select', { 'class': 'cbi-input-select', 'aria-label': _('TX power') },
+				[ 23, 26, 29 ].map(function(dbm) { return E('option', { 'value': String(dbm) }, dbm + ' dBm'); }));
+			var values = (data.groups || {}).nr || [];
+			var display = E('span', {});
+			function showCurrent() {
+				var value = values.filter(function(entry) { return String(entry.band) === selected.value; })[0];
+				display.textContent = value ? value.dbm + ' dBm' : '—';
+				limits.selectedIndex = value && [ 23, 26, 29 ].indexOf(value.dbm) >= 0 ? [ 23, 26, 29 ].indexOf(value.dbm) : 0;
+			}
+			selected.addEventListener('change', showCurrent);
+			var apply = E('button', { 'class': 'btn cbi-button cbi-button-action', 'type': 'button',
+				'click': ui.createHandlerFn(this, function() {
+					apply.disabled = true;
+					return L.resolveDefault(execW('/usr/share/5gmodem/bands.sh', [ 'settxpower', selected.value, limits.value ]), {}).then(ctx.forPage(function(reply) {
+						if (reply.code !== 0) {
+							ui.addNotification(null, E('p', [ _('TX power') + ' · ' + (reply.stdout || _('unavailable')) ]), 'error');
+						}
+						return load();
+					}));
+				}) }, _('Apply'));
+			controls.replaceChildren(display, ' ', selected, ' ', limits, ' ', apply);
+			showCurrent();
+		}));
+	}
+}
+
 function applyVendorJson(j) {
 		var note = document.getElementById('bandnote');
+		renderFg360Power(j.fg360 && !j.readonly);
 		render5gMode(j.mode5g);
 		renderCaEnabled(j.ca_enabled, j.ca_switch);
 		renderCellLock(j.celllock);
@@ -1265,7 +1322,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 40012,
+	API: 40013,
 	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
@@ -1309,5 +1366,6 @@ return baseclass.extend({
 		window.__hwSig = null;
 		window.setTimeout(loadBands, 300);
 		render5gMode(null); renderCaEnabled(null); renderCellLock(null); _lockMem = null;
+		renderFg360Power(false);
 	}
 });

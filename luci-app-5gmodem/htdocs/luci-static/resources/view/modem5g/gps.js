@@ -154,7 +154,7 @@ var SRC_CHIP = { at: 'AT', nmea: 'NMEA', qmi: 'QMI', ugps: 'ugps', mm: 'MM', usb
 
 return view.extend({
 	load: function() {
-		return fresh.check(40012, [ modemtabs, mutil ]).then(function() {
+		return fresh.check(40013, [ modemtabs, mutil ]).then(function() {
 			return L.resolveDefault(uci.load('5gmodem'));
 		});
 	},

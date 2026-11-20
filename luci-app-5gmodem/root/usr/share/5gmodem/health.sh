@@ -544,6 +544,8 @@ _heal_reconnect() {
 
 heal() {
 	[ "$H_HEAL" = "1" ] || [ "$H_HEALWIFI" = "1" ] || return 0
+	local native_iface
+	fg360_native && native_iface=$(fg360_native_iface)
 	_h_cnt=0; _h_anyup=""
 	for _h_f in "$HDIR"/*; do
 		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
@@ -590,6 +592,7 @@ heal() {
 	for _h_f in "$HDIR"/*; do
 		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
 		_h_if="${_h_f##*/}"
+		[ "$_h_if" != "$native_iface" ] || continue
 		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		if [ "$H_HEALWIFI" = "1" ] && is_wifi_iface "$_h_if"; then
 			case "$_h_st" in down|gone) ;; *) continue ;; esac

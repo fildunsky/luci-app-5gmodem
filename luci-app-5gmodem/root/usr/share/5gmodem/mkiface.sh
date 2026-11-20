@@ -207,9 +207,16 @@ mm_restart_safe() {
 	/etc/init.d/modemmanager start >/dev/null 2>&1
 }
 
+AMP=${MODEM_PATH:-$(uci -q get 5gmodem.@5gmodem[0].active_modem)}
+if [ -n "$AMP" ] && fg360_native "$AMP"; then
+	IF=$(fg360_native_iface "$AMP")
+	[ -n "$IF" ] || { json error mipc ""; exit 1; }
+	json existing mipc "$(fg360_native_netdev "$IF")"
+	exit 0
+fi
+
 note_foreign_uci network "mkiface"
 note_foreign_uci firewall "mkiface"
-AMP=${MODEM_PATH:-$(uci -q get 5gmodem.@5gmodem[0].active_modem)}
 _ACTPATH=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 _IS_ACTIVE=1
 [ -n "$MODEM_PATH" ] && [ -n "$_ACTPATH" ] && [ "$MODEM_PATH" != "$_ACTPATH" ] && _IS_ACTIVE=0

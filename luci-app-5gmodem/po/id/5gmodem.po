@@ -2110,6 +2110,9 @@ msgstr "Antarmuka ini terikat ke modem ini hanya karena kernel menggunakan ulang
 msgid "Loading messages…"
 msgstr "Memuat pesan…"
 
+msgid "Receive chains"
+msgstr "Rantai penerima"
+
 msgid "Antenna ports"
 msgstr "Port antena"
 

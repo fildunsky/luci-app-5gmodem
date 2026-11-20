@@ -1918,3 +1918,69 @@ msgstr ""
 
 msgid "Could not change the APN."
 msgstr ""
+
+msgid "Switching antennas"
+msgstr ""
+
+msgid "Change PIN"
+msgstr ""
+
+msgid "Could not read the SIM PIN status"
+msgstr ""
+
+msgid "Current PIN"
+msgstr ""
+
+msgid "Disable PIN protection"
+msgstr ""
+
+msgid "Enable PIN protection"
+msgstr ""
+
+msgid "Enter PIN"
+msgstr ""
+
+msgid "Incorrect SIM PIN"
+msgstr ""
+
+msgid "New PIN"
+msgstr ""
+
+msgid "No SIM card"
+msgstr ""
+
+msgid "Please wait…"
+msgstr ""
+
+msgid "SIM PIN"
+msgstr ""
+
+msgid "SIM PIN operation"
+msgstr ""
+
+msgid "SIM PIN operation completed"
+msgstr ""
+
+msgid "SIM is locked"
+msgstr ""
+
+msgid "SIM is ready"
+msgstr ""
+
+msgid "SIM requires PIN"
+msgstr ""
+
+msgid "SIM requires PUK"
+msgstr ""
+
+msgid "The PIN must contain 4–8 digits"
+msgstr ""
+
+msgid "The modem did not confirm the SIM PIN operation"
+msgstr ""
+
+msgid "The modem is busy"
+msgstr ""
+
+msgid "Receive chains"
+msgstr ""

@@ -1,5 +1,49 @@
+setup_fg360_native() {
+	local profile="$CFG.$(secname "$1")" active iface model
+	iface=$(fg360_native_iface "$1")
+	model=$(soc_modem_model "$1")
+	uci -q set "$profile=modem"
+	uci -q set "$profile.path=$1"
+	uci -q set "$profile.model=$model"
+	uci -q set "$profile.product=$model"
+	uci -q set "$profile.kind=fg360"
+	uci -q delete "$profile.vidpid"
+	uci -q delete "$profile.model_vp"
+	uci -q delete "$profile.at_port"
+	uci -q delete "$profile.data_at_port"
+	if [ -n "$iface" ]; then
+		uci -q set "$profile.network=$iface"
+		uci -q set "$profile.iface_proto=mipc"
+	else
+		uci -q delete "$profile.network"
+		uci -q delete "$profile.iface_proto"
+	fi
+
+	active=$(active_path)
+	if [ -z "$active" ] || ! "$RES/listmodems.sh" 2>/dev/null | grep -qF "\"path\":\"$active\""; then
+		uci -q set "$CFG.@5gmodem[0].active_modem=$1"
+		active="$1"
+	fi
+	if [ "$active" = "$1" ]; then
+		uci -q delete "$CFG.@5gmodem[0].at_port"
+		uci -q delete "$CFG.@5gmodem[0].device"
+		if [ -n "$iface" ]; then
+			uci -q set "$CFG.@5gmodem[0].network=$iface"
+			uci -q set "$CFG.@5gmodem[0].iface_proto=mipc"
+		else
+			uci -q delete "$CFG.@5gmodem[0].network"
+			uci -q delete "$CFG.@5gmodem[0].iface_proto"
+		fi
+	fi
+	uci -q commit "$CFG"
+}
+
 setup_one_modem() {
 	P="$1"
+	if fg360_native "$P"; then
+		setup_fg360_native "$P"
+		return $?
+	fi
 	if ! usb_path_present "$P"; then
 		logger -t 5gmodem "autosetup: $P is gone from the bus - skipping (device appeared and vanished)"
 		return 0

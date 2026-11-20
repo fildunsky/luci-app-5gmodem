@@ -61,6 +61,11 @@ _mm_idx() {
 }
 
 radio() {
+	if fg360_native "$(active_path)"; then
+		[ "$1" = off ] && _r_c="AT+CFUN=4" || _r_c="AT+CFUN=1"
+		fg360_at "$_r_c" high | tr -d '\r' | grep -qx OK
+		return $?
+	fi
 	_r_m=$(_mm_idx)
 	if [ -n "$_r_m" ]; then
 		if [ "$1" = off ]; then
@@ -83,6 +88,14 @@ air_get() {
 }
 
 air_set() {
+	local native_radio=0
+	if fg360_native "$(active_path)"; then
+		if [ "$1" = on ]; then radio off; else radio on; fi || {
+			echo '{"error":"modem radio did not accept the change"}'
+			return 1
+		}
+		native_radio=1
+	fi
 	if [ "$1" = on ]; then
 		[ "$(air_get)" = on ] || uci -q set "$CFG.@5gmodem[0].airplane_data=$(data_get)"
 		uci -q set "$CFG.@5gmodem[0].airplane=1"
@@ -90,7 +103,7 @@ air_set() {
 		_log "airplane mode on"
 		[ "$(data_get)" = off ] || data_set off >/dev/null
 		rm -f "$MARK"
-		radio off && : > "$MARK"
+		if [ "$native_radio" = 1 ] || radio off; then : > "$MARK"; fi
 	else
 		_as_d=$(uci -q get "$CFG.@5gmodem[0].airplane_data")
 		uci -q delete "$CFG.@5gmodem[0].airplane"
@@ -98,7 +111,7 @@ air_set() {
 		uci -q commit "$CFG"
 		rm -f "$MARK"
 		_log "airplane mode off"
-		radio on
+		[ "$native_radio" = 1 ] || radio on
 		[ "$_as_d" = off ] || data_set on >/dev/null
 	fi
 	echo '{"result":"ok"}'

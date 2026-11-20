@@ -144,6 +144,7 @@ function hms() {
 }
 
 function atPort() {
+	if (window._sendatLmPort === 'ccci') { return window._sendatLmPort; }
 	var port = uci.get('5gmodem', 'sms', 'atport');
 	if (!port) {
 		var ap = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '').replace(/[^A-Za-z0-9]/g, '_');
@@ -383,7 +384,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40012, [ editors, modemtabs, mutil, atexplain ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40013, [ editors, modemtabs, mutil, atexplain ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -404,6 +405,7 @@ return view.extend({
 							window._sendatLmPort = m.tty[0];
 						}
 						if (m.path === act) {
+							if (m.backend === 'fg360') { window._sendatLmPort = m.path; }
 							window._sendatLmVp = String(m.vidpid || '').toLowerCase();
 							window._sendatLmModel = String(m.model || '');
 						}

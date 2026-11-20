@@ -242,7 +242,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40012, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40013, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -973,6 +973,7 @@ return view.extend({
 
 		var mIfName = uci.get('5gmodem', '@5gmodem[0]', 'network') || 'modem';
 		var mIfExists = !!uci.get('network', mIfName);
+		var nativeMipc = activeKind === 'fg360' && uci.get('network', mIfName, 'proto') === 'mipc';
 
 		var mSec = (function() {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
@@ -1008,8 +1009,10 @@ return view.extend({
 			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
 			if (uci.get('5gmodem', sec) == null) { uci.add('5gmodem', 'modem', sec); }
 			uci.set('5gmodem', sec, 'apn_mode', value === 'manual' ? 'manual' : 'auto');
+			if (nativeMipc) { uci.set('network', mIfName, 'auto_conf', value === 'manual' ? '0' : '1'); }
 		};
 		o.load = function() {
+			if (nativeMipc) { return uci.get('network', mIfName, 'auto_conf') === '0' ? 'manual' : 'auto'; }
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
 			if (!p) { return 'auto'; }
 			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
@@ -1018,6 +1021,7 @@ return view.extend({
 		o.remove = function() {};
 
 		var apnIsManual = function() {
+			if (nativeMipc) { return uci.get('network', mIfName, 'auto_conf') === '0'; }
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
 			if (!p) { return false; }
 			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
@@ -1027,20 +1031,33 @@ return view.extend({
 			_('APN for the modem interface. Auto-filled from the detected operator; you can change it. Leave empty for the provider default.'));
 		o.placeholder = 'internet';
 		o.rmempty = true;
+		if (nativeMipc) {
+			o.validate = function(section_id, value) {
+				var v = String(value || '').trim();
+				return (!v || (v.length <= 100 && /^[A-Za-z0-9._-]+$/.test(v) && !/(^|\.)(ims|xcap|mms|sos|emergency)(\.|$)/i.test(v)))
+					|| _('Invalid APN provided');
+			};
+		}
 		o.write = function(section_id, value) {
 			if (!apnIsManual() || !mIfExists) { return; }
 			var v = String(value || '').trim();
+			if (nativeMipc) {
+				if (v) { uci.set('network', mIfName, 'iaapn', v); }
+				else { uci.unset('network', mIfName, 'iaapn'); }
+			}
 			if (v === (uci.get('network', mIfName, 'apn') || '')) { return; }
 			if (v) { uci.set('network', mIfName, 'apn', v); }
 			else { uci.unset('network', mIfName, 'apn'); }
 		};
 		o.remove = function() {
 			if (!apnIsManual() || !mIfExists) { return; }
+			if (nativeMipc) { uci.unset('network', mIfName, 'iaapn'); }
 			if (uci.get('network', mIfName, 'apn') != null) {
 				uci.unset('network', mIfName, 'apn');
 			}
 		};
 		o.load = function(section_id) {
+			if (nativeMipc) { return uci.get('network', mIfName, 'apn') || ''; }
 			var self = this;
 			window.setTimeout(function() {
 				L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/netpri.sh',
@@ -1218,6 +1235,82 @@ return view.extend({
 		};
 		o.remove = function() { if (mIfExists) { uci.unset('network', mIfName, 'password'); } };
 		o.load = function() { return uci.get('network', mIfName, 'password') || ''; };
+		}
+
+		if (activeKind === 'fg360' && activePath === 'ccci') {
+			o = s.taboption('apn', form.DummyValue, '_fg360_sim_pin', _('SIM PIN'));
+			o.renderWidget = function() {
+				var script = '/usr/share/5gmodem/fg360-sim.sh';
+				var state = '', busy = false;
+				var current = E('div', { 'aria-live': 'polite' }, [ _('Reading…') ]);
+				var feedback = E('div', { 'role': 'status', 'class': 'tg-modem-zapn-st' });
+				var choices = [
+					[ 'enter', _('Enter PIN') ], [ 'enable', _('Enable PIN protection') ],
+					[ 'disable', _('Disable PIN protection') ], [ 'change', _('Change PIN') ]
+				];
+				var operation = E('select', { 'class': 'cbi-input-select', 'aria-label': _('SIM PIN operation') },
+					choices.map(function(item) { return E('option', { 'value': item[0] }, [ item[1] ]); }));
+				var pin = E('input', { 'class': 'cbi-input-text', 'type': 'password', 'inputmode': 'numeric',
+					'autocomplete': 'off', 'maxlength': 8, 'placeholder': _('Current PIN'), 'aria-label': _('Current PIN') });
+				var replacement = E('input', { 'class': 'cbi-input-text', 'type': 'password', 'inputmode': 'numeric',
+					'autocomplete': 'new-password', 'maxlength': 8, 'placeholder': _('New PIN'), 'aria-label': _('New PIN') });
+				var apply = E('button', { 'type': 'button', 'class': 'btn cbi-button cbi-button-action' }, [ _('Apply') ]);
+				var states = {
+					ready: _('SIM is ready'), pin: _('SIM requires PIN'), puk: _('SIM requires PUK'),
+					missing: _('No SIM card'), locked: _('SIM is locked')
+				};
+				var errors = {
+					busy: _('The modem is busy'), incorrect_pin: _('Incorrect SIM PIN'),
+					puk_required: _('SIM requires PUK'), invalid_pin: _('The PIN must contain 4–8 digits')
+				};
+				function call(args) {
+					return L.resolveDefault(fs.exec(script, args), null).then(function(out) {
+						try { return JSON.parse((out && out.stdout) || '{}') || {}; } catch (e) { return {}; }
+					});
+				}
+				function paint() {
+					Array.prototype.forEach.call(operation.options, function(option) {
+						option.disabled = option.value === 'enter' ? state !== 'pin' : state !== 'ready';
+					});
+					if (state === 'pin') { operation.value = 'enter'; }
+					else if (state === 'ready' && operation.value === 'enter') { operation.value = 'enable'; }
+					var disabled = busy || m.readonly || (state !== 'pin' && state !== 'ready');
+					apply.disabled = operation.disabled = pin.disabled = replacement.disabled = disabled;
+					replacement.hidden = operation.value !== 'change';
+				}
+				function refresh() {
+					return call([ 'status', activePath ]).then(function(data) {
+						state = data.ok ? data.state : '';
+					current.textContent = states[state] || errors[data.error] || _('Could not read the SIM PIN status');
+						paint();
+					});
+				}
+				operation.addEventListener('change', paint);
+				apply.addEventListener('click', function() {
+					if (apply.disabled) { return; }
+					var action = operation.value;
+					var valid = /^[0-9]{4,8}$/;
+					if (!valid.test(pin.value) || (action === 'change' && !valid.test(replacement.value))) {
+						feedback.textContent = errors.invalid_pin;
+						return;
+					}
+					var args = [ action, activePath, pin.value ];
+					if (action === 'change') { args.push(replacement.value); }
+					pin.value = replacement.value = '';
+					busy = true;
+					paint();
+					feedback.textContent = _('Please wait…');
+					call(args).then(function(data) {
+						feedback.textContent = data.ok ? _('SIM PIN operation completed') :
+							(errors[data.error] || _('The modem did not confirm the SIM PIN operation'));
+						return refresh();
+					}).finally(function() { busy = false; paint(); });
+				});
+				paint();
+				refresh();
+				return E('div', { 'class': 'tg-modem-zapn' }, [ current,
+					m.readonly ? null : E('div', { 'class': 'tg-modem-zapn-row' }, [ operation, pin, replacement, apply ]), feedback ]);
+			};
 		}
 
 		var atDebugHl = (function() {
@@ -1494,8 +1587,17 @@ return view.extend({
 			_('IP type for the modem interface. IPv4 is the default: on most networks/modems a dual-stack (IPv4/IPv6) context registers but never gets an address, while IPv4 gets one immediately. Switch to "IPv4 and IPv6" only if you need IPv6 and the modem supports it.'));
 		o.value('ipv4', _('IPv4 only (recommended)'));
 		o.value('ipv4v6', _('IPv4 and IPv6'));
+		if (nativeMipc) { o.value('ipv6', _('IPv6')); }
 		o.write = function(section_id, value) {
 			if (!mIfExists) { return; }
+			if (nativeMipc) {
+				var mipcType = { ipv4: '1', ipv6: '2', ipv4v6: '3' }[value];
+				if (mipcType) {
+					uci.set('network', mIfName, 'iptype', mipcType);
+					uci.set('network', mIfName, 'iaiptype', mipcType);
+				}
+				return;
+			}
 			var proto = String(uci.get('network', mIfName, 'proto') || '');
 			var v6 = (String(value) === 'ipv4v6');
 			var opt, val;
@@ -1513,6 +1615,7 @@ return view.extend({
 		};
 		o.remove = function() {};
 		o.load = function(section_id) {
+			if (nativeMipc) { return { '1': 'ipv4', '2': 'ipv6', '3': 'ipv4v6' }[uci.get('network', mIfName, 'iptype')] || 'ipv4v6'; }
 			var v = uci.get('network', mIfName, 'pdptype')
 				|| uci.get('network', mIfName, 'iptype')
 				|| uci.get('network', mIfName, 'pdp') || '';
@@ -1640,6 +1743,9 @@ return view.extend({
 					ui.addNotification(null, E('p', [ _('Interface "%s" created (%s), bringing it up…').format(out.iface, mutil.protoLabel(out.proto)) ]), 'info');
 					if (_hd && out.proto) { _hd.proto.textContent = mutil.protoLabel(out.proto); _hd.proto.style.display = ''; }
 					if (_hd && out.iface) { _hd.ifName = out.iface; setHeadTech(); }
+					if (profilesView) { profilesView.loadProfiles(); }
+				} else if (out.result === 'existing' && out.proto === 'mipc') {
+					if (_hd) { _hd.proto.textContent = mutil.protoLabel(out.proto); _hd.proto.style.display = ''; }
 					if (profilesView) { profilesView.loadProfiles(); }
 				} else {
 					var _mkWhy = (out.result && out.result !== 'created')

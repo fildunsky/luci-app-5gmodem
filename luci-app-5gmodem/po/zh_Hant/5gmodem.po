@@ -2110,6 +2110,9 @@ msgstr "它與此數據機綁定只是因為內核復用了設備節點，其設
 msgid "Loading messages…"
 msgstr "正在加載簡訊…"
 
+msgid "Receive chains"
+msgstr "接收鏈路"
+
 msgid "Antenna ports"
 msgstr "天線埠"
 

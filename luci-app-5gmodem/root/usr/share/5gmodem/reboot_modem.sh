@@ -269,6 +269,27 @@ if [ -n "$PORT" ]; then
 fi
 [ -n "$_rb_am" ] || _rb_am="$FOR"
 [ -n "$_rb_am" ] || _rb_am="$_rb_act"
+if [ "$_rb_am" = ccci ]; then
+	. /usr/share/5gmodem/lib.sh 2>/dev/null
+	if fg360_native ccci; then
+		if [ "$MODE" != soft ]; then
+			echo '{"success":false,"error":"Only reconnect is available on the built-in modem"}'
+			exit 0
+		fi
+		_rb_native_iface=$(fg360_native_iface ccci)
+		if [ -z "$_rb_native_iface" ] || [ "$(uci -q get "network.$_rb_native_iface.auto")" = 0 ] \
+		   || [ "$(uci -q get 5gmodem.@5gmodem[0].airplane)" = 1 ]; then
+			echo '{"success":false,"error":"Mobile data is disabled or the MIPC interface is missing"}'
+			exit 0
+		fi
+		if /usr/share/fg360-modem/fg360_control.sh reconnect-data 127.0.0.1:17171 "$_rb_native_iface" >/dev/null 2>&1; then
+			echo '{"success":true,"mode":"mipc-reconnect"}'
+		else
+			echo '{"success":false,"error":"MIPC reconnect failed"}'
+		fi
+		exit 0
+	fi
+fi
 _rb_if=""
 if [ -n "$_rb_am" ]; then
 	_rb_if=$(uci -q get "5gmodem.m_$(echo "$_rb_am" | sed 's/[^A-Za-z0-9]/_/g').network")

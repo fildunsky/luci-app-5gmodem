@@ -20,6 +20,10 @@ See also `docs/FM350-reference.md` for the FM350 AT command reference.
 
 The 2cb7:0104 and 2cb7:0a05 profiles pick the network-card protocol from the driver of this modem's own interfaces only. An empty `BASE` (port gone mid-poll) used to `grep ""` every interface of the router, and a path prefix without a trailing `/` (`1-1`) also matched the neighbour on `1-1.2`.
 
+## AW1000 Ultra with Fibocom FG360
+
+Support uses the vendor firmware's integrated CCCI modem, existing MIPC interface and FG360 WebUI status API. The firmware provides the MIPC netifd handler, `mipc_wan_cli` and the FG360 Lua status library. The app reads available LTE and 5G metrics, carriers, neighbouring cells and SMS through these services. The Receive chains table shows a level in dBm for each RX chain and the position of the physical antenna switch. RSRQ is available for the serving cell. The modem temperature opens a panel with up to 12 readings.
+
 ## Protocol `fibocom`
 
 ### Overview

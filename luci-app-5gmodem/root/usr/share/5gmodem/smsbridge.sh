@@ -25,6 +25,44 @@ _active_is_android() {
 	[ "$(jsonfilter -i "/tmp/5gmodem/metrics_$(snap_key "$_TGT_PATH").json" -e '@.backend' 2>/dev/null)" = android ]
 }
 
+_active_is_fg360_sms() {
+	case "$PORT" in ''|fg360) ;; *) return 1 ;; esac
+	[ -n "$_TGT_PATH" ] && fg360_native "$_TGT_PATH"
+}
+
+_fg360_sms_call() {
+	local lock=/usr/share/fg360-modem/fg360_modem_lock.sh
+	local adapter="$RES/fg360-sms.lua"
+	[ -x "$lock" ] && [ -r "$adapter" ] && command -v lua >/dev/null 2>&1 || {
+		echo '{"error":"FG360 SMS service is unavailable"}'
+		return 1
+	}
+	local priority=normal wait=20
+	if [ "$BOX" = unseen ] || [ "$SMS_BG" = 1 ]; then priority=low; wait=0; fi
+	FG360_MODEM_LOCK=/tmp/fg360-modem-at.lock FG360_MODEM_LOCK_WAIT="$wait" \
+		"$lock" --priority "$priority" -- lua "$adapter" "$@"
+}
+
+_fg360_sms_cache=/tmp/5gmodem/fg360_sms_list.json
+_fg360_sms_list() {
+	local age cached modified now result
+	if [ -s "$_fg360_sms_cache" ]; then
+		modified=$(stat -c %Y "$_fg360_sms_cache" 2>/dev/null)
+		now=$(date +%s)
+		if [ -n "$modified" ]; then
+			age=$((now - modified))
+			if [ "$age" -ge 0 ] && [ "$age" -lt 5 ]; then
+				cached=$(cat "$_fg360_sms_cache" 2>/dev/null)
+				[ -z "$cached" ] || { printf '%s\n' "$cached"; return 0; }
+			fi
+		fi
+	fi
+	result=$(_fg360_sms_call list) || { printf '%s\n' "$result"; return 1; }
+	( umask 077; mkdir -p /tmp/5gmodem && printf '%s\n' "$result" > "$_fg360_sms_cache.$$" \
+		&& mv -f "$_fg360_sms_cache.$$" "$_fg360_sms_cache" ) 2>/dev/null
+	printf '%s\n' "$result"
+}
+
 _active_is_mm() {
 	_amp="$_TGT_PATH"
 	[ -n "$_amp" ] || return 1
@@ -204,13 +242,14 @@ _kb_feed_json() {
 	case "$_kf_n" in ''|*[!0-9]*) return 0 ;; esac
 	_kf_i=0
 	while [ "$_kf_i" -lt "$_kf_n" ]; do
-		_kf_x=""; _kf_s=""; _kf_t=""; _kf_c=""; _kf_p=""; _kf_o=""; _kf_r=""
+		_kf_x=""; _kf_s=""; _kf_t=""; _kf_c=""; _kf_p=""; _kf_o=""; _kf_r=""; _kf_rd=""
 		eval "$(printf '%s' "$1" | jsonfilter \
 			-e "_kf_x=@.msg[$_kf_i].index" -e "_kf_s=@.msg[$_kf_i].sender" \
 			-e "_kf_t=@.msg[$_kf_i].timestamp" -e "_kf_c=@.msg[$_kf_i].content" \
 			-e "_kf_p=@.msg[$_kf_i].part" -e "_kf_o=@.msg[$_kf_i].total" \
-			-e "_kf_r=@.msg[$_kf_i].reference" 2>/dev/null)"
+			-e "_kf_r=@.msg[$_kf_i].reference" -e "_kf_rd=@.msg[$_kf_i].native_read" 2>/dev/null)"
 		_kf_i=$((_kf_i + 1))
+		[ "$BOX:$UL:$_kf_rd" != unseen:seen:1 ] || continue
 		[ -n "$_kf_s$_kf_c" ] || continue
 		_kb_put "$_kf_x" "$_kf_s" "$_kf_t" "$_kf_c" "$_kf_p" "$_kf_o" "$_kf_r" ""
 	done
@@ -562,12 +601,14 @@ case "$1" in
 		_nd_out=""; _nd_cnt=0; _nd_lm=""
 		for _nd_p in $_nd_paths; do
 			_nd_sec="m_$(printf '%s' "$_nd_p" | sed 's/[^A-Za-z0-9]/_/g')"
-			if [ "$(uci -q get "$CFG.$_nd_sec.kind")" != "hilink" ]; then
+			if [ "$(uci -q get "$CFG.$_nd_sec.kind")" != "hilink" ] && ! fg360_native "$_nd_p"; then
 				bg_at_off "$_nd_p" && continue
 				[ -n "$_nd_lm" ] || _nd_lm=$("$RES/listmodems.sh" 2>/dev/null)
 				printf '%s' "$_nd_lm" | jsonfilter -e "@[@.path=\"$_nd_p\"].tty[0]" -e "@[@.path=\"$_nd_p\"].wdm[0]" 2>/dev/null | grep -q . || continue
 			fi
-			if [ "$_nd_p" = "$_nd_active" ]; then
+			if fg360_native "$_nd_p"; then
+				_nd_port=fg360
+			elif [ "$_nd_p" = "$_nd_active" ]; then
 				_nd_port=$(uci -q get "$CFG.sms.readport")
 			else
 				_nd_port=$(uci -q get "$CFG.$_nd_sec.at_port")
@@ -667,7 +708,13 @@ case "$1" in
 	markread)
 		shift
 		_nc_drop
-		if [ "$(_active_kind)" = "hilink" ] && [ -n "$1" ]; then
+		if _active_is_fg360_sms && [ -n "$1" ]; then
+			rm -f "$_fg360_sms_cache"
+			_fg360_sms_call markread "$@"
+			_fg_rc=$?
+			rm -f "$_fg360_sms_cache"
+			exit "$_fg_rc"
+		elif [ "$(_active_kind)" = "hilink" ] && [ -n "$1" ]; then
 			"$RES/hilink.sh" smsmarkread "$*" "$_TGT_PATH"
 		else
 			echo '{"success":true}'
@@ -1049,6 +1096,56 @@ case "$BOX" in
 		_DJ_TOTAL=$(_dj_count "$DEL")
 		_dj_write running ;;
 esac
+
+if _active_is_fg360_sms; then
+	case "$BOX" in
+		status)
+			_fg_result=$(_fg360_sms_list) || { echo 'FG360 SMS service is unavailable'; exit 0; }
+			_fg_used=$(printf '%s' "$_fg_result" | jsonfilter -e '@.used')
+			_fg_total=$(printf '%s' "$_fg_result" | jsonfilter -e '@.capacity')
+			_fg_store=$(printf '%s' "$_fg_result" | jsonfilter -e '@.store')
+			printf 'Storage type: %s, used: %s, total: %s, web: 1\n' "${_fg_store:-SM}" "$_fg_used" "$_fg_total" ;;
+		recv|unseen|dump)
+			_fg_result=$(_fg360_sms_list) || {
+				[ "$BOX" != unseen ] && echo '{"error":"FG360 SMS inbox is unavailable"}'
+				exit 1
+			}
+			_kb_out "$_fg_result" ;;
+		sent) echo '{"msg":[]}' ;;
+		archive-run|archive-why) echo '{"result":"native"}' ;;
+		send)
+			_fg_result=$(_fg360_sms_call send "$(_norm_num "$SND_TO")" "$SND_TXT") || {
+				_fg_error=$(printf '%s' "$_fg_result" | jsonfilter -e '@.error' 2>/dev/null)
+				printf '%s\n' "${_fg_error:-FG360 SMS service is busy or unavailable}" >&2
+				exit 1
+			}
+			printf 'sms sent sucessfully\n' ;;
+		delete|delete-run)
+			case "$DEL" in
+				all) [ "$BOX" = delete ] || exit 2 ;;
+				''|*[!0-9,]*|,*|*,|*,,*) exit 2 ;;
+			esac
+			rm -f "$_fg360_sms_cache"
+			_fg_result=$(_fg360_sms_call delete $(printf '%s' "$DEL" | tr ',' ' ')); _fg_rc=$?
+			rm -f "$_fg360_sms_cache"
+			if [ "$BOX" = delete ]; then
+				printf '%s\n' "$_fg_result"
+				[ "$(printf '%s' "$_fg_result" | jsonfilter -e '@.success' 2>/dev/null)" = true ]
+				exit $?
+			fi
+			_fg_ok=" $(printf '%s' "$_fg_result" | jsonfilter -e '@.ok[*]' 2>/dev/null | tr '\n' ' ')"
+			for _fg_id in $(printf '%s' "$DEL" | tr ',' ' '); do
+				case "$_fg_ok" in
+					*" $_fg_id "*) _dj_ok "$_fg_id" ;;
+					*) case "$_fg_rc" in 75) _dj_fail "$_fg_id" busy "" ;; *) _dj_fail "$_fg_id" refused "" ;; esac ;;
+				esac
+			done
+			_dj_write done ;;
+		*) _fg_continue=1 ;;
+	esac
+	_fg_rc=$?
+	[ "${_fg_continue:-0}" = 1 ] || exit "$_fg_rc"
+fi
 
 if [ -z "$PORT" ]; then
 	case "$BOX" in

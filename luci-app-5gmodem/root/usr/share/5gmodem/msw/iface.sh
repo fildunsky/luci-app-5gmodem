@@ -45,6 +45,7 @@ follow_iface_device() {
 
 ensure_iface() {
 	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt OWNER _dp _dpo _ifst
+	fg360_native "$P" && return 0
 	IF=$(uci -q get "$CFG.$SEC.network")
 	[ -n "$IF" ] || return 0
 	uci -q get "network.$IF" >/dev/null 2>&1 || return 0
@@ -273,6 +274,10 @@ orphan_iface_for() {
 
 iface_for_path() {
 	_want="$1"; [ -n "$_want" ] || return 1
+	if fg360_native "$_want"; then
+		fg360_native_iface "$_want"
+		return $?
+	fi
 	for _if in $(uci show network 2>/dev/null | sed -n "s/^network\.\([^.=]*\)=interface\$/\1/p"); do
 		case "$_if" in loopback|lan|wan6) continue ;; esac
 		if [ "$(uci -q get "network.$_if.proto")" = ccmni ]; then

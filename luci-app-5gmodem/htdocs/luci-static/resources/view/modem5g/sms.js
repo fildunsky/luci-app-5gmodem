@@ -420,6 +420,7 @@ function sms_android_new(parts) {
 function sms_item_new(item) {
 	if (item && item.android_new != null) { return String(item.android_new) === '1'; }
 	if (item && item.android_read != null) { return String(item.android_read) === '0' && String(item.android_seen) !== '1'; }
+	if (item && item.native_read != null) { return String(item.native_read) === '0'; }
 	return !!(smsSeen && !smsSeenFirst && sms_msg_pairs(item).some(function(p) {
 		return !smsSeen.has(p[0]) && !smsSeen.has(p[1]);
 	}));
@@ -506,6 +507,7 @@ function sms_merge_parts(json) {
 		return {
 			android_new: sms_android_new(parts),
 			android_read: sms_android_read(parts),
+			native_read: first.native_read,
 			sender: first.sender,
 			timestamp: first.timestamp,
 			tz: first.tz,
@@ -532,7 +534,9 @@ function sms_persist(values) {
 }
 
 function popTimeout(a, message, timeout, severity) {
-	return ui.addTimeLimitedNotification(a, message, timeout, severity);
+	if (ui.addTimeLimitedNotification)
+		return ui.addTimeLimitedNotification(a, message, timeout, severity);
+	return ui.addNotification(a, message, severity);
 }
 
 function serial_modems() {
@@ -585,12 +589,17 @@ function update_sms_count_for_modem(newValue) {
 	});
 }
 
+function isFg360SmsModem() {
+	return uci.get('5gmodem', '@5gmodem[0]', 'active_modem') === 'ccci' &&
+		uci.get('5gmodem', 'm_ccci', 'kind') === 'fg360';
+}
+
 function isPortlessSmsModem() {
 	var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
 	if (!p) { return false; }
 	var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
 	var kind = uci.get('5gmodem', sec, 'kind');
-	return kind === 'hilink' || (kind === 'tether' && uci.get('5gmodem', sec, 'tether') === 'android');
+	return isFg360SmsModem() || kind === 'hilink' || (kind === 'tether' && uci.get('5gmodem', sec, 'tether') === 'android');
 }
 
 // Short transport label for the header badge.
@@ -598,6 +607,7 @@ function sms_transport() {
 	var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
 	var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
 	var kind = uci.get('5gmodem', sec, 'kind');
+	if (isFg360SmsModem() && !uci.get('5gmodem', 'sms', 'readport')) { return 'FG360'; }
 	if (kind === 'tether' && uci.get('5gmodem', sec, 'tether') === 'android') { return 'Android'; }
 	if (kind === 'hilink') { return 'HiLink'; }
 	if (uci.get('5gmodem', 'sms', 'sms_via_mm') == '1') { return 'ModemManager'; }
@@ -733,7 +743,7 @@ function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40012, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40013, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1553,9 +1563,9 @@ return view.extend({
 					var pn = String(uci.get('5gmodem', 'sms', 'pnumber') || '').replace(/[^0-9+]/g, '');
 					phn = pn + phn;
 				}
-				var port = uci.get('5gmodem', 'sms', 'sendport');
+				var port = uci.get('5gmodem', 'sms', 'sendport') || '';
 				if (phn.length < 3) { ui.addNotification(null, E('p', _('Please enter phone number')), 'info'); return; }
-				if (!port) { ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info'); return; }
+				if (!port && !isFg360SmsModem()) { ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info'); return; }
 				if (text.length < 1) { ui.addNotification(null, E('p', _('Please enter a message text')), 'info'); return; }
 				c.setBusy(true);
 				c.status.innerHTML = '';
@@ -1591,9 +1601,9 @@ return view.extend({
 			if (c.busy) { return; }
 			uci.unload('5gmodem');
 			return uci.load('5gmodem').then(function() {
-				var port = uci.get('5gmodem', 'sms', 'sendport');
+				var port = uci.get('5gmodem', 'sms', 'sendport') || '';
 				var dx = (uci.get('5gmodem', 'sms', 'delay') || 0) * 1000;
-				if (!port) { ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info'); return; }
+				if (!port && !isFg360SmsModem()) { ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info'); return; }
 				if (text.length < 1) { ui.addNotification(null, E('p', _('Please enter a message text')), 'info'); return; }
 				var xs = smsBook.slice(), log = '';
 				var pre = E('pre', { 'class': 'tg-sms-log' }, '');
@@ -1667,13 +1677,15 @@ return view.extend({
 				}
 				return Promise.resolve();
 			}
-			return L.resolveDefault(fs.exec_direct(BRIDGE, [ 'status', storeL, portR ])).then(function(res) {
+			// LuCI's CGI transport stringifies arguments, including an unset port.
+			var readArgs = portR ? [ storeL, portR ] : [ storeL ];
+			return L.resolveDefault(fs.exec_direct(BRIDGE, [ 'status' ].concat(readArgs))).then(function(res) {
 				if (!res) { return; }
 				var st = sms_parse_status(res);
 				var t = st.t, u = st.u;
 				S.u = u; S.t = t;
 				if (u != null) { msg_bar(Math.floor(u), t); }
-				return L.resolveDefault(fs.exec_direct(BRIDGE, [ 'recv', storeL, portR ])).then(function(res2) {
+				return L.resolveDefault(fs.exec_direct(BRIDGE, [ 'recv' ].concat(readArgs))).then(function(res2) {
 					if (!res2) { return; }
 					res2 = res2.replace(/\\u([0-9a-fA-F]{2})f{6}([0-9a-fA-F]{2})/g, '\\u$1$2');
 					res2 = res2.replace(/[\u0000-\u001F]+/g, ' ');
@@ -2055,6 +2067,6 @@ return view.extend({
 	},
 
 	popTimeout: function(a, message, timeout, severity) {
-		ui.addTimeLimitedNotification(a, message, timeout, severity);
+		return popTimeout(a, message, timeout, severity);
 	}
 });

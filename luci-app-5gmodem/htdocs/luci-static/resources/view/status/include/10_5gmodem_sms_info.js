@@ -108,7 +108,11 @@ return baseclass.extend({
 						container.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;' + alignmentStyle;
 						
 						ui.hideModal();
-						ui.addTimeLimitedNotification(null, E('p', _('Alignment settings saved successfully')), 5000, 'info');
+						const message = E('p', _('Alignment settings saved successfully'));
+						if (ui.addTimeLimitedNotification)
+							ui.addTimeLimitedNotification(null, message, 5000, 'info');
+						else
+							ui.addNotification(null, message, 'info');
 					}, this)
 				}, _('Save'))
 			])

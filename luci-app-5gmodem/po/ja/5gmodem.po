@@ -2110,6 +2110,9 @@ msgstr "このインターフェースは、カーネルがデバイスノード
 msgid "Loading messages…"
 msgstr "メッセージを読み込み中…"
 
+msgid "Receive chains"
+msgstr "受信チェーン"
+
 msgid "Antenna ports"
 msgstr "アンテナポート"
 

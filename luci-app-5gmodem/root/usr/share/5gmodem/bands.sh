@@ -34,7 +34,7 @@ for _fa in "$@"; do
 done
 
 case "$1" in
-	json|jsonrefresh|mgmtinfo|mgmtjson|nratjson|getmode|getsupportedmodes|getcelllock|applyresult)
+	json|jsonrefresh|mgmtinfo|mgmtjson|nratjson|getmode|getsupportedmodes|getcelllock|applyresult|txpowerjson)
 		case "$2" in
 			'') : ;;
 			*[!0-9A-Za-z.:_-]*) : ;;   # letters too: SoC and PCI modem paths (ccci, *.remoteproc, hex)
@@ -100,6 +100,17 @@ active_modem() {
 	[ -n "$BANDS_ACTIVE_MODEM" ] && { printf '%s\n' "$BANDS_ACTIVE_MODEM"; return 0; }
 	uci -q get 5gmodem.@5gmodem[0].active_modem
 }
+
+if [ "$(active_modem)" = ccci ] && ( . /usr/share/5gmodem/lib.sh; fg360_native ccci ); then
+	case "$1" in
+		json|jsonrefresh|mgmtinfo|mgmtjson|applyresult|getbands|getsupportedbands|\
+		getbands5gnsa|getbands5gsa|getsupportedbands5gnsa|getsupportedbands5gsa|\
+		getmode|getsupportedmodes|get5gmode|getcelllock|getcelllock5g|txpowerjson|settxpower|\
+		setall|setbands|setbands5gnsa|setbands5gsa|setmode|setmodelive|set5gmode|setcelllock|setcelllock5g)
+			exec /bin/sh /usr/share/5gmodem/fg360-bands.sh "$@" ;;
+		*) exit 1 ;;
+	esac
+fi
 
 # The global options (network, at_port) and detect.sh describe uci active_modem: no fallback to
 # them when the call names another modem.

@@ -25,7 +25,10 @@ function ufFile(action, path) {
 }
 
 function popTimeout(a, message, timeout, severity) {
-    ui.addTimeLimitedNotification(a, message, timeout, severity);
+	if (ui.addTimeLimitedNotification)
+		ui.addTimeLimitedNotification(a, message, timeout, severity);
+	else
+		ui.addNotification(a, message, severity);
 }
 
 function getDateTimeSuffix() {
@@ -984,7 +987,7 @@ let atCommandsManagerDialog = baseclass.extend({
 });
 
 return baseclass.extend({
-	API: 40012,
+	API: 40013,
 	phonebookEditorDialog: phonebookEditorDialog,
 	ussdCodesManagerDialog: ussdCodesManagerDialog,
 	atCommandsManagerDialog: atCommandsManagerDialog

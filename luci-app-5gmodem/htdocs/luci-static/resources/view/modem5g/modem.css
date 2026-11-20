@@ -970,6 +970,16 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   margin-right: -.75em;
   pointer-events: none;
 }
+.tginfo-envrow > .tginfo-temps-fg360 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8em, 1fr));
+  flex-basis: 100%;
+  width: min(36em, 100%);
+  row-gap: .5em;
+}
+.tginfo-envrow:not(.tg-topen) > .tginfo-temps-fg360 { display: none; }
+.tginfo-temps-fg360 .tg-tpop-row { font-size: .85rem; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.tginfo-temps-fg360 .tg-tpop-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .tginfo-temp.tg-texp {
   position: relative;
   cursor: pointer;
