@@ -15,10 +15,21 @@ _sms_notify() (
 	exec 1000>&- 7>&- 8>&- 9>&-
 	exec 9>/tmp/5gmodem/sms-notify.lock || exit 0
 	flock -n 9 || exit 0
+	_sn_installed=0
 	for _sn_hook in "$RES"/sms-notify.d/*; do
 		[ -f "$_sn_hook" ] && [ -x "$_sn_hook" ] || continue
+		_sn_installed=1
 		"$_sn_hook" 9>&-
 	done
+
+	[ "$_sn_installed" = 0 ] || exit 0
+	_sn_mcu=/usr/bin/mcu-switch
+	[ -f "$_sn_mcu" ] && [ -x "$_sn_mcu" ] || exit 0
+	# Keep the final newline so extra newlines in the old option are rejected too.
+	[ "$(uci -q get 5gmodem.sms.newsms_hook && printf .)" = '/usr/bin/mcu-switch sms new
+.' ] || exit 0
+	"$_sn_mcu" sms new 9>&-
+	exit 0
 )
 
 _sw_run() {
@@ -604,7 +615,9 @@ case "$1" in
 				printf '%s' "$_smw_now" > /tmp/5gmodem/sms_new.stamp 2>/dev/null
 				if "$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
 					&& mv /tmp/5gmodem/sms_new.json.tmp /tmp/5gmodem/sms_new.json 2>/dev/null; then
-					[ -d "$RES/sms-notify.d" ] && _sms_notify >/dev/null 2>&1 </dev/null &
+					if [ -d "$RES/sms-notify.d" ] || [ -x /usr/bin/mcu-switch ]; then
+						_sms_notify >/dev/null 2>&1 </dev/null &
+					fi
 				fi
 			fi
 			if [ -n "$_REG_FLAT" ]; then

@@ -34,5 +34,6 @@ Sourced by `buttons.sh` after its helpers. A device package redefines the hooks 
 Device packages can install an executable handler in this directory. After updating `/tmp/5gmodem/sms_new.json`, sessionwatch runs the installed handlers in a background job without arguments. Handlers can read that file and decide when to update a display or an LED. They run serially and a refresh during an active job leaves the next notification pass to the next refresh. Keep handlers short and bounded so one device package does not delay other notifications.
 
 Device packages that previously set `5gmodem.sms.newsms_hook` should install a handler here to keep SMS notifications working after an update.
+With no executable handler installed, existing GL-E750 firmware can still notify its display when the option has the firmware's exact default value `/usr/bin/mcu-switch sms new` and that executable is present.
 
 The [standby flag](health-and-recovery.md#standby) is a separate contract.
