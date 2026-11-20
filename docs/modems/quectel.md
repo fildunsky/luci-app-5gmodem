@@ -24,6 +24,14 @@ The metric profiles for Quectel modules. Every `2c7c*` profile sources `_quectel
 
 For the YUGA CLM920 (05c6:9625), which speaks a Quectel-like `+QNWINFO`, see [others.md](others.md).
 
+## RG200U-CN band management
+
+The band profile uses the USB product name to distinguish this model from other
+modules with USB ID `2c7c:0900`. It reads the supported lists from
+`AT+QNWPREFCFG=?` and uses `gw_band` for WCDMA, `lte_band` for LTE and
+one shared `nr5g_band` list for 5G SA and NSA. Selecting automatic bands
+writes `0` for that technology only.
+
 ## Metric sources
 
 | Command | Field(s) |

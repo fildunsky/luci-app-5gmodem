@@ -1,3 +1,5 @@
+_fibocom_band_at() { sms_tool -d "$_DEVICE" at "$1"; }
+
 _DEFAULT_5G_BANDS="1 2 3 5 7 8 20 25 28 30 38 40 41 48 66 71 77 78 79"
 _BANDS_APPLY_LIVE=reconnect
 
@@ -7,7 +9,7 @@ _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 3
 _fm350_caps() {
     _cf="/tmp/5gmodem/fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
     if [ ! -s "$_cf" ]; then
-        sms_tool -d $_DEVICE at "AT+GTACT=?" 2>/dev/null | tr -d '\r' \
+        _fibocom_band_at "AT+GTACT=?" 2>/dev/null | tr -d '\r' \
             | grep -o '([^)]*)' > "$_cf.$$" 2>/dev/null
         [ -s "$_cf.$$" ] && [ "$(wc -l < "$_cf.$$")" -ge 6 ] \
             && mv "$_cf.$$" "$_cf" || rm -f "$_cf.$$"
@@ -57,7 +59,7 @@ getsupportedmodes() {
 }
 
 getmode() {
-    O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
+    O=$(_fibocom_band_at "AT+GTACT?")
     _gm=$(echo "$O" | awk -F[:,] '/^\+GTACT:/{gsub(/ /,"",$2); print $2; exit}')
     [ "$_gm" = 20 ] && _fm350_no_nr && _gm=10
     echo "$_gm"
@@ -74,11 +76,11 @@ setmode() {
         4)     A="$M,3,2" ;;
         *)     A="$M" ;;
     esac
-    sms_tool -d $_DEVICE at "AT+GTACT=$A"
+    _fibocom_band_at "AT+GTACT=$A"
 }
 
 getinfo() {
-  O=$(sms_tool -d $_DEVICE at "AT+CGMM?")
+  O=$(_fibocom_band_at "AT+CGMM?")
   _NAME="Fibocom $(echo "$O" | awk -F[:,] '/^\+CGMM:/{gsub("\"","");print $2}' | xargs)"
   echo "$_NAME"
 }
@@ -89,7 +91,7 @@ getsupportedbands() {
 }
 
 getbands() {
-    O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
+    O=$(_fibocom_band_at "AT+GTACT?")
     BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}' | tr -d '\r')
     for BAND in $BANDS; do
         case $BAND in ''|*[!0-9]*) continue ;; esac
@@ -101,13 +103,16 @@ getbands() {
 }
 
 _fm350_gtact_tail() {
-    sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r ' \
-        | sed -n 's/^+GTACT://p' | head -1 | cut -d, -f4- \
-        | tr ',' '\n' | grep -E "$1" | sort -n | xargs
+    local reply
+    reply=$(_fibocom_band_at "AT+GTACT?" 2>/dev/null | tr -d '\r ' \
+        | sed -n 's/^+GTACT://p' | head -1)
+    [ -n "$reply" ] || return 1
+    printf '%s\n' "$reply" | cut -d, -f4- | tr ',' '\n' | grep -E "$1" | sort -n | xargs
 }
 
 _fm350_gtact_set() {
-    _gs_line=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r ' \
+    local _gs_ack
+    _gs_line=$(_fibocom_band_at "AT+GTACT?" 2>/dev/null | tr -d '\r ' \
         | sed -n 's/^+GTACT://p' | head -1)
     [ -n "$_gs_line" ] || return 1
     _gs_rat=$(echo "$_gs_line" | cut -d, -f1)
@@ -147,14 +152,15 @@ _fm350_gtact_set() {
     for _gs_f in "$_gs_mode" $_gs_dup ",," "$_gs_rat,," "$_gs_rat"; do
         case " $_gs_tried " in *" $_gs_f "*) continue ;; esac
         _gs_tried="$_gs_tried $_gs_f"
+        _gs_ack=0
         if [ "$_gs_f" = "$_gs_rat" ]; then
             [ "$1" = "0" ] || continue
-            sms_tool -d $_DEVICE at "AT+GTACT=$_gs_rat" >/dev/null 2>&1
+            _fibocom_band_at "AT+GTACT=$_gs_rat" >/dev/null 2>&1 || _gs_ack=$?
         else
-            sms_tool -d $_DEVICE at "AT+GTACT=$_gs_f,$1" >/dev/null 2>&1
+            _fibocom_band_at "AT+GTACT=$_gs_f,$1" >/dev/null 2>&1 || _gs_ack=$?
         fi
-        [ -n "$_gs_want" ] || return 0
-        _gs_new=$(_fm350_gtact_tail "$2")
+        [ -n "$_gs_want" ] || return "$_gs_ack"
+        _gs_new=$(_fm350_gtact_tail "$2") || return 1
         if [ "$_gs_new" = "$_gs_want" ]; then
             [ "$_gs_f" = "$_gs_mode" ] || \
                 logger -t 5gmodem "bands: applied as AT+GTACT=$_gs_f,... (the modem ignored AT+GTACT=$_gs_mode,...)"
@@ -175,7 +181,7 @@ _fm350_reapply_lte() {
         ''|default) : ;;
         *) setbands "$_rab_sv" >/dev/null 2>&1; return ;;
     esac
-    LINE=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
+    LINE=$(_fibocom_band_at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
         | sed -n 's/^+GTACT: *//p' | head -1)
     [ -n "$LINE" ] || return
     MODE=$(echo "$LINE" | cut -d, -f1-3 | tr -d ' \r')
@@ -230,7 +236,7 @@ setbands() {
 
 _fm350_act() {
     if [ -z "$_ACT_CACHE" ]; then
-        _ACT_CACHE=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
+        _ACT_CACHE=$(_fibocom_band_at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
             | sed -n 's/^+GTACT: *//p' | head -1)
         [ -n "$_ACT_CACHE" ] || _ACT_CACHE="_none_"
     fi
@@ -297,7 +303,7 @@ getbands5gsa() {
 getbands5gnsa() {
     _fm350_no_nr && { echo "Unsupported"; return; }
 
-    O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
+    O=$(_fibocom_band_at "AT+GTACT?")
     BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}' | tr -d '\r')
     for BAND in $BANDS; do
         case $BAND in ''|*[!0-9]*) continue ;; esac

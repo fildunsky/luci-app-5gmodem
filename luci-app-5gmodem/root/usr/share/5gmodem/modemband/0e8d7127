@@ -1,9 +1,24 @@
 _DEVICE=""
 
-. $RES/_fibocom_fm350_common
+. "$RES/_fibocom_fm350_common"
+
+_fibocom_band_at() {
+	local reply
+
+	command -v at_query >/dev/null 2>&1 || . /usr/share/5gmodem/lib.sh
+	case "$1" in
+		*\?) at_query "$_DEVICE" "$1"; return ;;
+	esac
+
+	# The transport can return success even when the modem rejected the set.
+	reply=$(AT_QUERY_RAW=1 at_query "$_DEVICE" "$1") || return $?
+	printf '%s\n' "$reply"
+	printf '%s\n' "$reply" | tr -d '\r' \
+		| awk 'NF { last = $0 } END { exit last !~ /^[[:space:]]*OK[[:space:]]*$/ }'
+}
 
 getcelllock() {
-	O=$(sms_tool -d $_DEVICE at "AT+EMMCHLCK?" 2>/dev/null | tr -d '\r' \
+	O=$(_fibocom_band_at "AT+EMMCHLCK?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+EMMCHLCK: *//p' | head -1)
 	[ -n "$O" ] || { echo "Unsupported"; return; }
 
@@ -22,7 +37,7 @@ getcelllock() {
 
 get5gmode() {
 	_fm350_no_nr && { echo "Unsupported"; return; }
-	O=$(sms_tool -d $_DEVICE at "AT+E5GOPT?" 2>/dev/null | tr -d '\r' \
+	O=$(_fibocom_band_at "AT+E5GOPT?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+E5GOPT: *//p' | head -1 | tr -cd '0-9')
 	[ -n "$O" ] || { echo "Unsupported"; return; }
 	_SA=$((O & 2)); _NSA=$((O & 4))
@@ -35,11 +50,11 @@ get5gmode() {
 set5gmode() {
 	_fm350_no_nr && return
 	[ "$1" = "full" ] || return
-	sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1
+	_fibocom_band_at "AT+CFUN=4" >/dev/null 2>&1
 	sleep 2
-	sms_tool -d $_DEVICE at "AT+E5GOPT=7" >/dev/null 2>&1
+	_fibocom_band_at "AT+E5GOPT=7" >/dev/null 2>&1
 	sleep 1
-	sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1
+	_fibocom_band_at "AT+CFUN=1" >/dev/null 2>&1
 	sleep 8
 	_fm350_reapply_bands
 }
@@ -47,28 +62,28 @@ set5gmode() {
 setcelllock() {
 	case "$1" in
 		off)
-			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1
+			_fibocom_band_at "AT+CFUN=4" >/dev/null 2>&1
 			sleep 2
-			sms_tool -d $_DEVICE at "AT+EMMCHLCK=0" >/dev/null 2>&1
+			_fibocom_band_at "AT+EMMCHLCK=0" >/dev/null 2>&1
 			sleep 1
-			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1
+			_fibocom_band_at "AT+CFUN=1" >/dev/null 2>&1
 			sleep 8
 			_fm350_reapply_bands
 			;;
 		arfcn|cell)
 			_AR="$2"; _PC="$3"
 			[ -n "$_AR" ] || return
-			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1
+			_fibocom_band_at "AT+CFUN=4" >/dev/null 2>&1
 			sleep 2
-			sms_tool -d $_DEVICE at "AT+EMMCHLCK=0" >/dev/null 2>&1
+			_fibocom_band_at "AT+EMMCHLCK=0" >/dev/null 2>&1
 			sleep 1
 			if [ "$1" = "cell" ] && [ -n "$_PC" ]; then
-				sms_tool -d $_DEVICE at "AT+EMMCHLCK=1,7,0,$_AR,$_PC,3" >/dev/null 2>&1
+				_fibocom_band_at "AT+EMMCHLCK=1,7,0,$_AR,$_PC,3" >/dev/null 2>&1
 			else
-				sms_tool -d $_DEVICE at "AT+EMMCHLCK=1,7,0,$_AR,,3" >/dev/null 2>&1
+				_fibocom_band_at "AT+EMMCHLCK=1,7,0,$_AR,,3" >/dev/null 2>&1
 			fi
 			sleep 1
-			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1
+			_fibocom_band_at "AT+CFUN=1" >/dev/null 2>&1
 			sleep 8
 			_fm350_reapply_bands
 			;;

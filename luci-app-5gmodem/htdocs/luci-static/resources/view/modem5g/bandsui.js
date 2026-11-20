@@ -1063,6 +1063,10 @@ function applyBandsModemband(reset, confirmed) {
 		try { d = JSON.parse(String((res && res.stdout) || '').trim()); } catch (e) { d = null; }
 		if (!d || !d.id) {
 			var why = String((res && (res.stdout || res.stderr)) || '').trim();
+			if (/^AT port \/dev\/\S+ is busy\b/.test(why)) {
+				ui.addNotification(null, E('p', _('The modem AT port is busy, try again')), 'warning');
+				return;
+			}
 			ui.addNotification(null, E('p', [ _('Failed to set bands') + (why ? ': ' + why : '') ]), 'error');
 			return;
 		}
@@ -1261,7 +1265,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 40009,
+	API: 40010,
 	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },

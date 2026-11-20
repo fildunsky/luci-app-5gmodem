@@ -67,7 +67,9 @@ at_long_busy() {
 }
 
 _at_recover() {
-	[ -x "${RES:-/usr/share/5gmodem}/at-recover.sh" ] || return 0
+	local worker="${RES:-/usr/share/5gmodem}/at-recover.sh"
+	[ -x "$worker" ] || worker=/usr/share/5gmodem/at-recover.sh
+	[ -x "$worker" ] || return 0
 	( unset _AT_LOCK_HELD; exec 7>&- 8>&- 9>&-;
-	  exec "${RES:-/usr/share/5gmodem}/at-recover.sh" "$1" ) >/dev/null 2>&1 </dev/null &
+	  exec "$worker" "$1" ) >/dev/null 2>&1 </dev/null &
 }

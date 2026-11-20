@@ -1,0 +1,84 @@
+. "$RES/_quectel_common2"
+command -v at_query >/dev/null 2>&1 || . /usr/share/5gmodem/lib.sh
+
+getinfo() {
+	echo "Quectel RG200U-CN"
+}
+
+_rg200u_bands() {
+	local reply
+	[ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] || return 1
+	reply=$(at_query "$_DEVICE" "AT+QNWPREFCFG=$2" 2>/dev/null) || return 1
+	printf '%s\n' "$reply" | tr '\r' '\n' | awk -F, -v key="$1" '
+		$1 ~ /^\+QNWPREFCFG:[[:space:]]*"/ && NF == 2 {
+			sub(/^\+QNWPREFCFG:[[:space:]]*/, "", $1)
+			sub(/[[:space:]]+$/, "", $1)
+			if ($1 != "\"" key "\"") next
+			if ($2 ~ /^[[:space:]]*\([^()]*\)[[:space:]]*$/) {
+				sub(/^[[:space:]]*\(/, "", $2)
+				sub(/\)[[:space:]]*$/, "", $2)
+			}
+			sub(/^[[:space:]]+/, "", $2)
+			sub(/[[:space:]]+$/, "", $2)
+			gsub(/[[:space:]]*:[[:space:]]*/, ":", $2)
+			if ($2 !~ /^(0|[1-9][0-9]*(:[1-9][0-9]*)*)$/) exit 1
+			count = split($2, bands, ":")
+			for (i = 1; i <= count; i++)
+				if (bands[i] > 512) exit
+			for (i = 1; i <= count; i++) print bands[i]
+			exit
+		}' | sort -nu | xargs
+}
+
+_rg200u_supported() {
+	local bands
+	bands=$(_rg200u_bands "$1" '?') || return 1
+	case "$bands" in ''|0) return 1 ;; esac
+	printf '%s\n' "$bands"
+}
+
+_rg200u_current() {
+	local bands
+	bands=$(_rg200u_bands "$1" "\"$1\"") || return 1
+	[ -n "$bands" ] || return 1
+	if [ "$bands" = 0 ]; then _rg200u_supported "$1"; else printf '%s\n' "$bands"; fi
+}
+
+_rg200u_write() {
+	local key="$1" bands="$2" supported wanted current band
+	if [ "$bands" = default ]; then
+		wanted=0
+	else
+		case "$bands" in ''|*[!0-9\ ]*) return 1 ;; esac
+		supported=$(_rg200u_supported "$key") || return 1
+		for band in $bands; do
+			case " $supported " in *" $band "*) ;; *) return 1 ;; esac
+		done
+		wanted=$(printf '%s\n' "$bands" | awk '{ for (i = 1; i <= NF; i++) print $i }' | sort -nu | xargs | tr ' ' ':')
+		[ -n "$wanted" ] || return 1
+	fi
+	current=$(_rg200u_bands "$key" "\"$key\"") || return 1
+	[ -n "$current" ] || return 1
+	[ "${current// /:}" != "$wanted" ] || return 0
+	at_query "$_DEVICE" "AT+QNWPREFCFG=\"$key\",$wanted" >/dev/null 2>&1 || return 1
+	current=$(_rg200u_bands "$key" "\"$key\"") || return 1
+	[ "${current// /:}" = "$wanted" ] && return 0
+	[ "$wanted" = 0 ] && [ -n "$current" ] && [ "$current" = "$(_rg200u_supported "$key")" ]
+}
+
+bands3g_style() { echo "mask"; }
+getsupportedbands3g() { _rg200u_supported gw_band; }
+getbands3g() { _rg200u_current gw_band; }
+setbands3g() { _rg200u_write gw_band "$1"; }
+
+getsupportedbands() { _rg200u_supported lte_band; }
+getbands() { _rg200u_current lte_band; }
+setbands() { _rg200u_write lte_band "$1"; }
+
+getsupportedbands5gnsa() { _rg200u_supported nr5g_band; }
+getbands5gnsa() { _rg200u_current nr5g_band; }
+setbands5gnsa() { _rg200u_write nr5g_band "$1"; }
+
+getsupportedbands5gsa() { echo "Unsupported"; }
+getbands5gsa() { echo "Unsupported"; }
+setbands5gsa() { echo "Unsupported"; return 1; }
