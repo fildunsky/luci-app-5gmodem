@@ -913,17 +913,17 @@ return baseclass.extend({
 	// Resolves to the rendered form node (no wrapper); the caller adds its own collapsible block.
 	tabbedPanel: function() {
 		return ext.load().then(function() {
-		var m = new form.Map('5gmodem');
-		var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
-		s.addremove = false;
-		SMS_TABS.forEach(function(t) {
-			s.tab(t[0], t[1]);
-			var px = tabProxy(s, t[0]);
-			t[2].forEach(function(build) { build(px); });
-		});
-		ext.call('sms', 'receive', tabProxy(s, 'notify'));
-		ext.call('sms', 'send', tabProxy(s, 'send'));
-		return m.render();
+			var m = new form.Map('5gmodem');
+			var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
+			s.addremove = false;
+			SMS_TABS.forEach(function(t) {
+				s.tab(t[0], t[1]);
+				var px = tabProxy(s, t[0]);
+				t[2].forEach(function(build) { build(px); });
+			});
+			ext.call('sms', 'receive', tabProxy(s, 'notify'));
+			ext.call('sms', 'send', tabProxy(s, 'send'));
+			return m.render();
 		});
 	},
 
@@ -935,28 +935,28 @@ return baseclass.extend({
 		injectStyle();
 
 		return ext.load().then(function() {
-		var m = new form.Map('5gmodem');
-		var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
-		s.addremove = false;
-		build(s);
-		ext.call('sms', group, s);
+			var m = new form.Map('5gmodem');
+			var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
+			s.addremove = false;
+			build(s);
+			ext.call('sms', group, s);
 
-		var storeKey = '5gmodem_settings_' + group;
-		var open = false;
-		try { open = localStorage.getItem(storeKey) === '1'; } catch (e) {}
+			var storeKey = '5gmodem_settings_' + group;
+			var open = false;
+			try { open = localStorage.getItem(storeKey) === '1'; } catch (e) {}
 
-		return m.render().then(function(mapNode) {
-			var attrs = { 'class': 'cbi-section tgpage sms-settings-panel' };
-			if (open) attrs.open = '';
-			var det = E('details', attrs, [
-				E('summary', {}, _('Settings')),
-				mapNode
-			]);
-			det.addEventListener('toggle', function() {
-				try { localStorage.setItem(storeKey, det.open ? '1' : '0'); } catch (e) {}
+			return m.render().then(function(mapNode) {
+				var attrs = { 'class': 'cbi-section tgpage sms-settings-panel' };
+				if (open) attrs.open = '';
+				var det = E('details', attrs, [
+					E('summary', {}, _('Settings')),
+					mapNode
+				]);
+				det.addEventListener('toggle', function() {
+					try { localStorage.setItem(storeKey, det.open ? '1' : '0'); } catch (e) {}
+				});
+				return det;
 			});
-			return det;
-		});
 		});
 	}
 });

@@ -266,7 +266,10 @@ function condPresets(services) {
 
 // extension presets come first
 function extPresets(kind, services, own) {
-	return [].concat.apply([], ext.call('presets', kind, services)).concat(own);
+	var presets = ext.call('presets', kind, services).filter(Array.isArray);
+	return [].concat.apply([], presets).filter(function(p) {
+		return p && typeof p.label === 'string' && typeof p.cmd === 'string' && p.cmd.length;
+	}).concat(own);
 }
 
 // One state (pressed/released, or switch on/off): command on the left, LEDs on the right.
@@ -397,8 +400,12 @@ function buttonCard(b, leds, services, onDelete) {
 var API = { statePanel: statePanel, setField: setField, setLeds: setLeds, delBinding: delBinding,
 	saveStatus: saveStatus, flashSaved: flashSaved };
 
+function isCard(node) {
+	return node instanceof Element || node instanceof DocumentFragment;
+}
+
 function renderButton(b, leds, services, onDelete) {
-	return ext.call('buttonCard', b, leds, services, onDelete, API)[0] || buttonCard(b, leds, services, onDelete);
+	return ext.first('buttonCard', isCard, b, leds, services, onDelete, API) || buttonCard(b, leds, services, onDelete);
 }
 
 document.addEventListener('click', function() {
@@ -408,7 +415,7 @@ document.addEventListener('click', function() {
 return view.extend({
 	// the page shows no modem bar, but the menu tabs hidden by settings must stay hidden here too
 	// render first: the button, LED and service lists come from the router after the page is drawn
-	load: function() { return Promise.all([ ext.load(), L.resolveDefault(modemtabs.refreshMenuTabs()) ]); },
+	load: function() { return L.resolveDefault(modemtabs.refreshMenuTabs()); },
 
 	render: function() {
 		/* header card in the Network-page layout */
@@ -432,14 +439,18 @@ return view.extend({
 			])
 		]);
 		var body = E('div', { 'class': 'tg-btn' }, [ head ]);
-		Promise.all([ L.resolveDefault(detect(), {}), L.resolveDefault(detectLeds(), []), L.resolveDefault(detectServices(), []) ])
-			.then(function(res) { fill(res[0] || {}, res[1] || [], res[2] || []); });
+		Promise.all([ L.resolveDefault(detect(), {}), L.resolveDefault(detectLeds(), []),
+			L.resolveDefault(detectServices(), []), ext.load() ]).then(function(res) {
+			var data = res[0] || {};
+			ext.call('init', data);
+			fill(data, res[1] || [], res[2] || []);
+			ext.call('cards', data, API).filter(isCard).forEach(function(c) { body.appendChild(c); });
+		});
 		return body;
 
 		function fill(data, leds, services) {
-			ext.call('init', data);
-			var buttons = data.buttons || [];
-			var assignable = (buttons || []).filter(function(b) { return !b['default']; });
+			var buttons = Array.isArray(data.buttons) ? data.buttons : [];
+			var assignable = buttons.filter(function(b) { return b && typeof b.name === 'string' && !b['default']; });
 			hd.ico.classList.toggle('off', !assignable.length);
 			if (!assignable.length) {
 				hd.main.textContent = _('No assignable buttons were detected on this device');
@@ -483,7 +494,6 @@ return view.extend({
 
 			assignable.forEach(function(b) { if (isConfigured(b)) { addCard(b); } });
 			refreshAdd();
-			ext.call('cards', data, API).forEach(function(c) { body.appendChild(c); });
 		}
 	},
 

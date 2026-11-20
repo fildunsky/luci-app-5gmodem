@@ -163,10 +163,10 @@ The Wi-Fi uplink is detected from the wireless config (`wifi-iface` with `networ
 
 ### Standby
 
-A device power manager (GL-E750: `mcu-switch standby`) takes the uplinks down on purpose and keeps the flag file `/tmp/5gmodem/standby` while it does (`standby_active` in `lib.sh`). The flag lives in tmpfs, so it never survives a reboot.
+A device power manager creates `/tmp/5gmodem/standby` before taking its selected uplinks down and removes it after restoring them. The GL-E750 manager pauses Wi-Fi and the wired WAN while leaving the modem available for SMS. The flag lives in tmpfs and expires on reboot.
 
-- `health.sh` treats the flag like a disabled watchdog (`tick`, `once`, `event`): penalties are lifted and the state is cleared, so nothing is probed or healed, and after standby the watchdog starts from a clean state instead of healing a link that was "down" for the whole standby.
-- `sessionwatch.sh` skips the session checks, the stray-proxy redial, snapshot warm-ups, Telegram, telemetry and station parking. The SMS jobs (mirror, commands, archive, queue) keep running.
+- `health.sh` clears penalties and old probe state on standby entry. Queued watchdog passes check the flag after taking their lock, and delayed recovery steps check again before changing a link.
+- `sessionwatch.sh` pauses automatic registration, redial, SIM wake, snapshot polling, Telegram, telemetry and station parking. SMS mirroring, commands, archiving and sending keep running.
 - Independent of the flag, `heal` honours `auto=0` / `disabled=1` of an interface that netifd no longer lists. A disabled interface disappears from the dump at the next `network reload` (`ifup` and `wifi up` both reload), and the old check, nested under `autostart=false`, was skipped for it: the ladder went on to reboot the modem.
 
 ## stapark.sh: Wi-Fi client parking (one radio)
