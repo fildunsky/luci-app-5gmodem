@@ -458,7 +458,9 @@ case "$1" in
 
 		_sweep_n=0
 		while :; do
-			if ! pidof ModemManager >/dev/null 2>&1 \
+			_SW_STBY=""
+			standby_active && _SW_STBY=1
+			if [ -z "$_SW_STBY" ] && ! pidof ModemManager >/dev/null 2>&1 \
 			   && ! uci -q show network 2>/dev/null | grep -qE "\.proto='?($(proto_re proxy))'?\$"; then
 				_ps_if=$(uci -q get 5gmodem.@5gmodem[0].network)
 				if [ ! -f "/tmp/5gmodem/simwait/$_ps_if" ] && proto_in direct "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)"; then
@@ -526,8 +528,8 @@ case "$1" in
 			[ -n "$_SW_NETONLY" ] || "$RES/simwait.sh" tick
 			[ -n "$_SW_NETONLY" ] || check_once
 			_page_refresh
-			[ -n "$_SW_NETONLY" ] || warm_snapshots
-			[ -n "$_SW_NETONLY" ] || warm_active
+			[ -n "$_SW_NETONLY$_SW_STBY" ] || warm_snapshots
+			[ -n "$_SW_NETONLY$_SW_STBY" ] || warm_active
 			_page_refresh
 			"$RES/health.sh" tick >/dev/null 2>&1
 			_page_refresh
@@ -548,7 +550,7 @@ case "$1" in
 			else
 				rm -f /tmp/5gmodem/ucidelta
 			fi
-			"$RES/tgnotify.sh" tick >/dev/null 2>&1
+			[ -n "$_SW_STBY" ] || "$RES/tgnotify.sh" tick >/dev/null 2>&1
 			_sw_bgo=""
 			[ -n "$_REG_FLAT" ] && bg_at_off && _sw_bgo=1
 			_smw_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
@@ -559,8 +561,12 @@ case "$1" in
 			if [ -n "$_REG_FLAT" ] && [ "$_smw_iv" -gt 0 ] && [ -z "$_sw_bgo" ] \
 			   && [ "$((_smw_now - _smw_prev))" -ge "$_smw_iv" ]; then
 				printf '%s' "$_smw_now" > /tmp/5gmodem/sms_new.stamp 2>/dev/null
-				"$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
-					&& mv /tmp/5gmodem/sms_new.json.tmp /tmp/5gmodem/sms_new.json 2>/dev/null
+				if "$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
+					&& mv /tmp/5gmodem/sms_new.json.tmp /tmp/5gmodem/sms_new.json 2>/dev/null; then
+					# sms.newsms_hook: command run after each refresh of sms_new.json (e.g. a display or LED script)
+					_smw_hook=$(uci -q get 5gmodem.sms.newsms_hook)
+					[ -n "$_smw_hook" ] && sh -c "$_smw_hook" >/dev/null 2>&1 </dev/null &
+				fi
 			fi
 			if [ -n "$_REG_FLAT" ]; then
 			[ -n "$_sw_bgo" ] || "$RES/smscmd.sh" run >/dev/null 2>&1
@@ -589,9 +595,9 @@ case "$1" in
 				case "$_ipw" in *:*) continue ;; esac
 				is_iphone "${_ipw##*/}" && { usbmuxd_ensure >/dev/null 2>&1; break; }
 			done
-			"$RES/telemetry.sh" tick >/dev/null 2>&1
+			[ -n "$_SW_STBY" ] || "$RES/telemetry.sh" tick >/dev/null 2>&1
+			[ -n "$_SW_STBY" ] || "$RES/stapark.sh" tick >/dev/null 2>&1
 			"$RES/gpsfeed.sh" tick >/dev/null 2>&1
-			"$RES/stapark.sh" tick >/dev/null 2>&1
 			"$RES/mobile.sh" tick >/dev/null 2>&1
 		done
 		;;

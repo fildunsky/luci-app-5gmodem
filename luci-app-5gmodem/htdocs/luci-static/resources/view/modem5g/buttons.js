@@ -2,6 +2,7 @@
 'require view';
 'require fs';
 'require ui';
+'require 5gmodem.ext as ext';
 'require view.modem5g.modemtabs as modemtabs';
 
 // Router buttons: one card per button, page styles in page-buttons.css (tg-btn-*).
@@ -15,7 +16,7 @@ function detect() {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'detect' ]).then(function(res) {
 		var j = {};
 		try { j = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
-		return (j && j.buttons) || [];
+		return j || {};
 	});
 }
 function detectLeds() {
@@ -156,6 +157,14 @@ function typewrite(term, input, text) {
 
 // The command "terminal" (btnterm, styled in modem.css) with the preset menu behind the caret.
 function cmdField(value, presetList) {
+	var help = E('div', { 'class': 'cbi-value-description', 'style': 'display:none' });
+	var cur = presetList;
+	function syncHelp() {	// preset.help: shown while its command is in the field
+		var h = '';
+		(cur || []).forEach(function(p) { if (p.help && p.cmd === input.value.trim()) { h = p.help; } });
+		help.textContent = h;
+		help.style.display = h ? '' : 'none';
+	}
 	var input = E('input', {
 		'type': 'text', 'spellcheck': 'false', 'autocomplete': 'off',
 		'placeholder': _('shell command'), 'value': value || '',
@@ -164,7 +173,10 @@ function cmdField(value, presetList) {
 	var menu = E('div', { 'class': 'btnmenu' });
 	var body = E('div', { 'class': 'btnterm-body' }, [ input ]);
 	var term = E('div', { 'class': 'btnterm' }, [ E('div', { 'class': 'btnterm-hd' }, 'sh'), body ]);
+	input.addEventListener('input', syncHelp);
 	function fillMenu(list) {
+		cur = list;
+		syncHelp();
 		menu.innerHTML = '';
 		(list || []).forEach(function(p) {
 			menu.appendChild(E('div', {
@@ -184,7 +196,7 @@ function cmdField(value, presetList) {
 		'keydown': function(ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); caret.click(); } }
 	}, '▾');
 	body.appendChild(caret);
-	return { input: input, node: E('div', { 'class': 'btncmd' }, [ term, menu ]), setPresets: fillMenu };
+	return { input: input, node: E('div', { 'class': 'btncmd' }, [ term, menu, help ]), setPresets: fillMenu };
 }
 
 function infoBox(key, text) {
@@ -252,12 +264,18 @@ function condPresets(services) {
 	}).concat(PRESETS_COMMON);
 }
 
+// extension presets come first
+function extPresets(kind, services, own) {
+	return [].concat.apply([], ext.call('presets', kind, services)).concat(own);
+}
+
 // One state (pressed/released, or switch on/off): command on the left, LEDs on the right.
 function statePanel(b, leds, state, services) {
 	var ct0 = (b['ct_' + state] === 'conditional') ? 'conditional' : 'simple';
-	var cPre = condPresets(services);
+	var cPre = extPresets('conditional', services, condPresets(services));
+	var sPre = extPresets('simple', services, PRESETS_SIMPLE);
 
-	var cmd = cmdField(b['cmd_' + state], ct0 === 'conditional' ? cPre : PRESETS_SIMPLE);
+	var cmd = cmdField(b['cmd_' + state], ct0 === 'conditional' ? cPre : sPre);
 
 	var sGrid = ledGrid(leds, b['leds_' + state]);
 	var simpleLeds = ledsBlock(_('LEDs in this state:'), sGrid);
@@ -275,7 +293,7 @@ function statePanel(b, leds, state, services) {
 		{ 'value': 'simple', 'label': _('Simple') },
 		{ 'value': 'conditional', 'label': _('Conditional') }
 	], ct0, function(v) {
-		cmd.setPresets(v === 'conditional' ? cPre : PRESETS_SIMPLE);
+		cmd.setPresets(v === 'conditional' ? cPre : sPre);
 		simpleLeds.style.display = (v === 'simple') ? '' : 'none';
 		condArea.style.display = (v === 'conditional') ? '' : 'none';
 	});
@@ -375,7 +393,13 @@ function buttonCard(b, leds, services, onDelete) {
 	return card;
 }
 
-function renderButton(b, leds, services, onDelete) { return buttonCard(b, leds, services, onDelete); }
+// helpers an extension builds its own cards with (hooks buttonCard, cards)
+var API = { statePanel: statePanel, setField: setField, setLeds: setLeds, delBinding: delBinding,
+	saveStatus: saveStatus, flashSaved: flashSaved };
+
+function renderButton(b, leds, services, onDelete) {
+	return ext.call('buttonCard', b, leds, services, onDelete, API)[0] || buttonCard(b, leds, services, onDelete);
+}
 
 document.addEventListener('click', function() {
 	document.querySelectorAll('.btnmenu.open').forEach(function(m) { m.classList.remove('open'); });
@@ -384,10 +408,9 @@ document.addEventListener('click', function() {
 return view.extend({
 	// the page shows no modem bar, but the menu tabs hidden by settings must stay hidden here too
 	// render first: the button, LED and service lists come from the router after the page is drawn
-	load: function() { return L.resolveDefault(modemtabs.refreshMenuTabs()); },
+	load: function() { return Promise.all([ ext.load(), L.resolveDefault(modemtabs.refreshMenuTabs()) ]); },
 
 	render: function() {
-
 		/* header card in the Network-page layout */
 		var hd = {};
 		hd.ico = E('div', { 'class': 'tginfo-signal tg-btn-ico' });
@@ -409,11 +432,13 @@ return view.extend({
 			])
 		]);
 		var body = E('div', { 'class': 'tg-btn' }, [ head ]);
-		Promise.all([ L.resolveDefault(detect(), []), L.resolveDefault(detectLeds(), []), L.resolveDefault(detectServices(), []) ])
-			.then(function(res) { fill(res[0] || [], res[1] || [], res[2] || []); });
+		Promise.all([ L.resolveDefault(detect(), {}), L.resolveDefault(detectLeds(), []), L.resolveDefault(detectServices(), []) ])
+			.then(function(res) { fill(res[0] || {}, res[1] || [], res[2] || []); });
 		return body;
 
-		function fill(buttons, leds, services) {
+		function fill(data, leds, services) {
+			ext.call('init', data);
+			var buttons = data.buttons || [];
 			var assignable = (buttons || []).filter(function(b) { return !b['default']; });
 			hd.ico.classList.toggle('off', !assignable.length);
 			if (!assignable.length) {
@@ -425,11 +450,8 @@ return view.extend({
 			var list = E('div', { 'class': 'tg-btn-list' });
 			body.appendChild(list);
 
-			var CFG_KEYS = [ 'cmd_pressed', 'cmd_released', 'ct_pressed', 'ct_released',
-				'leds_pressed', 'leds_released', 'ledson_pressed', 'ledsoff_pressed',
-				'ledson_released', 'ledsoff_released' ];
-			function isConfigured(b) {
-				return CFG_KEYS.some(function(k) { return b[k] && b[k] !== ''; });
+			function isConfigured(b) {	// any state, extension states included
+				return Object.keys(b).some(function(k) { return /^(cmd|ct|leds|ledson|ledsoff)_/.test(k) && b[k]; });
 			}
 
 			var shown = {};
@@ -461,6 +483,7 @@ return view.extend({
 
 			assignable.forEach(function(b) { if (isConfigured(b)) { addCard(b); } });
 			refreshAdd();
+			ext.call('cards', data, API).forEach(function(c) { body.appendChild(c); });
 		}
 	},
 

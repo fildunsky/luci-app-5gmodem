@@ -1032,7 +1032,7 @@ _off_cleanup() {
 case "$1" in
 tick)
 	lock_guard
-	[ "$H_EN" = "1" ] || _off_cleanup
+	[ "$H_EN" = "1" ] && ! standby_active || _off_cleanup
 	mkdir -p "$HDIR"
 	_t_last=$(cat "$HDIR/.t" 2>/dev/null); case "$_t_last" in ''|*[!0-9]*) _t_last=0 ;; esac
 	_t_now=$(uptime_s)
@@ -1044,7 +1044,7 @@ tick)
 	heal
 	;;
 once)
-	[ "$H_EN" = "1" ] || _off_cleanup
+	[ "$H_EN" = "1" ] && ! standby_active || _off_cleanup
 	mkdir -p "$HDIR"
 	( exec >/dev/null 2>&1 </dev/null
 	  exec 9>"/tmp/5gmodem/health.lock"
@@ -1056,7 +1056,7 @@ once)
 	sleep 1
 	;;
 event)
-	[ "$H_EN" = "1" ] || exit 0
+	[ "$H_EN" = "1" ] && ! standby_active || exit 0
 	case " $(wan_nets) " in *" $2 "*) ;; *) exit 0 ;; esac
 	mkdir -p "$HDIR"
 	_ev_t0=$(uptime_s)

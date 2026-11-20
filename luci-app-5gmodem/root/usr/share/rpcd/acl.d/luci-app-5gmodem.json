@@ -61,6 +61,7 @@
 				"/usr/libexec/package-manager-call list-installed": [ "exec" ],
 				"/usr/libexec/opkg-list installed": [ "exec" ],
 				"/usr/libexec/opkg-call list-installed": [ "exec" ],
+				"/www/luci-static/resources/5gmodem/ext": [ "list" ],
 				"/etc/modemdefine": [ "read" ],
 				"/etc/5gmodem": [ "read" ],
 				"/etc/defmodems": [ "read" ],
@@ -84,7 +85,7 @@
 			},
 			"uci": [ "5gmodem", "modemdefine", "defmodems", "network", "firewall", "system" ],
 			"ubus": {
-				"file": [ "read", "exec" ]
+				"file": [ "read", "list", "exec" ]
 			}
 		},
 		"write": {
