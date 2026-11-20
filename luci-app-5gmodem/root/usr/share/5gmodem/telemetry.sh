@@ -18,6 +18,35 @@ _SNAP="/tmp/5gmodem/metrics_${_KEY}.json"
 
 _jf() { jsonfilter -i "$_SNAP" -e "@.$1" 2>/dev/null; }
 
+_tele_device() {
+	[ -n "$_AM" ] || return 1
+	for _td_dir in "/sys/bus/usb/devices/$_AM" "/sys/bus/pci/devices/${_AM##*/}" \
+	               "/sys/bus/platform/devices/${_AM##*/}/remoteproc"; do
+		[ -d "$_td_dir" ] || continue
+		# The sysfs inode changes when a different device enumerates at the same path.
+		ls -diL "$_td_dir" 2>/dev/null | awk 'NR == 1 { print $1 }'
+		return
+	done
+}
+
+_keep_radio() {
+	[ -n "$_modem_id" ] && [ -n "$_st" ] && [ "${_age:--1}" -ge 0 ] \
+		&& [ -s "$TELE" ] && [ -s "$TELE_CELL" ] && [ -s "$TSNAP" ] || return 1
+	case "$_tele_sim_state:$_tele_sim_waiting" in absent:*|locked:*|*:true) return 1 ;; esac
+	read -r _kr_key < "$TSNAP"
+	case "$_kr_key" in "$_SNAP:$_modem_id:"*) ;; *) return 1 ;; esac
+	# A stale sample may be kept only if it is the same one we already exported.
+	[ -n "$_fresh" ] || [ "$_kr_key" = "$_tc_key" ] || return 1
+	# Preserve both files and their timestamps. The LCD expires the last export after 90 s.
+	_kr_mtime=$(date -r "$TELE" +%s 2>/dev/null) || return 1
+	_kr_age=$(( $(date +%s) - _kr_mtime ))
+	[ "$_kr_age" -ge 0 ] && [ "$_kr_age" -le 90 ] || return 1
+	case "$(cat "$TELE" 2>/dev/null)" in *'"sig"'*|*'"rsrp"'*|*'"oper"'*) ;; *) return 1 ;; esac
+	_kr_sim=$(jsonfilter -i "$TELE" -e '@.sim_state' 2>/dev/null)
+	[ "$(jsonfilter -i "$TELE" -e '@.waiting_sim' 2>/dev/null)" = "$_tele_sim_waiting" ] \
+		&& { [ "$_tele_sim_state" = "$_kr_sim" ] || [ "$_tele_sim_state:$_kr_sim" = unknown:ready ]; }
+}
+
 _int() {
 	case "$1" in ''|-|--|---) return ;; esac
 	_iv="$1"; _is=""
@@ -56,6 +85,9 @@ _tele_sim_fields() {
 tele_write() {
 	_J=""
 	_fresh=""
+	_held=""
+	_st=""; _age=-1
+	_modem_id=$(_tele_device)
 	if [ -n "$_AM" ] && [ -s "$_SNAP" ]; then
 		_st=$(cat "${_SNAP%.json}.stamp" 2>/dev/null)
 		case "$_st" in
@@ -66,7 +98,7 @@ tele_write() {
 	fi
 
 	_tc_hit=""
-	_tc_key="$_SNAP:$_st"
+	_tc_key="$_SNAP:$_modem_id:$_st"
 	if [ -n "$_fresh" ] && [ -s "$TSNAP" ] && [ "$(sed -n 1p "$TSNAP")" = "$_tc_key" ]; then
 		_tc_hit=1
 		_J=$(sed -n 2p "$TSNAP")
@@ -123,6 +155,10 @@ tele_write() {
 		_tele_sim_state=$(jsonfilter -s "$_tele_sim_json" -e '@.sim_state' 2>/dev/null)
 		_tele_sim_waiting=$(jsonfilter -s "$_tele_sim_json" -e '@.waiting_sim' 2>/dev/null)
 	fi
+	case "$_J" in
+		*'"sig"'*|*'"rsrp"'*|*'"oper"'*) ;;
+		*) if _keep_radio; then _held=1; return 0; fi ;;
+	esac
 	if [ -n "$_net" ] && [ -f "/tmp/5gmodem/health/$_net" ]; then
 		read -r _hs _hf _ho _hms _hsince < "/tmp/5gmodem/health/$_net"
 		[ "$_hs" = "up" ] && _num ping "$(_int "$_hms")"
@@ -144,8 +180,8 @@ tele_write() {
 				_num tx $(( (_txb - _ptx) / _dt ))
 			fi
 		fi
-		printf '%s %s %s %s\n' "$_now" "$_rxb" "$_txb" "$_dev" > "$PREV.tmp" \
-			&& mv "$PREV.tmp" "$PREV"
+		printf '%s %s %s %s\n' "$_now" "$_rxb" "$_txb" "$_dev" > "$PREV.$$" \
+			&& mv "$PREV.$$" "$PREV"
 	fi
 
 	_sc=$(jsonfilter -i /tmp/5gmodem/sms_new.json -e '@.count' 2>/dev/null)
@@ -181,23 +217,8 @@ tele_write() {
 		fi
 	fi
 
-	if [ -n "$_fresh" ]; then
-		case "$_J" in
-			*'"sig"'*|*'"rsrp"'*|*'"oper"'*) ;;
-			*)
-				_tw_age=$(( $(date +%s) - $(date -r "$TELE" +%s 2>/dev/null || echo 0) ))
-				if [ "$_tw_age" -lt 120 ]; then
-					case "$(cat "$TELE" 2>/dev/null)" in
-						*'"sig"'*|*'"rsrp"'*|*'"oper"'*)
-						if [ "$(jsonfilter -i "$TELE" -e '@.sim_state' 2>/dev/null)" = "$_tele_sim_state" ] \
-							&& [ "$(jsonfilter -i "$TELE" -e '@.waiting_sim' 2>/dev/null)" = "$_tele_sim_waiting" ]; then return 0; fi ;;
-					esac
-				fi ;;
-		esac
-	fi
-
 	_tele_sim_fields
-	printf '{%s}\n' "$_J" > "$TELE.tmp" && mv "$TELE.tmp" "$TELE"
+	printf '{%s}\n' "$_J" > "$TELE.$$" && mv "$TELE.$$" "$TELE" || return 1
 
 	_J=""
 	if [ -n "$_tc_hit" ]; then
@@ -255,14 +276,14 @@ tele_write() {
 		_nb=$(grep -o '"neighbors":\[[^]]*\]' "$_SNAP" 2>/dev/null | head -1)
 		_nb=${_nb#\"neighbors\":}
 		case "$_nb" in \[*\]) [ "$_nb" != "[]" ] && _J="$_J${_J:+,}\"nbrs\":$_nb" ;; esac
-		printf '%s\n%s\n%s\n' "$_tc_key" "$_tc_main" "$_J" > "$TSNAP.tmp" && mv "$TSNAP.tmp" "$TSNAP"
+		printf '%s\n%s\n%s\n' "$_tc_key" "$_tc_main" "$_J" > "$TSNAP.$$" && mv "$TSNAP.$$" "$TSNAP"
 	fi
 	if [ -n "$_fresh" ]; then
 		_str ext_ip  "$_te_xip"
 		_str ext_ip6 "$_te_xip6"
 	fi
 	_tele_sim_fields
-	printf '{%s}\n' "$_J" > "$TELE_CELL.tmp" && mv "$TELE_CELL.tmp" "$TELE_CELL"
+	printf '{%s}\n' "$_J" > "$TELE_CELL.$$" && mv "$TELE_CELL.$$" "$TELE_CELL"
 }
 
 _mqtt_args() {
@@ -287,7 +308,8 @@ _mpub() {
 }
 
 tele_publish() {
-	tele_write
+	tele_write || return 1
+	[ -z "$_held" ] || return 0
 	_mqtt_args || return 0
 	[ -s "$TELE" ] || return 0
 	_mpub -t "$TOPIC/state" -f "$TELE" 2>/dev/null \
@@ -345,10 +367,9 @@ tele_discovery() {
 }
 
 _refresh_snap() {
-	_rf=$(_g refresh); case "$_rf" in ''|*[!0-9]*) _rf=120 ;; esac
+	# Start before the 120-second export limit so there is time to retry a busy poll.
+	_rf=$(_g refresh); case "$_rf" in ''|*[!0-9]*) _rf=90 ;; esac
 	[ "$_rf" = "0" ] && return 0
-	[ -n "$_AM" ] || return 0
-	[ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || [ -d "/sys/bus/platform/devices/${_AM##*/}/remoteproc" ] || return 0
 	_rs_st=$(cat "${_SNAP%.json}.stamp" 2>/dev/null)
 	case "$_rs_st" in
 		*[!0-9]*) _rs_st="" ;;

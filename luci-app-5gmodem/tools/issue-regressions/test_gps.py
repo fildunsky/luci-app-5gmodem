@@ -272,13 +272,16 @@ class Parsers(unittest.TestCase):
 
 class StatusWithStubs(unittest.TestCase):
     # gps.sh against a fake modem: lib.sh, uci and listmodems.sh are replaced
-    def run_gps(self, vidpid, answers, *args, uci='', sysfs=None):
+    def run_gps(self, vidpid, answers, *args, uci='', sysfs=None, cache=None):
         with tempfile.TemporaryDirectory() as t:
             t = Path(t)
             (t / 'res').mkdir()
             (t / 'bin').mkdir()
             if sysfs:
                 sysfs(t / 'sys')
+            if cache:
+                (t / 'tmp').mkdir()
+                (t / 'tmp' / cache[0]).write_text(cache[1])
             # an answer given as a tuple (text,) comes without the final OK
             cases = ''.join(f"\t\t'{c}') printf '%s\\n' '{a[0]}' ;;\n" if isinstance(a, tuple)
                             else f"\t\t'{c}') printf '%s\\n' '{a}' 'OK' ;;\n" for c, a in answers.items())
@@ -300,6 +303,59 @@ class StatusWithStubs(unittest.TestCase):
             r = shell(f'sh {GPS} ' + ' '.join(args), env=env)
             sent = (t / 'tmp/sent').read_text().split('\n') if (t / 'tmp/sent').exists() else []
             return r, [s for s in sent if s]
+
+    def test_telit_incomplete_probe_is_pending(self):
+        cmd = 'AT$GPSP?'
+        for answer in ('', cmd, 'OK', '+CME ERROR: 14', 'No response from modem.'):
+            with self.subTest(answer=answer):
+                r, sent = self.run_gps('1bc7:1201', {cmd: (answer,)}, 'caps')
+                j = json.loads(r.stdout)
+                self.assertEqual((j['supported'], j['pending'], sent), (0, True, [cmd]))
+
+    def test_sierra_echo_is_pending(self):
+        cmd = 'AT!GPSSTATUS?'
+        r, _ = self.run_gps('1199:9071', {cmd: (cmd,)}, 'caps')
+        j = json.loads(r.stdout)
+        self.assertEqual((j['supported'], j['pending']), (0, True))
+
+    def test_telit_complete_probe_is_decisive(self):
+        cmd = 'AT$GPSP?'
+        for answer, supported in (('$GPSP: 1', 1), ('ERROR', 0), ('+CME ERROR: 4', 0)):
+            with self.subTest(answer=answer):
+                r, _ = self.run_gps('1bc7:1201', {cmd: (answer,)}, 'caps')
+                j = json.loads(r.stdout)
+                self.assertEqual(j['supported'], supported)
+                self.assertNotIn('pending', j)
+
+    def test_fm350_primary_rejection_cannot_rule_out_the_ap_port(self):
+        r, _ = self.run_gps('0e8d:7127', {'AT+GTGPSPOWER?': ('ERROR',)}, 'caps')
+        self.assertTrue(json.loads(r.stdout)['pending'])
+
+    def test_devices_with_no_gnss_query_or_qmi_node_are_unsupported(self):
+        def compal(root):
+            dev = root / 'bus/usb/devices/1-1'
+            dev.mkdir(parents=True)
+            (dev / 'product').write_text('RXMG1\n')
+
+        for sysfs, family in ((None, ''), (compal, 'compal')):
+            with self.subTest(family=family):
+                r, sent = self.run_gps('19d2:1485', {}, 'caps', sysfs=sysfs)
+                j = json.loads(r.stdout)
+                self.assertEqual((j['family'], j['supported'], sent), (family, 0, []))
+                self.assertNotIn('pending', j)
+
+    def test_old_gnss_cache_entries_are_handled(self):
+        cmd = 'AT$GPSP?'
+        old_cache = 'sup=0\nfam=telit\nvp=1bc7:1201\n'
+        r, sent = self.run_gps('1bc7:1201', {}, 'caps',
+                               cache=('gnss_caps_m_1_1.neg', old_cache))
+        self.assertTrue(json.loads(r.stdout)['pending'])
+        self.assertEqual(sent, [])
+
+        r, sent = self.run_gps('1bc7:1201', {cmd: '$GPSP: 1'}, 'caps',
+                               cache=('gnss_caps_m_1_1', old_cache))
+        self.assertEqual(json.loads(r.stdout)['supported'], 1)
+        self.assertEqual(sent, [cmd])
 
     def test_qmi_session_kept_by_client_id(self):
         # a Qualcomm modem with the QMI LOC service and no vendor GNSS commands

@@ -326,7 +326,7 @@ _tmo() {
 # Family by USB vendor; Dell ids split between Foxconn and Sierra builds.
 _family_hint() {
 	if [ -n "$_TGT" ]; then
-		case "$(cat "/sys/bus/usb/devices/$_TGT/product" 2>/dev/null)" in
+		case "$(cat "$SYS/bus/usb/devices/$_TGT/product" 2>/dev/null)" in
 			*VOS_5G*|*RXMG1*|*RXM-G1*|*SG500M2*) echo compal; return ;;
 		esac
 	fi
@@ -599,6 +599,7 @@ _caps() {
 		_cached_family=$(sed -n 's/^fam=//p' "$CAPS" | head -n 1)
 		_current_family=$(_family_hint)
 		if [ "$(sed -n 's/^vp=//p' "$CAPS" | head -n 1)" = "$_vp" ] \
+			&& grep -qE '^(sup=1|confirmed=1)$' "$CAPS" \
 			&& { { [ "$_cached_family" != compal ] && [ "$_current_family" != compal ]; } || [ "$_cached_family" = "$_current_family" ]; }; then
 			cat "$CAPS"; return
 		fi
@@ -608,7 +609,11 @@ _caps() {
 	# the FM350 probe walks every tty of the modem, 4 s each, on every status poll otherwise
 	if [ -s "$CAPS.neg" ]; then
 		_cn_a=$(( $(date +%s) - $(date -r "$CAPS.neg" +%s 2>/dev/null || echo 0) ))
-		[ "$_cn_a" -ge 0 ] && [ "$_cn_a" -lt 60 ] && { cat "$CAPS.neg"; return; }
+		if [ "$_cn_a" -ge 0 ] && [ "$_cn_a" -lt 60 ]; then
+			cat "$CAPS.neg"
+			printf '%s\n' 'pending=1'
+			return
+		fi
 		rm -f "$CAPS.neg"
 	fi
 	# a HiLink stick is a router of its own: no AT port, no GNSS commands
@@ -634,9 +639,11 @@ vp=$_vp"
 		return
 	fi
 	_sup=0; _st=""; _r=""; _op=""; _gap=""
-	if [ -n "$_fam" ] && [ -n "$_atp" ]; then
-		_probe=$(_probe_cmd "$_fam")
-		[ -z "$_probe" ] || _r=$(_at "$_probe")
+	_probe=$(_probe_cmd "$_fam")
+	if [ -n "$_probe" ] && [ -n "$_atp" ]; then
+		_r=$(AT_QUERY_RAW=1 _at "$_probe" | awk -v probe="$_probe" '
+			{ sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, "") }
+			NF && $0 != probe && $0 != "OK" && $0 != "No response from modem."')
 		case "$_fam" in
 			sierra) printf '%s' "$_r" | grep -q 'ERROR' || { [ -n "$_r" ] && _sup=1; } ;;
 			fibocom)
@@ -644,6 +651,8 @@ vp=$_vp"
 				# FM350 (0e8d) answers the GNSS commands on the AP-side AT port (interface 3), not on
 				# the modem AT port (interface 6) the app polls: that one gives ERROR or nothing
 				if [ -z "$_st" ] && [ "${_vp%%:*}" = 0e8d ]; then
+					# A rejection on the modem AT port says nothing about GNSS on the AP port.
+					_r=""
 					for _gp in $(_tty_list); do
 						[ "$_gp" = "$_atp" ] && continue
 						is_devpath "$_gp" || continue
@@ -675,8 +684,10 @@ vp=$_vp"
 	_lock=""; _qr=""
 	# QMI LOC first for the modems that give the position only as NMEA (and for unknown vendors):
 	# no port hunting, and on/off is a session, not a stored setting with a modem restart
-	if [ "$_loc" = nmea ] && _qr=$(_q --get-service-version-info) \
-	   && printf '%s\n' "$_qr" | grep -qE '^[[:space:]]+loc \('; then
+	if [ "$_loc" = nmea ]; then
+		_qr=$(_q --get-service-version-info) || _qr=""
+	fi
+	if printf '%s\n' "$_qr" | grep -qE '^[[:space:]]+loc \('; then
 		_sup=1; _loc=qmi; _modes=cold; [ -n "$_fam" ] || _fam=qualcomm
 		_lock=$(_q --loc-get-engine-lock | sed -n 's/^.*engine lock: *//p' | head -n 1)
 		# Foxconn: with AT+GPS=0 the receiver is off in hardware; only AT+GPS=1 (a restart) brings it back
@@ -692,11 +703,15 @@ lock=$_lock
 outport=$_op
 atport=$_gap
 vp=$_vp"
-	# a "no" is cached too (the probe costs a round trip), but not a busy or silent port
-	if [ "$_sup" = 1 ] || [ -n "$_r" ] || [ -n "$_qr" ]; then
-		printf '%s\n' "$_c" > "$CAPS"; rm -f "$CAPS.neg"
+	# Old negative caches could come from an echo or a partial reply.
+	if [ "$_sup" = 1 ] || [ -z "$_TGT" ] \
+	   || { [ -z "$_probe" ] && { [ -n "$_qr" ] || { [ -n "$_vp" ] && [ -z "$(_wdm)" ]; }; }; } \
+	   || printf '%s\n' "$_r" | grep -qiE '^(ERROR|\+CME ERROR:[[:space:]]*(4|operation not supported))$'; then
+		printf '%s\n' "$_c" 'confirmed=1' > "$CAPS"; rm -f "$CAPS.neg"
 	else
 		printf '%s\n' "$_c" > "$CAPS.neg"
+		_c="$_c
+pending=1"
 	fi
 	printf '%s\n' "$_c"
 }
@@ -1061,9 +1076,11 @@ case "$1" in
 	status|'') _status ;;
 	caps)
 		_c=$(_caps_eff)
-		printf '{"supported":%s,"family":%s,"source":%s,"modes":%s,"reboot":%s,"outport":%s}\n' "$(_num "$(_kv "$_c" sup)")" \
+		_pending=""
+		[ "$(_kv "$_c" pending)" != 1 ] || _pending=',"pending":true'
+		printf '{"supported":%s,"family":%s,"source":%s,"modes":%s,"reboot":%s,"outport":%s%s}\n' "$(_num "$(_kv "$_c" sup)")" \
 			"$(_str "$(_kv "$_c" fam)")" "$(_str "$(_kv "$_c" loc)")" "$(_str "$(_kv "$_c" modes)")" \
-			"$(_num "$(_kv "$_c" reboot)")" "$(_str "$(_kv "$_c" outport)")" ;;
+			"$(_num "$(_kv "$_c" reboot)")" "$(_str "$(_kv "$_c" outport)")" "$_pending" ;;
 	on|off) _power "$1" ;;
 	antport) _antport "$2" ;;
 	start)

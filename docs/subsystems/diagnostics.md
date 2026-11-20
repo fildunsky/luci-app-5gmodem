@@ -606,12 +606,12 @@ ssh, which forked a full poll each time. Verbs: `write`, `publish` (MQTT via `mo
 - Freshness gate: a stale snapshot (modem removed, page closed) showed "signal 67" for a dead modem
   (7 hours stale, 2026-08-20). Stale means modem fields are omitted while the file is still rewritten
   (mtime shows the exporter is alive).
-- A fresh snapshot with an empty signal core (port busy during the poll) does not overwrite a
-  previous file that had the core: a single port hiccup blanked the consumer's modem card (Almond
-  screen, 2026-08-20). Real modem loss shows as the snapshot stamp going stale.
+- An incomplete poll or an expired snapshot can leave the last successful export in place for
+  up to 90 s from that export while the same modem is still present and SIM status permits it.
+  The files retain their original timestamps and MQTT does not republish the held sample.
 - The metrics collector runs only while the Network page is open (`page_active`, 15 s). With the
   page closed and the snapshot stale, telemetry refreshes it itself through the same collector
-  (serialised via LOCKDIR), at most every `tele.refresh` seconds (default 120, 0 disables), bounded
+  (serialised via LOCKDIR), at most every `tele.refresh` seconds (default 90, 0 disables), bounded
   to 25 s. A full collection is ~1.5 s CPU.
 - The ifup hook forces a new collection with cache TTL 0. With the usual TTL of 60 s, a snapshot
   taken before registration was served again, and `oper`/`mode` stayed empty for about 100 s after

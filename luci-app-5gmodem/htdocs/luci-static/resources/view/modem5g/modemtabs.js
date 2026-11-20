@@ -160,9 +160,7 @@ function gpsSeenKey() {
 function gpsSeenHide() {
 	try {
 		// the base key holds the last answer for any modem: used until uci says which modem is active
-		var k = gpsSeenKey(), v = localStorage.getItem(k);
-		if (v === null && k !== GPS_SEEN_BASE) { v = localStorage.getItem(GPS_SEEN_BASE); }
-		gateHideRule('gps-tab-hide', 'gps', v !== '1');
+		gateHideRule('gps-tab-hide', 'gps', localStorage.getItem(gpsSeenKey()) !== '1');
 	} catch (e) { gateHideRule('gps-tab-hide', 'gps', true); }
 }
 gpsSeenHide();
@@ -281,20 +279,24 @@ function applyEsimTabVisibility(tries) {
 }
 
 function applyGpsTabVisibility() {
+	var key;
 	return L.resolveDefault(uci.load('5gmodem'))
 		.then(function() {
 			if (String(uci.get('5gmodem', '@5gmodem[0]', 'show_gps') || '') === '0') { return null; }
+			key = gpsSeenKey();
+			gpsSeenHide();
 			return L.resolveDefault(fs.exec('/usr/share/5gmodem/gps.sh', [ 'caps' ]), null);
 		})
 		.then(function(r) {
-			if (!r) { return; }
-			var st = {};
-			try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) { return; }
+			if (!r || r.code !== 0 || !r.stdout || key !== gpsSeenKey()) { return; }
+			var st;
+			try { st = JSON.parse(r.stdout); } catch (e) { return; }
+			if (!st || st.pending || st.busy || (st.supported !== 0 && st.supported !== 1)) { return; }
 			try {
-				var gv = String(st.supported) === '1' ? '1' : '0';
-				localStorage.setItem(gpsSeenKey(), gv); localStorage.setItem(GPS_SEEN_BASE, gv);
+				var gv = String(st.supported);
+				localStorage.setItem(key, gv); localStorage.setItem(GPS_SEEN_BASE, gv);
 			} catch (e) {}
-			mutil.lsTouch(gpsSeenKey());
+			mutil.lsTouch(key);
 			gpsSeenHide();
 		});
 }
@@ -578,7 +580,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 40010,
+	API: 40011,
 	renderBar: function() {
 		pageFadeIn();
 		return loadModems().then(function(st) {
