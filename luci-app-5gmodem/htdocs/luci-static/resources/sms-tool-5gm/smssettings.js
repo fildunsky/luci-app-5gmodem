@@ -909,7 +909,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 40011,
+	API: 40012,
 	// Resolves to the rendered form node (no wrapper); the caller adds its own collapsible block.
 	tabbedPanel: function() {
 		return ext.load().then(function() {
