@@ -161,6 +161,14 @@ The Wi-Fi uplink is detected from the wireless config (`wifi-iface` with `networ
 - **Step 2: rebuild only that radio** through `network.wireless` on ubus. The AP on it goes dark for a few seconds. This fixes the NO_DEVICE detach, which `REASSOCIATE` does not fix. `wifi up <radio>` cannot be used: `/sbin/wifi` calls `ubus call network reload` internally (`wifi_updown`) and so restarts every interface.
 - **Step 3: global `network reload`**, only when the radio rebuild failed **and** no other uplink is alive. An earlier version did this as step 2 and took down a working modem whenever Wi-Fi failed ("modem stopping network" in the log).
 
+### Standby
+
+A device power manager (GL-E750: `mcu-switch standby`) takes the uplinks down on purpose and keeps the flag file `/tmp/5gmodem/standby` while it does (`standby_active` in `lib.sh`). The flag lives in tmpfs, so it never survives a reboot.
+
+- `health.sh` treats the flag like a disabled watchdog (`tick`, `once`, `event`): penalties are lifted and the state is cleared, so nothing is probed or healed, and after standby the watchdog starts from a clean state instead of healing a link that was "down" for the whole standby.
+- `sessionwatch.sh` skips the session checks, the stray-proxy redial, snapshot warm-ups, Telegram, telemetry and station parking. The SMS jobs (mirror, commands, archive, queue) keep running.
+- Independent of the flag, `heal` honours `auto=0` / `disabled=1` of an interface that netifd no longer lists. A disabled interface disappears from the dump at the next `network reload` (`ifup` and `wifi up` both reload), and the old check, nested under `autostart=false`, was skipped for it: the ladder went on to reboot the modem.
+
 ## stapark.sh: Wi-Fi client parking (one radio)
 
 On a radio with one channel (`iw phy`: `#channels <= 1`, for example wcn36xx), the access point has to follow the channel of the station. When the station loses its network, wpa_supplicant scans every channel and the access point stays down until the network returns.
