@@ -12,6 +12,17 @@
 .tg-btn-i { display: inline-flex; }
 .tg-btn-i svg { display: block; }
 .tg-btn .cbi-button.tg-btn-ico { padding: 6px 8px; line-height: 0; }
+.tg-btn .cbi-button-negative.tg-btn-ico {
+  color: var(--tg-btn-bad) !important;
+  border: 1px solid currentColor !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.tg-btn .cbi-button-negative.tg-btn-ico:hover:not(:disabled) { background: rgba(229,72,77,.10) !important; }
+.tg-btn .cbi-button-negative.tg-btn-ico:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
 .tg-btn-muted { color: var(--tg-muted); }
 
 .tg-btn-card { display: grid; gap: 12px; }

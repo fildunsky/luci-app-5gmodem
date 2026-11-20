@@ -4,6 +4,7 @@
 'require fs';
 'require uci';
 'require ui';
+'require 5gmodem.ext as ext';
 
 /*
 	Copyright 2022-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -297,7 +298,7 @@ function addNotifications(s) {
 							if (dsled == 'D') {
 								let led = uci.get('5gmodem', 'sms', 'smsled');
 								if (led)
-									return fs.write('/sys/class/leds/' + led + '/brightness', '0');
+									return L.resolveDefault(fs.write('/sys/class/leds/' + led + '/brightness', '0'));
 							}
 						});
 					}
@@ -345,7 +346,7 @@ function addNotifications(s) {
 		return L.resolveDefault(fs.list('/sys/class/leds'), []).then(L.bind(function(leds) {
 			if (leds.length > 0) {
 				leds.sort((a, b) => a.name < b.name ? -1 : (a.name > b.name ? 1 : 0));
-				leds.forEach(e => { if ((o.keylist || []).indexOf(e.name) < 0) { o.value(e.name); } });
+				leds.forEach(e => { if ((this.keylist || []).indexOf(e.name) < 0) { this.value(e.name); } });
 			}
 			return this.super('load', [section_id]);
 		}, this));
@@ -867,8 +868,10 @@ var SMS_TABS = [
 ];
 
 // The group builders only call s.option(); route them into one tab.
+// children: the tab's own option list (what LuCI renders), for the extension hook `sms`.
 function tabProxy(s, tab) {
 	return {
+		children: s.tabs[tab].children,
 		option: function() {
 			return s.taboption.apply(s, [ tab ].concat(Array.prototype.slice.call(arguments)));
 		}
@@ -909,15 +912,19 @@ return baseclass.extend({
 	API: 40011,
 	// Resolves to the rendered form node (no wrapper); the caller adds its own collapsible block.
 	tabbedPanel: function() {
-		var m = new form.Map('5gmodem');
-		var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
-		s.addremove = false;
-		SMS_TABS.forEach(function(t) {
-			s.tab(t[0], t[1]);
-			var px = tabProxy(s, t[0]);
-			t[2].forEach(function(build) { build(px); });
+		return ext.load().then(function() {
+			var m = new form.Map('5gmodem');
+			var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
+			s.addremove = false;
+			SMS_TABS.forEach(function(t) {
+				s.tab(t[0], t[1]);
+				var px = tabProxy(s, t[0]);
+				t[2].forEach(function(build) { build(px); });
+			});
+			ext.call('sms', 'receive', tabProxy(s, 'notify'));
+			ext.call('sms', 'send', tabProxy(s, 'send'));
+			return m.render();
 		});
-		return m.render();
 	},
 
 	panel: function(group) {
@@ -927,26 +934,29 @@ return baseclass.extend({
 
 		injectStyle();
 
-		var m = new form.Map('5gmodem');
-		var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
-		s.addremove = false;
-		build(s);
+		return ext.load().then(function() {
+			var m = new form.Map('5gmodem');
+			var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
+			s.addremove = false;
+			build(s);
+			ext.call('sms', group, s);
 
-		var storeKey = '5gmodem_settings_' + group;
-		var open = false;
-		try { open = localStorage.getItem(storeKey) === '1'; } catch (e) {}
+			var storeKey = '5gmodem_settings_' + group;
+			var open = false;
+			try { open = localStorage.getItem(storeKey) === '1'; } catch (e) {}
 
-		return m.render().then(function(mapNode) {
-			var attrs = { 'class': 'cbi-section tgpage sms-settings-panel' };
-			if (open) attrs.open = '';
-			var det = E('details', attrs, [
-				E('summary', {}, _('Settings')),
-				mapNode
-			]);
-			det.addEventListener('toggle', function() {
-				try { localStorage.setItem(storeKey, det.open ? '1' : '0'); } catch (e) {}
+			return m.render().then(function(mapNode) {
+				var attrs = { 'class': 'cbi-section tgpage sms-settings-panel' };
+				if (open) attrs.open = '';
+				var det = E('details', attrs, [
+					E('summary', {}, _('Settings')),
+					mapNode
+				]);
+				det.addEventListener('toggle', function() {
+					try { localStorage.setItem(storeKey, det.open ? '1' : '0'); } catch (e) {}
+				});
+				return det;
 			});
-			return det;
 		});
 	}
 });

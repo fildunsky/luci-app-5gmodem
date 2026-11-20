@@ -189,6 +189,7 @@ simwait_check() (
 simwait_tick_one_locked() {
 	local path="$1" section="$2" interface="$3" proto="$4" port="$5" owner="$6"
 	local status up pending available autostart error identity state hint
+	standby_active && return 0
 	case "$interface" in ''|-|*[!A-Za-z0-9_-]*) return ;; esac
 	[ "$(uci -q get "network.$interface.auto")" != 0 ] && [ "$(uci -q get "network.$interface.disabled")" != 1 ] || return
 	usb_path_present "$path" || { simwait_clear "$interface"; return; }
@@ -200,6 +201,7 @@ simwait_tick_one_locked() {
 	error=$(printf '%s' "$status" | jsonfilter -e '@.errors[0].code' 2>/dev/null)
 	available=$(printf '%s' "$status" | jsonfilter -e '@.available' 2>/dev/null)
 	if [ "$autostart" != true ] && [ -z "$error" ]; then
+		standby_active && return 0
 		if [ -f "$SIMWAIT_DIR/$interface.blocked" ]; then
 			ubus call network.interface notify_proto "{\"interface\":\"$interface\",\"action\":5,\"available\":true}" >/dev/null 2>&1 || return
 		fi
@@ -209,6 +211,7 @@ simwait_tick_one_locked() {
 	[ "$(uci -q get "5gmodem.$section.network")" = "$interface" ] || return
 	case "$error" in SIM_MISSING|SIM_NOT_PRESENT|NO_SIM) hint=absent ;; esac
 	if ! simwait_check_locked "$interface" "$section" "$path" "$port" "$owner" "$hint"; then
+		standby_active && return 0
 		if [ ! -f "$SIMWAIT_DIR/$interface.blocked" ]; then
 			ubus call network.interface notify_proto "{\"interface\":\"$interface\",\"action\":5,\"available\":false}" >/dev/null 2>&1 || return
 			ubus call network.interface notify_proto "{\"interface\":\"$interface\",\"action\":3,\"error\":[\"SIM_MISSING\"]}" >/dev/null 2>&1 || return
@@ -216,13 +219,16 @@ simwait_tick_one_locked() {
 		fi
 		return
 	fi
+	standby_active && return 0
 	[ -f "$SIMWAIT_DIR/$interface" ] || return
 	uptime_s > "$SIMWAIT_DIR/$interface.resume.tmp.$$"
 	mv "$SIMWAIT_DIR/$interface.resume.tmp.$$" "$SIMWAIT_DIR/$interface.resume"
 	if [ -f "$SIMWAIT_DIR/$interface.blocked" ]; then
+		standby_active && return 0
 		ubus call network.interface notify_proto "{\"interface\":\"$interface\",\"action\":5,\"available\":true}" >/dev/null 2>&1 || return
 	fi
 	if [ "$up" != true ] && [ "$pending" != true ] && { [ "$autostart" != true ] || [ "$available" != false ]; }; then
+		standby_active && return 0
 		ubus call network.interface up "{\"interface\":\"$interface\"}" >/dev/null 2>&1 || return
 	fi
 	simwait_clear "$interface"

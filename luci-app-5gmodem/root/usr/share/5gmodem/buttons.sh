@@ -115,19 +115,35 @@ _is_system() { [ "$1" = "reset" ]; }
 
 _json_esc() { sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
+# Extensions: buttons.d/*.sh redefine these hooks. Contract: docs/subsystems/extensions.md
+_STATES="pressed released"	# button states with an action
+_ext_buttons() { cat; }		# filter of the detected buttons: name<TAB>label<TAB>type
+_ext_cond() { return 3; }	# $1 command -> 0 on, 1 off, 2 unknown, 3 not mine
+_ext_detect() { :; }		# extra members of the detect JSON, each followed by a comma
+_ext_run() { :; }		# $1 button, $2 state; non-zero: skip the action
+_ext_cmd() { return 1; }	# extra verbs, "$@"; non-zero: not mine
+for _x in /usr/share/5gmodem/buttons.d/*.sh; do [ -f "$_x" ] && . "$_x"; done
+_is_state() { case " $_STATES " in *" $1 "*) return 0 ;; esac; return 1; }
+
+# $1 command -> 0 on (service running), 1 off, 2 unknown
+_cond() {
+	_ext_cond "$1"; _rc=$?
+	[ "$_rc" = 3 ] || return "$_rc"
+	_svc=$(printf '%s' "$1" | sed -n 's/.*svc[[:space:]]\{1,\}[a-z]\{1,\}[[:space:]]\{1,\}\([A-Za-z0-9_.-]\{1,\}\).*/\1/p')
+	[ -n "$_svc" ] || _svc=$(printf '%s' "$1" | sed -n 's#.*/etc/init.d/\([A-Za-z0-9_.-]\{1,\}\).*#\1#p')
+	[ -n "$_svc" ] && [ -x "/etc/init.d/$_svc" ] || return 2
+	_svc_running "$_svc" || return 1
+}
+
 _sync_leds_all() {
 	for _s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\([^.=]*\)=button\$/\1/p"); do
-		for _st in pressed released; do
+		for _st in $_STATES; do
 			[ "$(uci -q get "$CFG.$_s.ct_$_st")" = "conditional" ] || continue
-			_cmd=$(uci -q get "$CFG.$_s.$_st")
-			_svc=$(printf '%s' "$_cmd" | sed -n 's/.*svc[[:space:]]\{1,\}[a-z]\{1,\}[[:space:]]\{1,\}\([A-Za-z0-9_.-]\{1,\}\).*/\1/p')
-			[ -n "$_svc" ] || _svc=$(printf '%s' "$_cmd" | sed -n 's#.*/etc/init.d/\([A-Za-z0-9_.-]\{1,\}\).*#\1#p')
-			[ -n "$_svc" ] && [ -x "/etc/init.d/$_svc" ] || continue
-			if _svc_running "$_svc"; then
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")"
-			else
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")"
-			fi
+			_cond "$(uci -q get "$CFG.$_s.$_st")"
+			case $? in
+				0) _apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")" ;;
+				1) _apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")" ;;
+			esac
 		done
 	done
 }
@@ -135,10 +151,12 @@ _sync_leds_all() {
 # same field names as "set" plus the uci options "setleds" writes
 _save_field() {
 	case "$1" in
-		pressed|released|debounce|type_override|btntype|ct_pressed|ct_released|svc_pressed|svc_released) return 0 ;;
-		leds_pressed|leds_released|leds_on_pressed|leds_off_pressed|leds_on_released|leds_off_released) return 0 ;;
+		debounce|type_override|btntype) return 0 ;;
+		ct_*|svc_*) _is_state "${1#*_}" ;;
+		leds_on_*|leds_off_*) _is_state "${1#leds_*_}" ;;
+		leds_*) _is_state "${1#leds_}" ;;
+		*) _is_state "$1" ;;
 	esac
-	return 1
 }
 
 # detach LEDs named in a "name=0|1 ..." spec from their system trigger, then resync conditional ones;
@@ -162,9 +180,11 @@ _leds_take() {
 case "$1" in
 detect)
 	_jf() { printf '%s' "$(uci -q get "$CFG.$1.$2" 2>/dev/null)" | _json_esc; }
-	printf '{"buttons":['
+	printf '{'
+	_ext_detect
+	printf '"buttons":['
 	_f=1
-	_dts_buttons | sort -u | while IFS='	' read -r _name _label _type; do
+	_dts_buttons | _ext_buttons | sort -u | while IFS='	' read -r _name _label _type; do
 		[ -n "$_name" ] || continue
 		[ -n "$_type" ] || _type=button
 		_def=0; _is_system "$_name" && _def=1
@@ -174,7 +194,7 @@ detect)
 		printf '{"name":"%s","label":"%s","type":"%s","default":%d,"btntype":"%s","debounce":"%s"' \
 			"$_name" "$(printf '%s' "$_label" | _json_esc)" "$_type" "$_def" \
 			"$(_jf "$_s" btntype)" "$(_jf "$_s" debounce)"
-		for _st in pressed released; do
+		for _st in $_STATES; do
 			printf ',"ct_%s":"%s","cmd_%s":"%s","svc_%s":"%s"' \
 				"$_st" "$(_jf "$_s" "ct_$_st")" \
 				"$_st" "$(_jf "$_s" "$_st")" \
@@ -204,7 +224,8 @@ services)
 	;;
 set)
 	[ -n "$2" ] || { echo '{"error":"no button"}'; exit 0; }
-	case "$3" in pressed|released|debounce|type_override|btntype|ct_pressed|ct_released|svc_pressed|svc_released) ;; *) echo '{"error":"bad field"}'; exit 0 ;; esac
+	case "$3" in debounce|type_override|btntype) ;; ct_*|svc_*) _is_state "${3#*_}" ;; *) _is_state "$3" ;; esac \
+		|| { echo '{"error":"bad field"}'; exit 0; }
 	_s=$(_sid "$2")
 	uci -q get "$CFG.$_s" >/dev/null 2>&1 || uci -q set "$CFG.$_s=button"
 	uci -q set "$CFG.$_s.name=$2"
@@ -241,7 +262,8 @@ leds)
 	;;
 setleds)
 	[ -n "$2" ] || { echo '{"error":"no button"}'; exit 0; }
-	case "$3" in pressed|released|on_pressed|off_pressed|on_released|off_released) ;; *) echo '{"error":"bad action"}'; exit 0 ;; esac
+	case "$3" in on_*|off_*) _is_state "${3#*_}" ;; *) _is_state "$3" ;; esac \
+		|| { echo '{"error":"bad action"}'; exit 0; }
 	_s=$(_sid "$2")
 	uci -q get "$CFG.$_s" >/dev/null 2>&1 || uci -q set "$CFG.$_s=button"
 	uci -q set "$CFG.$_s.name=$2"
@@ -286,7 +308,7 @@ applyleds)
 	;;
 run)
 	[ -n "$2" ] || exit 0
-	case "$3" in pressed|released) ;; *) exit 0 ;; esac
+	_is_state "$3" && _ext_run "$2" "$3" || exit 0
 	_s=$(_sid "$2")
 	_st="$3"
 	_ct=$(uci -q get "$CFG.$_s.ct_$_st")
@@ -304,16 +326,12 @@ run)
 	[ -n "$_cmd" ] && ! cmd_allowed "$_cmd" && _cmd=''
 
 	if [ "$_ct" = "conditional" ]; then
-		_svc=$(printf '%s' "$_cmd" | sed -n 's/.*svc[[:space:]]\{1,\}[a-z]\{1,\}[[:space:]]\{1,\}\([A-Za-z0-9_.-]\{1,\}\).*/\1/p')
-		[ -n "$_svc" ] || _svc=$(printf '%s' "$_cmd" | sed -n 's#.*/etc/init.d/\([A-Za-z0-9_.-]\{1,\}\).*#\1#p')
 		[ "$_dbc" -gt 0 ] && echo "$_now" > "$_m" 2>/dev/null
-		if [ -n "$_svc" ] && [ -x "/etc/init.d/$_svc" ]; then
-			if _svc_running "$_svc"; then
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")"
-			else
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")"
-			fi
-		fi
+		_cond "$_cmd"
+		case $? in
+			0) _apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")" ;;
+			1) _apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")" ;;
+		esac
 		[ -n "$_cmd" ] && BUTTON="$2" ACTION="$_st" SEEN="$4" sh -c "$_cmd"
 		exit 0
 	fi
@@ -341,6 +359,6 @@ svc)
 	esac
 	;;
 *)
-	echo '{"error":"usage: detect|set|run"}'
+	_ext_cmd "$@" || echo '{"error":"usage: detect|set|run"}'
 	;;
 esac

@@ -1880,6 +1880,10 @@ extra_uplink_nets() {
 	done
 }
 
+# Standby of the device: an external power manager keeps this flag while it holds the uplinks down on purpose.
+# The watchdog and the network jobs of sessionwatch pause; SMS keeps working. Contract: docs/subsystems/health-and-recovery.md#standby
+standby_active() { [ -e /tmp/5gmodem/standby ]; }
+
 cmd_allowed() {
 	[ -x /usr/libexec/5gmodem/cmd-policy ] || return 0
 	/usr/libexec/5gmodem/cmd-policy "$1" >/dev/null 2>&1 && return 0

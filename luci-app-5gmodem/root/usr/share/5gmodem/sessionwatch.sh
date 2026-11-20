@@ -11,6 +11,27 @@ export SW_BG=1
 
 _log() { logger -t 5gmodem "sessionwatch: $*"; }
 
+_sms_notify() (
+	exec 1000>&- 7>&- 8>&- 9>&-
+	exec 9>/tmp/5gmodem/sms-notify.lock || exit 0
+	flock -n 9 || exit 0
+	_sn_installed=0
+	for _sn_hook in "$RES"/sms-notify.d/*; do
+		[ -f "$_sn_hook" ] && [ -x "$_sn_hook" ] || continue
+		_sn_installed=1
+		"$_sn_hook" 9>&-
+	done
+
+	[ "$_sn_installed" = 0 ] || exit 0
+	_sn_mcu=/usr/bin/mcu-switch
+	[ -f "$_sn_mcu" ] && [ -x "$_sn_mcu" ] || exit 0
+	# Keep the final newline so extra newlines in the old option are rejected too.
+	[ "$(uci -q get 5gmodem.sms.newsms_hook && printf .)" = '/usr/bin/mcu-switch sms new
+.' ] || exit 0
+	"$_sn_mcu" sms new 9>&-
+	exit 0
+)
+
 _sw_run() {
 	_swr_t="$1"; shift
 	"$@" 2>/dev/null &
@@ -35,6 +56,7 @@ _kill_stuck_uqmi() {
 		_ku_st=$(cut -d' ' -f22 "$_ku_p/stat" 2>/dev/null)
 		case "$_ku_st" in ''|*[!0-9]*) continue ;; esac
 		[ $((_ku_up - _ku_st / 100)) -ge 15 ] || continue
+		standby_active && return 0
 		_ku_pid="${_ku_p#/proc/}"
 		_log "killing stuck uqmi $_ku_pid on $1 - it is holding the channel of a down interface"
 		kill -9 "$_ku_pid" 2>/dev/null
@@ -103,6 +125,7 @@ _sw_sim_ready() {
 }
 
 _revive() {
+	standby_active && return 0
 	_rv_f="/tmp/5gmodem/sw_last_$1"
 	_rv_now=$(_now)
 	_rv_prev=$(cat "$_rv_f" 2>/dev/null)
@@ -115,10 +138,23 @@ _revive() {
 	fi
 	printf '%s' "$_rv_now" > "$_rv_f" 2>/dev/null
 	_log "$1: $2 - restarting"
-	iface_up "$1"
+	standby_active || iface_up "$1"
+}
+
+_stray_redial() {
+	sleep 2
+	standby_active || [ -f "/tmp/5gmodem/simwait/$1" ] || ifup "$1"
+}
+
+_restart_interface() {
+	standby_active && return 0
+	ifdown "$1"
+	sleep 2
+	standby_active || iface_up "$1"
 }
 
 check_one() {
+	standby_active && return 0
 	_path="$1"; _if="$2"; _proto="$3"; _port="$4"
 
 	[ ! -f "/tmp/5gmodem/simwait/$_if" ] || return 0
@@ -148,9 +184,11 @@ check_one() {
 				return 0
 			fi
 			rm -f "/tmp/5gmodem/sw_noproto_$_if"
+			standby_active && return 0
 			proto_in uqmi "$_proto" && _kill_stuck_uqmi "$(uci -q get "network.$_if.device")"
 			case "$_sw_st" in *'"pending": true'*) return 0 ;; esac
 			if [ "$_proto" = modemmanager ] && case "$_sw_st" in *DISCONNECT_FAILED*) true ;; *) false ;; esac; then
+				standby_active && return 0
 				mm_ghost_bearer "$_if" "$("$RES/modemswitch.sh" mmindex "$_path" 2>/dev/null)"
 				[ $? = 1 ] || return 0
 			fi
@@ -167,6 +205,7 @@ check_one() {
 							_swc=$(at_query "$_port" "AT+COPS?" 6 4 2>/dev/null 									| tr -d '\r' \
 								| sed -n 's/^+COPS: *\([0-9]*\).*/\1/p' | head -1)
 							if [ "$_swc" = "2" ]; then
+						standby_active && return 0
 								_log "modem on $_if was deregistered by command (+COPS: 2) - re-enabling network search"
 								at_query "$_port" "AT+COPS=0" 20 4 >/dev/null 2>&1
 								printf '%s' "$_swnow" > "$_swcf" 2>/dev/null
@@ -181,6 +220,7 @@ check_one() {
 							_sw_sim_ready "$_if" || return 0
 							if [ "$(_sw_run 8 uqmi -d "$_swd" --get-data-status \
 								| tr -d '"' | tr -d '[:space:]')" = "connected" ]; then
+							standby_active && return 0
 								_log "$_if: session stuck \"connected\" while the interface is down - stopping it before bring-up"
 								_sw_run 10 uqmi -d "$_swd" --stop-network 0xffffffff --autoconnect >/dev/null 2>&1
 								sleep 2
@@ -222,6 +262,7 @@ check_one() {
 						_qfmt=$(qmicli_p "$_wdm" --wda-get-data-format 2>/dev/null \
 							| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
 					_qrf="/tmp/5gmodem/sw_rawiptry_$_if"
+					standby_active && return 0
 					if [ ! -f "$_qrf" ] && [ -f /lib/netifd/proto/qmiraw.sh ] \
 					   && [ "$(uci -q get "network.$_if.proto")" = qmi ]; then
 						: > "$_qrf"
@@ -229,15 +270,19 @@ check_one() {
 						uci set "network.$_if.proto=qmiraw"
 						uci set "network.$_if.dhcp=0"
 						uci commit network
+						if standby_active; then
+							rm -f /tmp/5gmodem/protoguard
+							return 0
+						fi
 						REGISTER_PROTO_FORCE=1 "$RES/register_proto.sh" >/dev/null 2>&1
-						( ifdown "$_if"; sleep 2; iface_up "$_if" ) >/dev/null 2>&1 </dev/null &
+						_restart_interface "$_if" >/dev/null 2>&1 </dev/null &
 					else
 						case "$_qraw:$_qfmt" in
 							Y:802-3|N:raw-ip)
 								_log "$_if: frame format mismatch (driver raw_ip=$_qraw, modem $_qfmt) - inbound traffic is being dropped" ;;
 						esac
 						_log "$_if: QMI says connected but no address for $_qn cycles - reinitializing the modem"
-						"$RES/qmi-recover.sh" reset "$_path" "channel did not come up ($_if)" >/dev/null 2>&1
+						standby_active || "$RES/qmi-recover.sh" reset "$_path" "channel did not come up ($_if)" >/dev/null 2>&1
 					fi
 				fi
 			fi
@@ -395,6 +440,7 @@ warm_active() {
 }
 
 _page_refresh() {
+	standby_active && return 0
 	_pr_t=""
 	read -r _pr_t 2>/dev/null < /tmp/5gmodem/page_active
 	case "$_pr_t" in ''|*[!0-9]*) return 0 ;; esac
@@ -431,21 +477,26 @@ _sweep_tmp() {
 	\) -mmin +30 -exec rm -f {} + 2>/dev/null
 }
 
+_start_protoguard() {
+	local marker=/tmp/5gmodem/protoguard handler proto
+	if [ -f "$marker" ] || standby_active; then return 0; fi
+	: > "$marker" || return 0
+	( sleep 45
+	  if standby_active; then rm -f "$marker"; exit 0; fi
+	  handler=$(ubus call network get_proto_handlers 2>/dev/null)
+	  for proto in fibocom qmiraw; do
+		uci -q show network 2>/dev/null | grep -q "\.proto='$proto'" || continue
+		echo "$handler" | grep -q "\"$proto\"" && continue
+		if standby_active; then rm -f "$marker"; exit 0; fi
+		logger -t 5gmodem "protoguard: an interface uses $proto but netifd does not know the proto - forcing registration"
+		REGISTER_PROTO_FORCE=1 "$RES/register_proto.sh" >/dev/null 2>&1
+		break
+	  done
+	) >/dev/null 2>&1 </dev/null &
+}
+
 case "$1" in
 	*)
-		if [ ! -f /tmp/5gmodem/protoguard ]; then
-			: > /tmp/5gmodem/protoguard
-			( sleep 45
-			  _pg_h=$(ubus call network get_proto_handlers 2>/dev/null)
-			  for _pg_p in fibocom qmiraw; do
-				uci -q show network 2>/dev/null | grep -q "\.proto='$_pg_p'" || continue
-				echo "$_pg_h" | grep -q "\"$_pg_p\"" && continue
-				logger -t 5gmodem "protoguard: an interface uses $_pg_p but netifd does not know the proto - forcing registration"
-				REGISTER_PROTO_FORCE=1 "$RES/register_proto.sh" >/dev/null 2>&1
-				break
-			  done
-			) >/dev/null 2>&1 </dev/null &
-		fi
 		_stray_ok() {
 			_so_f=/tmp/5gmodem/straykill
 			_so_now=$(cut -d. -f1 /proc/uptime)
@@ -458,7 +509,8 @@ case "$1" in
 
 		_sweep_n=0
 		while :; do
-			if ! pidof ModemManager >/dev/null 2>&1 \
+			_start_protoguard
+			if ! standby_active && ! pidof ModemManager >/dev/null 2>&1 \
 			   && ! uci -q show network 2>/dev/null | grep -qE "\.proto='?($(proto_re proxy))'?\$"; then
 				_ps_if=$(uci -q get 5gmodem.@5gmodem[0].network)
 				if [ ! -f "/tmp/5gmodem/simwait/$_ps_if" ] && proto_in direct "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)"; then
@@ -467,13 +519,14 @@ case "$1" in
 							if pgrep -x lpac >/dev/null 2>&1 \
 							   || pgrep -x qmicli >/dev/null 2>&1 \
 							   || pgrep -x mbimcli >/dev/null 2>&1 \
+								   || standby_active \
 							   || ! _stray_ok; then
 								:
 							else
 								_log "a stray proxy sits on a direct channel ($_ps_if) - killing mbim/qmi-proxy and redialing"
 								killall mbim-proxy 2>/dev/null
 								killall qmi-proxy 2>/dev/null
-								( sleep 2; [ -f "/tmp/5gmodem/simwait/$_ps_if" ] || ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+									_stray_redial "$_ps_if" >/dev/null 2>&1 </dev/null &
 							fi
 						elif ! pgrep -x lpac >/dev/null 2>&1 \
 						   && ! pgrep -x qmicli >/dev/null 2>&1 \
@@ -482,12 +535,13 @@ case "$1" in
 						   && ! pgrep -x uqmi >/dev/null 2>&1 \
 						   && ! pgrep -f "[m]bim\.sh|[q]mi\.sh" >/dev/null 2>&1 \
 						   && ! ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"pending": true' \
+								   && ! standby_active \
 						   && _stray_ok; then
 							_log "a stray proxy is blocking the dial ($_ps_if is down) - killing mbim/qmi-proxy"
 							killall mbim-proxy 2>/dev/null
 							killall qmi-proxy 2>/dev/null
 							if [ ! -f "/tmp/5gmodem/simwait/$_ps_if" ] && _sw_sim_ready "$_ps_if"; then
-								( sleep 2; [ -f "/tmp/5gmodem/simwait/$_ps_if" ] || ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+									_stray_redial "$_ps_if" >/dev/null 2>&1 </dev/null &
 							fi
 						fi
 					fi
@@ -504,7 +558,7 @@ case "$1" in
 			_SW_NETONLY=""
 			netonly_active && _SW_NETONLY=1
 			if [ -n "$_SW_NETONLY" ]; then _REG_FLAT=""; else _reg_refresh; fi
-			if [ -n "$_REG_FLAT" ]; then
+			if [ -n "$_REG_FLAT" ] && ! standby_active; then
 				_sh_noreg=""
 				for _sh_p in $(printf '%s\n' "$_REG_FLAT" | awk 'NF{print $1}'); do
 					uci -q get "5gmodem.m_$(printf '%s' "$_sh_p" | sed 's/[^A-Za-z0-9]/_/g')" >/dev/null 2>&1 \
@@ -515,19 +569,19 @@ case "$1" in
 					_sh_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
 					_sh_last=$(cat "$_sh_f" 2>/dev/null)
 					case "$_sh_last" in ''|*[!0-9]*) _sh_last=0 ;; esac
-					if [ "$((_sh_now - _sh_last))" -ge 120 ]; then
+					if [ "$((_sh_now - _sh_last))" -ge 120 ] && ! standby_active; then
 						printf '%s' "$_sh_now" > "$_sh_f" 2>/dev/null
 						"$RES/modemswitch.sh" autosetup >/dev/null 2>&1
 					fi
-				elif [ -z "$(uci -q get "5gmodem.@5gmodem[0].active_modem")" ]; then
+				elif [ -z "$(uci -q get "5gmodem.@5gmodem[0].active_modem")" ] && ! standby_active; then
 					"$RES/modemswitch.sh" resolve >/dev/null 2>&1
 				fi
 			fi
-			[ -n "$_SW_NETONLY" ] || "$RES/simwait.sh" tick
-			[ -n "$_SW_NETONLY" ] || check_once
+			[ -n "$_SW_NETONLY" ] || standby_active || "$RES/simwait.sh" tick
+			[ -n "$_SW_NETONLY" ] || standby_active || check_once
 			_page_refresh
-			[ -n "$_SW_NETONLY" ] || warm_snapshots
-			[ -n "$_SW_NETONLY" ] || warm_active
+			[ -n "$_SW_NETONLY" ] || standby_active || warm_snapshots
+			[ -n "$_SW_NETONLY" ] || standby_active || warm_active
 			_page_refresh
 			"$RES/health.sh" tick >/dev/null 2>&1
 			_page_refresh
@@ -548,7 +602,7 @@ case "$1" in
 			else
 				rm -f /tmp/5gmodem/ucidelta
 			fi
-			"$RES/tgnotify.sh" tick >/dev/null 2>&1
+			standby_active || "$RES/tgnotify.sh" tick >/dev/null 2>&1
 			_sw_bgo=""
 			[ -n "$_REG_FLAT" ] && bg_at_off && _sw_bgo=1
 			_smw_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
@@ -559,8 +613,12 @@ case "$1" in
 			if [ -n "$_REG_FLAT" ] && [ "$_smw_iv" -gt 0 ] && [ -z "$_sw_bgo" ] \
 			   && [ "$((_smw_now - _smw_prev))" -ge "$_smw_iv" ]; then
 				printf '%s' "$_smw_now" > /tmp/5gmodem/sms_new.stamp 2>/dev/null
-				"$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
-					&& mv /tmp/5gmodem/sms_new.json.tmp /tmp/5gmodem/sms_new.json 2>/dev/null
+				if "$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
+					&& mv /tmp/5gmodem/sms_new.json.tmp /tmp/5gmodem/sms_new.json 2>/dev/null; then
+					if [ -d "$RES/sms-notify.d" ] || [ -x /usr/bin/mcu-switch ]; then
+						_sms_notify >/dev/null 2>&1 </dev/null &
+					fi
+				fi
 			fi
 			if [ -n "$_REG_FLAT" ]; then
 			[ -n "$_sw_bgo" ] || "$RES/smscmd.sh" run >/dev/null 2>&1
@@ -589,9 +647,9 @@ case "$1" in
 				case "$_ipw" in *:*) continue ;; esac
 				is_iphone "${_ipw##*/}" && { usbmuxd_ensure >/dev/null 2>&1; break; }
 			done
-			"$RES/telemetry.sh" tick >/dev/null 2>&1
+			standby_active || "$RES/telemetry.sh" tick >/dev/null 2>&1
 			"$RES/gpsfeed.sh" tick >/dev/null 2>&1
-			"$RES/stapark.sh" tick >/dev/null 2>&1
+			standby_active || "$RES/stapark.sh" tick >/dev/null 2>&1
 			"$RES/mobile.sh" tick >/dev/null 2>&1
 		done
 		;;

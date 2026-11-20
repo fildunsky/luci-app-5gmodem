@@ -11,6 +11,7 @@ Why the code looks the way it does: hardware quirks, OpenWrt and LuCI pitfalls, 
 - [Device detection, port binding and modem identity](subsystems/device-detection.md)
 - [Diagnostics: developer report, Modem page, AT console, 5gtop, telemetry, statistics](subsystems/diagnostics.md)
 - [eSIM (eUICC) management](subsystems/esim.md)
+- [Extensions: hooks for device-specific packages](subsystems/extensions.md)
 - [GPS: modem GNSS receiver and map](subsystems/gps.md)
 - [GPS services: clock from GNSS, Traccar, NMEA over TCP](subsystems/gps-feed.md)
 - [Health checks and recovery](subsystems/health-and-recovery.md)

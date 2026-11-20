@@ -161,6 +161,14 @@ The Wi-Fi uplink is detected from the wireless config (`wifi-iface` with `networ
 - **Step 2: rebuild only that radio** through `network.wireless` on ubus. The AP on it goes dark for a few seconds. This fixes the NO_DEVICE detach, which `REASSOCIATE` does not fix. `wifi up <radio>` cannot be used: `/sbin/wifi` calls `ubus call network reload` internally (`wifi_updown`) and so restarts every interface.
 - **Step 3: global `network reload`**, only when the radio rebuild failed **and** no other uplink is alive. An earlier version did this as step 2 and took down a working modem whenever Wi-Fi failed ("modem stopping network" in the log).
 
+### Standby
+
+A device power manager creates `/tmp/5gmodem/standby` before taking its selected uplinks down and removes it after restoring them. The GL-E750 manager pauses Wi-Fi and the wired WAN while leaving the modem available for SMS. The flag lives in tmpfs and expires on reboot.
+
+- `health.sh` clears penalties and old probe state on standby entry. Queued watchdog passes check the flag after taking their lock, and delayed recovery steps check again before changing a link.
+- `sessionwatch.sh` pauses automatic registration, redial, SIM wake, snapshot polling, Telegram, telemetry and station parking. SMS mirroring, commands, archiving and sending keep running.
+- Independent of the flag, `heal` honours `auto=0` / `disabled=1` of an interface that netifd no longer lists. A disabled interface disappears from the dump at the next `network reload` (`ifup` and `wifi up` both reload), and the old check, nested under `autostart=false`, was skipped for it: the ladder went on to reboot the modem.
+
 ## stapark.sh: Wi-Fi client parking (one radio)
 
 On a radio with one channel (`iw phy`: `#channels <= 1`, for example wcn36xx), the access point has to follow the channel of the station. When the station loses its network, wpa_supplicant scans every channel and the access point stays down until the network returns.

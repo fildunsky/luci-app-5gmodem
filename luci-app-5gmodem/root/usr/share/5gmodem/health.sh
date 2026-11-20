@@ -527,6 +527,21 @@ mm_registered_now() {
 }
 
 
+_heal_cmd() {
+	standby_active || "$@"
+}
+
+_heal_start() {
+	( exec 9>&-; _heal_cmd "$@" ) >/dev/null 2>&1 </dev/null &
+}
+
+_heal_reconnect() {
+	standby_active && return 0
+	ifdown "$1"
+	sleep 3
+	_heal_cmd iface_up "$1"
+}
+
 heal() {
 	[ "$H_HEAL" = "1" ] || [ "$H_HEALWIFI" = "1" ] || return 0
 	_h_cnt=0; _h_anyup=""
@@ -618,37 +633,41 @@ heal() {
 			if [ "$_h_step" -lt 1 ] && [ "$_h_st" = down ]; then
 				_h_next=1
 				_ev "healing $_h_if: reconnecting Wi-Fi ($_h_n/$HEAL_MAX)"
-				( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				_heal_start _heal_reconnect "$_h_if"
 			elif [ "$_h_step" -lt 2 ]; then
 				_h_next=2
 				_h_sta=$(printf '%s' "$_HDUMP" | jsonfilter \
 					-e "@.interface[@.interface=\"$_h_if\"].device" 2>/dev/null | head -1)
 				if [ -n "$_h_sta" ]; then
 					_ev "healing $_h_if: reconnecting station $_h_sta ($_h_n/$HEAL_MAX)"
-					( ubus call "wpa_supplicant.$_h_sta" control '{"command":"REASSOCIATE"}' \
-					    || iw dev "$_h_sta" disconnect
-					  sleep 6; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+					( exec 9>&-
+					  _heal_cmd ubus call "wpa_supplicant.$_h_sta" control '{"command":"REASSOCIATE"}' \
+					    || _heal_cmd iw dev "$_h_sta" disconnect
+					  sleep 6; _heal_cmd iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null &
 				else
 					_ev "healing $_h_if: station unknown, reconnecting the interface ($_h_n/$HEAL_MAX)"
-					( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+					_heal_start _heal_reconnect "$_h_if"
 				fi
 			elif [ "$_h_step" -lt 3 ] || [ -n "$_h_anyup" ] || [ -n "$_h_multi" ]; then
 				_h_next=3
 				_h_radio=$(wifi_radio_for "$_h_if")
 				if [ -n "$_h_radio" ]; then
 					_ev "healing $_h_if: rebuilding radio $_h_radio ($_h_n/$HEAL_MAX)"
-					( ubus call network.wireless down "{\"device\":\"$_h_radio\"}"
+					( exec 9>&-
+					  _heal_cmd ubus call network.wireless down "{\"device\":\"$_h_radio\"}"
 					  sleep 2
-					  ubus call network.wireless up "{\"device\":\"$_h_radio\"}"
-					  sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+					  _heal_cmd ubus call network.wireless up "{\"device\":\"$_h_radio\"}"
+					  sleep 3; _heal_cmd iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null &
 				else
 					_ev "healing $_h_if: radio unknown, reconnecting the interface ($_h_n/$HEAL_MAX)"
-					( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+					_heal_start _heal_reconnect "$_h_if"
 				fi
 			else
 				_h_next=4
 				_ev "healing $_h_if: rebuilding the whole network, network reload ($_h_n/$HEAL_MAX)"
-				( ubus call network reload; sleep 2; wifi up >/dev/null 2>&1; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				( exec 9>&-
+				  _heal_cmd ubus call network reload; sleep 2; _heal_cmd wifi up; sleep 3
+				  _heal_cmd ifup "$_h_if" ) >/dev/null 2>&1 </dev/null &
 			fi
 			printf '%s %s %s\n' "$_h_next" "$_h_now" "$_h_n" > "$HDIR/$_h_if.heal"
 			[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "healing $_h_if: attempts exhausted - manual intervention needed"
@@ -764,7 +783,7 @@ heal() {
 					printf 'try %s\n' "$(uptime_s)" > "$HDIR/$_h_if.nodata"
 					rm -f "$HDIR/$_h_if.heal"
 					_ev "$_h_if: has an address ($_h_lip) but no traffic - one reconnect before calling it a carrier restriction"
-					( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+					_heal_start _heal_reconnect "$_h_if"
 					continue
 				fi
 				_h_nd=$(cat "$HDIR/$_h_if.nodata" 2>/dev/null)
@@ -805,13 +824,16 @@ heal() {
 							_ev "healing $_h_if: modem disabled in ModemManager ($_h_mms) - enabling"
 						fi
 						if ! pgrep -f "mmcli -m $_h_mmi --enable" >/dev/null 2>&1; then
-							( mmcli -m "$_h_mmi" --enable >/dev/null 2>&1 & _h_mep=$!
+						( exec 9>&-
+						  standby_active && exit 0
+						  mmcli -m "$_h_mmi" --enable >/dev/null 2>&1 & _h_mep=$!
 							  ( sleep 30 & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill "$_h_mep" 2>/dev/null ) >/dev/null 2>&1 & _h_mew=$!
 							  wait "$_h_mep" 2>/dev/null
-							  kill "$_h_mew" 2>/dev/null ) >/dev/null 2>&1 </dev/null 9>&- &
+						  kill "$_h_mew" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
 						fi
 						continue ;;
 					connected)
+						standby_active && return 0
 						mm_ghost_bearer "$_h_if" "$_h_mmi"
 						case $? in
 							0) _ev "healing $_h_if: ModemManager stuck in 'connected' after a failed disconnect - modem reset"; continue ;;
@@ -864,7 +886,7 @@ heal() {
 		if [ -z "$_h_absent" ] && [ -z "$_h_hilink" ] && [ -z "$_h_mmi" ] && heal_radio_off "$_h_if" "$_h_at"; then
 			_ev "healing $_h_if: radio is off - restarting it, AT+CFUN=4 then 1 ($_h_n/$HEAL_MAX)"
 			uptime_s > "$HDIR/$_h_if.radio"
-			( "$RES/reboot_modem.sh" soft "$_h_at" ) >/dev/null 2>&1 </dev/null 9>&- &
+			_heal_start "$RES/reboot_modem.sh" soft "$_h_at"
 			printf '%s %s %s\n' "$_h_step" "$_h_now" "$_h_n" > "$HDIR/$_h_if.heal"
 			[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "healing $_h_if: attempts exhausted - manual intervention needed"
 			continue
@@ -873,24 +895,26 @@ heal() {
 		case "$_h_next" in
 			1)
 				_ev "healing $_h_if: reconnecting the interface ($_h_n/$HEAL_MAX)"
-				( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				_heal_start _heal_reconnect "$_h_if"
 				;;
 			2)
 				if [ -n "$_h_hilink" ]; then
 					_ev "healing $_h_if: rebooting the module via API ($_h_n/$HEAL_MAX)"
-					( "$RES/hilink.sh" reboot "$_h_path" ) >/dev/null 2>&1 </dev/null 9>&- &
+					_heal_start "$RES/hilink.sh" reboot "$_h_path"
 				else
 					_ev "healing $_h_if: rebooting the module, AT+CFUN=1,1 ($_h_n/$HEAL_MAX)"
-					( "$RES/reboot_modem.sh" hard "$_h_at" ) >/dev/null 2>&1 </dev/null 9>&- &
+					_heal_start "$RES/reboot_modem.sh" hard "$_h_at"
 				fi
 				;;
 			3)
 				if [ -n "$H_PSCRIPT" ] && [ -x "$H_PSCRIPT" ]; then
 					_ev "healing $_h_if: running the power script $H_PSCRIPT ($_h_n/$HEAL_MAX)"
-					( "$H_PSCRIPT" "$_h_if" "$_h_path" "$_h_at" 2>&1 | head -c 400 | logger -t 5gmodem-power ) >/dev/null 2>&1 </dev/null 9>&- &
+					( exec 9>&-
+					  _heal_cmd "$H_PSCRIPT" "$_h_if" "$_h_path" "$_h_at" 2>&1 \
+					  | head -c 400 | logger -t 5gmodem-power ) >/dev/null 2>&1 </dev/null &
 				else
 					_ev "healing $_h_if: power-cycling the USB port ($_h_n/$HEAL_MAX)"
-					( "$RES/reboot_modem.sh" usbpower "$_h_path" ) >/dev/null 2>&1 </dev/null 9>&- &
+					_heal_start "$RES/reboot_modem.sh" usbpower "$_h_path"
 				fi
 				;;
 		esac
@@ -993,6 +1017,7 @@ lock_guard() {
 	[ "$_lg_since" -gt 0 ] && [ "$_lg_seen" = "$_lg_now" ] || return 0
 	[ $((_lg_now - _lg_since)) -ge "$LOCK_RELEASE_MIN" ] || return 0
 	[ "$_lg_try" -gt 0 ] && [ $((_lg_now - _lg_try)) -lt "$LOCK_RETRY" ] && return 0
+	standby_active && return 0
 	_lg_try="$_lg_now"
 	_lg_o=$(BANDS_ACTIVE_MODEM="$_lg_p" "$RES/bands.sh" celllockrelease 2>/dev/null </dev/null 9>&-)
 	case "$_lg_o" in
@@ -1023,14 +1048,29 @@ _teardown() {
 _off_cleanup() {
 	[ -d "$HDIR" ] || exit 0
 	exec 9>"/tmp/5gmodem/health.lock"
-	flock 9
+	if [ "$1" = standby ]; then
+		# The session watcher must continue running SMS jobs during standby.
+		flock -n 9 && standby_active || exit 0
+	else
+		flock 9 || exit 0
+	fi
+	[ -d "$HDIR" ] || exit 0
 	_teardown
 	uplink_notify health
 	exit 0
 }
 
+_watchdog_round() {
+	standby_active && return 0
+	round
+	standby_active && return 0
+	enforce
+	[ "$1" != heal ] || _heal_cmd heal
+}
+
 case "$1" in
 tick)
+	standby_active && _off_cleanup standby
 	lock_guard
 	[ "$H_EN" = "1" ] || _off_cleanup
 	mkdir -p "$HDIR"
@@ -1039,37 +1079,33 @@ tick)
 	[ $((_t_now - _t_last)) -ge $((H_INT - 2)) ] || exit 0
 	exec 9>"/tmp/5gmodem/health.lock"
 	flock -n 9 || exit 0
-	round
-	enforce
-	heal
+	_watchdog_round heal
 	;;
 once)
+	standby_active && _off_cleanup standby
 	[ "$H_EN" = "1" ] || _off_cleanup
 	mkdir -p "$HDIR"
 	( exec >/dev/null 2>&1 </dev/null
 	  exec 9>"/tmp/5gmodem/health.lock"
-	  flock 9
-	  round
-	  enforce
-	  heal ) &
+	  flock 9 || exit 0
+	  _watchdog_round heal ) &
 	echo '{"result":"ok"}'
 	sleep 1
 	;;
 event)
-	[ "$H_EN" = "1" ] || exit 0
+	[ "$H_EN" = "1" ] && ! standby_active || exit 0
 	case " $(wan_nets) " in *" $2 "*) ;; *) exit 0 ;; esac
 	mkdir -p "$HDIR"
 	_ev_t0=$(uptime_s)
 	exec 9>"/tmp/5gmodem/health.lock"
-	flock 9
+	flock 9 || exit 0
 	# a hotplug burst queues one event per interface; a round that started
 	# after this event already saw it, and every extra round counts one more
 	# probe toward fail_n
 	_ev_t=$(cat "$HDIR/.t" 2>/dev/null)
 	case "$_ev_t" in ''|*[!0-9]*) _ev_t=0 ;; esac
 	[ "$_ev_t" -gt "$_ev_t0" ] && exit 0
-	round
-	enforce
+	_watchdog_round
 	;;
 dnsfix)
 	# works with the watchdog off too: without it nobody else gives an MBIM link its DNS back
