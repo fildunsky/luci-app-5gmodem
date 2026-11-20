@@ -1571,6 +1571,32 @@ sms_apply_cpms() {
 	printf '%s|%s\n' "$_cp_m1" "$_cp_m3"
 }
 
+sms_storage_capacity() {
+	local out pid ticks=0 limit
+	out=$(mktemp /tmp/5gmodem/bounded.XXXXXX) || return 1
+	sleep_tick_init
+	limit=$((8 * _TICKS_PER_SEC))
+	(
+		# The caller may own the AT lock. A stalled serial child must not keep it.
+		exec 1000>&- 5>&- 6>&- 7>&- 8>&- 9>&-
+		exec sms_tool -d "$1" -s "$2" status
+	) > "$out" 2>/dev/null </dev/null &
+	pid=$!
+	while kill -0 "$pid" 2>/dev/null && [ "$ticks" -lt "$limit" ]; do
+		( exec 1000>&- 5>&- 6>&- 7>&- 8>&- 9>&-; sleep "$_SLEEP_TICK" )
+		ticks=$((ticks + 1))
+	done
+	if kill -0 "$pid" 2>/dev/null; then
+		kill -9 "$pid" 2>/dev/null
+		rm -f "$out"
+		logger -t 5gmodem "sms: $2 storage status timed out on $1"
+		return 124
+	fi
+	wait "$pid" 2>/dev/null || :
+	sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' "$out" | head -1
+	rm -f "$out"
+}
+
 set_sms_storage() {
 	_ss_at="$1"
 	[ -n "$_ss_at" ] && [ -e "$_ss_at" ] || return 0
@@ -1582,14 +1608,14 @@ set_sms_storage() {
 	_ss_alt=""
 
 	if [ "$(uci -q get 5gmodem.sms.storage_touched)" != 1 ]; then
-		_ss_me=$(sms_tool -d "$_ss_at" -s ME status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
-		_ss_sm=$(sms_tool -d "$_ss_at" -s SM status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+		_ss_me=$(sms_storage_capacity "$_ss_at" ME) || return $?
+		_ss_sm=$(sms_storage_capacity "$_ss_at" SM) || return $?
 		_ss_try=0
 		while [ -n "$_ss_stg" ] && [ "$_ss_try" -lt 2 ] && { [ -z "$_ss_me" ] || [ -z "$_ss_sm" ]; } && [ -n "$_ss_me$_ss_sm" ]; do
 			_ss_try=$((_ss_try + 1))
 			sleep 3
-			[ -n "$_ss_me" ] || _ss_me=$(sms_tool -d "$_ss_at" -s ME status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
-			[ -n "$_ss_sm" ] || _ss_sm=$(sms_tool -d "$_ss_at" -s SM status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+			[ -n "$_ss_me" ] || _ss_me=$(sms_storage_capacity "$_ss_at" ME) || return $?
+			[ -n "$_ss_sm" ] || _ss_sm=$(sms_storage_capacity "$_ss_at" SM) || return $?
 		done
 		_ss_vp=$(uci -q get "5gmodem.m_$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g').vidpid")
 		[ "$_ss_vp" = "19d2:1485" ] || case "$_ss_stg" in
