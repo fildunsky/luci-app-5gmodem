@@ -2378,7 +2378,11 @@ function applyMetrics(json) {
 							pv.textContent = mutil.formatPhone(json.phone);
 							pv.style.display = '';
 							pv.setAttribute('data-hadata', '1');
-						} else if (pv.getAttribute('data-hadata') !== '1') {
+						} else if (json.backend === 'fg360' || pv.getAttribute('data-hadata') !== '1') {
+							if (json.backend === 'fg360') {
+								pv.textContent = '';
+								pv.removeAttribute('data-hadata');
+							}
 							pv.style.display = 'none';
 						}
 						_hasPhone = _hasPhone || pv.getAttribute('data-hadata') === '1';
@@ -3033,7 +3037,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40013, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40014, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

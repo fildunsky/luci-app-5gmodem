@@ -77,6 +77,44 @@ fg360_at() {
                          ({'ok': False, 'error': 'incorrect_pin'}, 1, ['AT+CPIN="0000"|high']))
         self.assertNotIn('0000', result.stdout + result.stderr)
 
+    def test_phone_is_read_only_and_cached_for_the_matching_sim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = '00000000000000000001'
+            second = '00000000000000000002'
+            library = root / 'lib.sh'
+            library.write_text('''
+uci() { echo ccci; }
+fg360_native() { [ "$1" = ccci ]; }
+uptime_s() { echo "$MOCK_UPTIME"; }
+fg360_at() {
+    printf '%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" >> "$MOCK_LOG"
+    printf '%s\n' "$MOCK_RESPONSE"
+}
+''')
+            script = root / 'fg360-sim.sh'
+            script.write_text(SCRIPT.read_text().replace('/usr/share/5gmodem/lib.sh', str(library))
+                              .replace('/tmp/5gmodem', str(root)))
+            log = root / 'calls'
+
+            def read(sim, response, uptime):
+                env = dict(os.environ, MOCK_UPTIME=str(uptime), MOCK_LOG=str(log), MOCK_RESPONSE=response)
+                result = subprocess.run(['sh', '-x', str(script), 'phone', 'ccci', sim],
+                                        env=env, text=True, capture_output=True, check=True)
+                self.assertNotIn('0000000', result.stderr)
+                return result.stdout.strip()
+
+            response = f'+ICCID: "{first}F"\r\n+CNUM: "1234567","0000000",145\r\nOK'
+            self.assertEqual(read(first, response, 100), '+0000000')
+            self.assertEqual(read(first, 'ERROR', 101), '+0000000')
+            self.assertEqual(log.read_text().splitlines(), ['AT+ICCID;+CNUM|low|2|0'])
+            self.assertEqual(read(second, response, 102), '')
+            self.assertEqual(read(second, 'ERROR', 103), '')
+            self.assertEqual(len(log.read_text().splitlines()), 2)
+            self.assertEqual(read(second, f'+ICCID: {second}\nOK', 123), '')
+            self.assertEqual(read(second, f'+ICCID: {second}\n+CNUM: ,"0000001",129\nOK', 124), '')
+            self.assertEqual(len(log.read_text().splitlines()), 3)
+
     def test_only_status_is_granted_for_read_access(self):
         rule = json.loads(ACL.read_text())['luci-app-5gmodem']
         read = [line for line in rule['read']['file'] if 'fg360-sim' in line]

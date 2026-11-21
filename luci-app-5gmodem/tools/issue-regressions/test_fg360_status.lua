@@ -37,6 +37,18 @@ assert(result.neighbors[1].earfcn == "3050" and result.neighbors[1].rsrp == "-10
 assert(result.antports == "1:-95: 2:-101:" and result.rxdiv == "2rx")
 assert(result.soc_temp == "54.2" and result.mtemp == nil)
 
+local test_iccid = "00000000000000000001"
+status.iccid = test_iccid
+result = normalize(status, { phone_for_sim = function(iccid)
+    assert(iccid == test_iccid)
+    return "+0000000"
+end })
+assert(result.phone == "+0000000")
+status.sim_status = "SIM PIN"
+result = normalize(status, { phone_for_sim = function() error("locked SIM lookup") end })
+assert(result.phone == nil)
+status.iccid, status.sim_status = nil, "READY"
+
 local database = os.tmpname()
 local names = assert(io.open(database, "w"))
 names:write("00101;Test;Home network\n00102;Test;Visited network\n")

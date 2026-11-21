@@ -22,7 +22,7 @@ The 2cb7:0104 and 2cb7:0a05 profiles pick the network-card protocol from the dri
 
 ## AW1000 Ultra with Fibocom FG360
 
-Support uses the vendor firmware's integrated CCCI modem, existing MIPC interface and FG360 WebUI status API. The firmware provides the MIPC netifd handler, `mipc_wan_cli` and the FG360 Lua status library. The app reads available LTE and 5G metrics, carriers, neighbouring cells and SMS through these services. The Receive chains table shows a level in dBm for each RX chain and the position of the physical antenna switch. RSRQ is available for the serving cell. The modem temperature opens a panel with up to 12 readings.
+Support uses the vendor firmware's integrated CCCI modem, existing MIPC interface and FG360 WebUI status API. The firmware provides the MIPC netifd handler, `mipc_wan_cli` and the FG360 Lua status library. The app reads available LTE and 5G metrics, carriers, neighbouring cells and SMS through these services. The Receive chains table shows a level in dBm for each RX chain and the position of the physical antenna switch. RSRQ is available for the serving cell. The Modem card shows the number returned by `AT+CNUM` for a ready SIM. The app verifies the ICCID in the same read and caches the result for that SIM. The modem temperature opens a panel with up to 12 readings.
 
 ## Protocol `fibocom`
 

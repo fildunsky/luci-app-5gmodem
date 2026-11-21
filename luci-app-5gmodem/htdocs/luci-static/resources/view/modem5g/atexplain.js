@@ -790,7 +790,7 @@ function explain(cmd, stdout) {
 }
 
 return baseclass.extend({
-	API: 40013,
+	API: 40014,
 	explain: explain,
 	splitCmd: splitCmd,
 	fields: fields

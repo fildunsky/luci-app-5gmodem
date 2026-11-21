@@ -15,11 +15,63 @@ valid_pin() {
 	[ "${#1}" -ge 4 ] && [ "${#1}" -le 8 ]
 }
 
+read_phone() (
+	iccid="$1"
+	case "$iccid" in ''|*[!0123456789]*) exit 1 ;; esac
+	[ "${#iccid}" -ge 18 ] && [ "${#iccid}" -le 22 ] || exit 1
+	cache=/tmp/5gmodem/fg360-phone
+	mkdir -p "${cache%/*}" || exit 1
+	exec 6>"$cache.lock"
+	flock -n 6 || exit 1
+	now=$(uptime_s)
+	case "$now" in ''|*[!0123456789]*) exit 1 ;; esac
+	read -r expires saved phone 2>/dev/null < "$cache" || :
+	case "$expires" in ''|*[!0123456789]*) expires=0 ;; esac
+	if [ "$saved" = "$iccid" ] && [ "$expires" -gt "$now" ]; then
+		printf '%s\n' "$phone"
+		exit 0
+	fi
+	reply=$(fg360_at 'AT+ICCID;+CNUM' low 2 0 6>&- 2>/dev/null) || reply=
+	if phone=$(printf '%s\n' "$reply" | awk -v iccid="$iccid" '
+		{ sub(/\r$/, "") }
+		/^\+I?CCID:/ || /^[0-9]+[Ff]?$/ {
+			sim = $0
+			sub(/^\+I?CCID:[[:space:]]*/, "", sim)
+			gsub(/["[:space:]]/, "", sim)
+			sub(/[Ff]$/, "", sim)
+			matching = ("x" sim == "x" iccid)
+		}
+		/^\+CNUM:/ && number == "" {
+			line = $0
+			if (!sub(/^\+CNUM:[[:space:]]*("[^"]*")?[[:space:]]*,[[:space:]]*"/, "", line)) next
+			split(line, fields, "\"")
+			digits = fields[1]
+			if (digits !~ /^[+]?[0-9]+$/ || length(digits) < 5 || length(digits) > 21) next
+			if (fields[2] !~ /^[[:space:]]*,[[:space:]]*[0-9]+([[:space:]]*,|[[:space:]]*$)/) next
+			if (digits !~ /^\+/ && fields[2] ~ /^[[:space:]]*,[[:space:]]*145([[:space:]]*,|[[:space:]]*$)/) digits = "+" digits
+			number = digits
+		}
+		/^OK[[:space:]]*$/ { ok = 1 }
+		END { if (!matching || !ok) exit 1; print number }
+	'); then
+		expires=$((now + 300))
+	else
+		expires=$((now + 20))
+		phone=
+	fi
+	printf '%s %s %s\n' "$expires" "$iccid" "$phone" > "$cache"
+	printf '%s\n' "$phone"
+)
+
 operation="$1"
 [ "$2" = ccci ] && [ "$(uci -q get '5gmodem.@5gmodem[0].active_modem')" = ccci ] \
 	&& fg360_native "$2" || failure unavailable
 
 case "$operation" in
+	phone)
+		[ "$#" -eq 3 ] || failure invalid_request
+		read_phone "$3"
+		exit $? ;;
 	status)
 		[ "$#" -eq 2 ] || failure invalid_request
 		output=$(fg360_at 'AT+CPIN?' normal 5 2 2>/dev/null); result=$?

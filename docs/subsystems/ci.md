@@ -61,7 +61,10 @@ Bumping the README links in the release commit by hand used to leave a 15-20 min
 
 ## Stable asset names
 
-Translation packages get their version from `luci.mk` (a commit hash), so the file name changes every release and cannot be linked from the README. CI renames them to `luci-i18n-5gmodem-<lang>.apk/.ipk`; the version stays inside the package metadata. Copies under both names used to be attached side by side, which doubled the assets and confused users.
+Translation packages use the app version and release so a metadata-only fix can
+upgrade an installed translation. They depend on the UI provided by both Full
+and Lite. CI publishes one package per language and format under the stable name
+`luci-i18n-5gmodem-<lang>.apk/.ipk`, with the version in the package metadata.
 
 ## Failure logs
 

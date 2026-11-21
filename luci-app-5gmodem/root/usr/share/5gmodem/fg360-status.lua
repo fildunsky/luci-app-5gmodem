@@ -211,7 +211,10 @@ local function normalize(status, options)
     if output.sim_state == "ready" then
         local imsi, iccid = uint(status.imsi), uint(status.iccid)
         if imsi and #imsi >= 14 and #imsi <= 16 then output.imsi = imsi end
-        if iccid and #iccid >= 18 and #iccid <= 22 then output.iccid = iccid end
+        if iccid and #iccid >= 18 and #iccid <= 22 then
+            output.iccid = iccid
+            if options.phone_for_sim then output.phone = options.phone_for_sim(iccid) end
+        end
     end
     local duration = options.duration
     if duration then
@@ -379,6 +382,15 @@ local function cache_fresh(name, uptime, interval)
     return last ~= nil and last > 0 and uptime >= last and uptime - last <= interval * 2 + 5
 end
 
+local function phone_for_sim(iccid)
+    local command = "/usr/share/5gmodem/fg360-sim.sh phone ccci " .. iccid .. " 2>/dev/null"
+    local pipe = io.popen(command, "r")
+    if not pipe then return nil end
+    local phone = pipe:read("*l")
+    pipe:close()
+    if phone and phone:match("^%+?%d+$") then return phone end
+end
+
 local function run()
     local json = require "luci.jsonc"
     local options, status = {}, nil
@@ -393,6 +405,7 @@ local function run()
             end
         end
         options.csq = arg[3]
+        options.phone_for_sim = phone_for_sim
         options.duration = connection_uptime(options.iface, options.netdev)
         local stock = dofile("/usr/libexec/fg360-mea-webui/fg360_api.lua")
         if type(stock) ~= "table" or type(stock.status) ~= "function" then return false end

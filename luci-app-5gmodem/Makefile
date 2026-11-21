@@ -22,8 +22,12 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=4.0.13
+PKG_VERSION:=4.0.14
 PKG_RELEASE:=1
+PKG_PROVIDES:=luci-5gmodem-ui
+PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
+override PKG_FIXUP_DEPENDS = $(PKG_DEFAULT_DEPENDS) $(filter-out $(PKG_DEFAULT_DEPENDS), \
+	$(if $(filter luci-i18n-5gmodem-%,$(1)),$(patsubst $(PKG_NAME),$(PKG_PROVIDES),$(2)),$(2)))
 
 define Package/luci-app-5gmodem/conffiles
 /etc/config/5gmodem
@@ -122,6 +126,7 @@ define Package/luci-app-5gmodem-lite
   URL:=$(LUCI_URL)
   MAINTAINER:=$(MAINTAINER)
   DEPENDS:=+sms-tool +coreutils-stty
+  PROVIDES:=$(PKG_PROVIDES)
   PKGARCH:=all
   CONFLICTS:=luci-app-5gmodem
 endef
