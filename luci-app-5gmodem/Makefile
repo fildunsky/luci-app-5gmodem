@@ -22,7 +22,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=4.0.14
+PKG_VERSION:=4.0.15
 PKG_RELEASE:=1
 PKG_PROVIDES:=luci-5gmodem-ui
 PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)

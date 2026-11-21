@@ -46,13 +46,16 @@ apdu_backend() {
 	case "$_ab" in
 		at|uqmi|bridge) echo "$_ab"; return ;;
 		qmi|mbim)
-			case "$(_wdm_driver)" in
-				*cdc_mbim*) _mbim_or_at ;;
-				*qmi_wwan*) echo qmi ;;
+			_abdev=$(esim_wdm)
+			case "$(_wdm_driver "$_abdev")" in
+				*cdc_mbim*) _mbim_or_at "$_abdev" ;;
+				*qmi_wwan*) _qmi_backend "$_abdev" ;;
 				*)
-					if [ -z "$(esim_wdm)" ]; then
+					if [ -z "$_abdev" ]; then
 						logger -t 5gmodem "esim: $_ab selected, but the modem has no cdc-wdm - going over AT via the bridge"
 						echo bridge
+					elif [ "$_ab" = qmi ] || _wdm_configured_for_direct_qmi "$_abdev"; then
+						_qmi_backend "$_abdev"
 					else
 						echo "$_ab"
 					fi ;;
@@ -66,11 +69,12 @@ apdu_backend() {
 	[ -n "$_if" ] || _if=$(uci -q get 5gmodem.@5gmodem[0].network)
 	_abp=$(uci -q get "network.$_if.proto")
 	case "$_abp" in
-		mbim|modemmanager|qmi)
-			case "$(_wdm_driver)" in
-				*cdc_mbim*) _mbim_or_at ;;
-				*qmi_wwan*) echo qmi ;;
-				*) [ "$_abp" = qmi ] && echo qmi || _mbim_or_at ;;
+		mbim|modemmanager|qmi|qmiraw)
+			_abdev=$(esim_wdm)
+			case "$(_wdm_driver "$_abdev"):$_abp" in
+				*cdc_mbim*:*) _mbim_or_at "$_abdev" ;;
+				*qmi_wwan*:*|*:qmi|*:qmiraw) _qmi_backend "$_abdev" ;;
+				*) _mbim_or_at "$_abdev" ;;
 			esac ;;
 		# see docs/subsystems/esim.md#apdu-backend-selection
 		*) echo bridge ;;
@@ -163,9 +167,37 @@ esim_wdm() {
 	echo "$1"
 }
 
+_wdm_ifaces() {
+	[ -n "$1" ] || return 0
+	uci -q show network 2>/dev/null | awk -F= -v device="'$1'" '
+		$1 ~ /^network\.[^.]+\.device$/ && $2 == device { split($1, key, "."); print key[2] }
+	'
+}
+
+_wdm_configured_for_direct_qmi() {
+	for _wq in $(_wdm_ifaces "$1"); do
+		case "$(uci -q get "network.$_wq.proto")" in
+			qmi|qmiraw) return 0 ;;
+		esac
+	done
+	return 1
+}
+
+_qmi_backend() {
+	# The libqmi backend leaves a proxy on the node, even if netifd is between dial attempts.
+	if ! _wdm_configured_for_direct_qmi "$1"; then
+		echo qmi
+	elif ! command -v uqmi >/dev/null 2>&1 || \
+	     { [ -d /usr/lib/lpac/driver ] && [ ! -f /usr/lib/lpac/driver/driver_apdu_uqmi.so ]; }; then
+		echo bridge
+	else
+		echo uqmi
+	fi
+}
+
 _wdm_owned_by_netifd() {
 	[ -n "$1" ] || return 1
-	for _wn in $(uci show network 2>/dev/null | sed -n "s|^network\.\([^.]*\)\.device='$1'\$|\1|p"); do
+	for _wn in $(_wdm_ifaces "$1"); do
 		case "$(uci -q get "network.$_wn.proto")" in
 			mbim|qmi|qmiraw) : ;;
 			*) continue ;;
@@ -179,7 +211,7 @@ _wdm_owned_by_netifd() {
 
 _wdm_owned_by_umbim() {
 	[ -n "$1" ] || return 1
-	for _wo in $(uci show network 2>/dev/null | sed -n "s|^network\.\([^.]*\)\.device='$1'\$|\1|p"); do
+	for _wo in $(_wdm_ifaces "$1"); do
 		[ "$(uci -q get "network.$_wo.proto")" = "mbim" ] || continue
 		ubus call "network.interface.$_wo" status 2>/dev/null \
 			| grep -q '"up": true' && return 0
@@ -188,8 +220,8 @@ _wdm_owned_by_umbim() {
 }
 
 _mbim_or_at() {
-	if _wdm_owned_by_umbim "$(esim_wdm)"; then
-		logger -t 5gmodem "esim: node $(esim_wdm) is owned by umbim (proto=mbim) - mbim probe forbidden, going over AT via the bridge"
+	if _wdm_owned_by_umbim "$1"; then
+		logger -t 5gmodem "esim: node $1 is owned by umbim (proto=mbim) - mbim probe forbidden, going over AT via the bridge"
 		echo bridge
 	else
 		echo mbim
@@ -197,7 +229,8 @@ _mbim_or_at() {
 }
 
 _wdm_driver() {
-	_wd=$(esim_wdm)
+	_wd="${1-$(esim_wdm)}"
+	[ -n "$_wd" ] || return 0
 	readlink -f "/sys/class/usbmisc/${_wd##*/}/device/driver" 2>/dev/null | sed 's#.*/##'
 }
 
@@ -326,13 +359,15 @@ _mbim_target_is_active_esim() {
 _wdm_free_channels() {
 	command -v qmicli >/dev/null 2>&1 || return 0
 	[ -n "$1" ] && [ -e "$1" ] || return 0
-	case "$2" in ''|*[!0-9]*) return 0 ;; esac
+	_wdm_configured_for_direct_qmi "$1" && return 0
+	_fcslot=$(_mbim_uim_slot)
+	case "$_fcslot" in ''|*[!0-9]*) return 0 ;; esac
 	_fcmb=""
 	case "$(readlink -f "/sys/class/usbmisc/${1##*/}/device/driver" 2>/dev/null)" in
 		*/cdc_mbim) _fcmb="--device-open-mbim" ;;
 	esac
 	for _fc in 1 2 3 4; do
-		qmicli -d "$1" -p $_fcmb --uim-close-logical-channel="$2,$_fc" >/dev/null 2>&1
+		qmicli -d "$1" -p $_fcmb --uim-close-logical-channel="$_fcslot,$_fc" >/dev/null 2>&1
 	done
 }
 
@@ -400,7 +435,7 @@ run_lpac() {
 			kill -9 "$_PID" 2>/dev/null; killall -9 lpac 2>/dev/null
 		fi
 		rm -f "$_MLOOP"
-		[ -n "$_MKILLED" ] && _wdm_free_channels "$_MDEV" "$(_mbim_uim_slot)"
+		[ -n "$_MKILLED" ] && _wdm_free_channels "$_MDEV"
 		[ "$_MSKIP" = 1 ] && _mbim_slot_restore "$_MDEV" "$_MOLD"
 		if [ -s "$_MR" ]; then cat "$_MR"; else err "timeout"; fi
 		rm -f "$_MR"
@@ -490,16 +525,17 @@ esim_active() {
 	esac
 	_ea_w=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
 	[ -n "$_ea_w" ] && [ -e "$_ea_w" ] || return 1
+	_ea_c="/tmp/5gmodem/esim_act_$(printf '%s' "$_ea_w" | tr -c 'A-Za-z0-9' '_')"
+	if _wdm_configured_for_direct_qmi "$_ea_w" || \
+	   { ! pidof ModemManager >/dev/null 2>&1 && _wdm_owned_by_netifd "$_ea_w"; }; then
+		[ "$(cat "$_ea_c" 2>/dev/null)" = 0 ] && return 1
+		return 0
+	fi
 	command -v qmicli >/dev/null 2>&1 || return 1
 	_ea_mb=""
 	case "$(readlink -f "/sys/class/usbmisc/${_ea_w##*/}/device/driver" 2>/dev/null)" in
 		*/cdc_mbim) _ea_mb="--device-open-mbim" ;;
 	esac
-	_ea_c="/tmp/5gmodem/esim_act_$(printf '%s' "$_ea_w" | tr -c 'A-Za-z0-9' '_')"
-	if ! pidof ModemManager >/dev/null 2>&1 && _wdm_owned_by_netifd "$_ea_w"; then
-		[ "$(cat "$_ea_c" 2>/dev/null)" = 0 ] && return 1
-		return 0
-	fi
 	qmicli -d "$_ea_w" -p $_ea_mb --uim-get-slot-status 2>/dev/null | awk '
 		/^ *Physical slot [0-9]+:/ { act = 0; euicc = 0; seen = 1; next }
 		/Slot status: *active/     { act = 1 }
@@ -610,7 +646,7 @@ do_lpac() {
 				PORT=$(find_port)
 				[ -n "$PORT" ] || break ;;
 			*)
-				_wdm_free_channels "$(esim_wdm)" "$(_mbim_uim_slot)"
+				_wdm_free_channels "$(esim_wdm)"
 				if [ "$_dl_max" -gt 2 ]; then
 					_dl_p=$(live_port)
 					_dl_s=$(_mbim_uim_slot); case "$_dl_s" in ''|*[!0-9]*) _dl_s=2 ;; esac

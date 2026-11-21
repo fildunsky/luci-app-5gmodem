@@ -39,8 +39,9 @@ The list is a hint for tab visibility and for labelling an unvisited second slot
 
 `apdu_backend` returns `at|bridge|qmi|uqmi|mbim`.
 
-- Manual `esim_apdu` wins, but `qmi`/`mbim` are checked against the real cdc-wdm driver (`_wdm_driver`): a stale manual `qmi` on a modem now in MBIM composition (or the reverse) makes lpac fail `euicc_init`. If the modem has no cdc-wdm at all (FM350 in fibocom/xmm composition) a manual `qmi`/`mbim` is ignored and we fall back to `bridge`; this was a real report where the CCHO probe found the eUICC on ttyUSB1/ttyUSB3 while `qmi` was forced.
-- Auto for `mbim|modemmanager|qmi` protocols: decided by the cdc-wdm driver, not the protocol name. Two T99W175 (`05c6:9025`) under ModemManager had their nodes on `qmi_wwan`; the mbim backend could not open a channel and the result looked like "no eSIM", although SDX55 reads the eUICC fine over QMI.
+- Manual `qmi`/`mbim` choices are checked against the actual cdc-wdm driver and its data protocol. A modem without cdc-wdm falls back to the AT bridge. A stale choice from a different USB composition can fail `euicc_init`.
+- Auto for `mbim|modemmanager|qmi|qmiraw` starts with the cdc-wdm driver. Qualcomm SDX55 under ModemManager can expose `qmi_wwan`, where the MBIM backend cannot open an eUICC channel.
+- A node configured for netifd `qmi` or `qmiraw` uses lpac's `uqmi` backend, including when libqmi was selected manually. If `uqmi` or its lpac plugin is missing, use the AT bridge. This check applies while the link is down as well, since a proxy started between dial attempts can outlive lpac and block the next dial.
 - Auto for AT-class protocols (fibocom/atc/xmm/ncm/3g/wwan) is `bridge`, not lpac's native `at` driver. The native driver was tried for faster downloads on FM350 with patched lpac 2.3.x, but its persistent `at_expect` buffer desynchronises on long CGLA chains: `es10b_prepare_download` stalled exactly 240 s twice in a row. The only download verified end-to-end on FM350 (Tele2) went through the bridge. Native `at` stays available via `esim_apdu='at'`.
 - Old 2.1.x layout (no `/usr/lib/lpac/lpac`) supports only the bridge.
 - `wdm_backend` (mbim/qmi/uqmi) skips the AT-only preamble (live port, `AT+SIMTYPE`, CCHC cleanup, `find_port`), otherwise QMI modems without AT ports failed with "no AT port".
@@ -63,11 +64,16 @@ The list is a hint for tab visibility and for labelling an unvisited second slot
 
 ### umbim (kernel `proto=mbim`)
 
-- `_wdm_owned_by_umbim`: umbim opens cdc-wdm directly, not through a proxy. Our mbim probe starts mbim-proxy on the same node, the proxy takes the channel, and the data session drops (Cudy TR3000 + DW5821e: "opening the 5gmodem page kills internet"). QMI is not gated: QMI multiplexes clients and SDX55 eUICC is reachable only over QMI.
+- `_wdm_owned_by_umbim`: umbim opens cdc-wdm directly. Starting mbim-proxy on the same node can drop the data session (Cudy TR3000 + DW5821e: "opening the 5gmodem page kills internet").
 - Ownership requires the interface to be up. Gating on `proto` alone blocked the probe on a down interface (no SIM, ifdown) and redirected eSIM to AT, which SDX55 does not support ("no eUICC-capable AT port" on MV31-W with interface down).
 - `_mbim_or_at`: if umbim owns the node we use the bridge (AT), never the native AT driver.
 - Read-only verbs answer `uplink busy` immediately instead of taking the lock and scanning every tty with CCHO (SDX55 has three tty, none answers), which used to hang for minutes and end with "no eUICC-capable AT port".
 - `esim_active` caches the QMI slot verdict per node because the QMI query cannot run while netifd owns the node.
+
+### uqmi (`proto=qmi` or `qmiraw`)
+
+- The libqmi APDU driver starts `qmi-proxy`. With netifd using `uqmi` on the same cdc-wdm, the proxy interferes with direct requests and sessionwatch redials the WAN (#89).
+- The eSIM probe and operations use the `uqmi` APDU backend on that node. Best-effort retry cleanup and the AT fallback's slot check also skip proxy requests on the configured direct QMI node.
 
 ### Temporary uplink release
 
