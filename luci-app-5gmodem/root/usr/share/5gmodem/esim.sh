@@ -762,7 +762,6 @@ setshow)
 		*)   uci -q delete "5gmodem.$_sec.esim_show" 2>/dev/null ;;
 	esac
 	uci -q commit 5gmodem
-	rm -f "/tmp/5gmodem/esimstat_$_AP" 2>/dev/null
 	echo '{"result":"ok"}'
 	exit 0
 	;;
@@ -867,11 +866,19 @@ status)
 
 	[ -n "$LPAC_BROKEN" ] && { echo '{"available":0,"active":0,"broken":1}'; exit 0; }
 	[ -x "$LPAC" ] || { echo '{"available":0,"active":0}'; exit 0; }
+	if grep -q '"available":1' "/tmp/5gmodem/esimstat_$_AP" 2>/dev/null; then
+		echo '{"available":1,"active":0}'
+		exit 0
+	fi
 
 	_vp=$(uci -q get "5gmodem.$_es_sec.vidpid")
 	[ -n "$_vp" ] || _vp=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_AP\"].vidpid" 2>/dev/null | head -1)
 	_prod=$("$RES/listmodems.sh" 2>/dev/null \
 		| jsonfilter -e "@[@.path=\"$_AP\"].product" 2>/dev/null | head -1)
+	# This module can access a removable eUICC. Its USB ID is shared with other models.
+	case "$_vp:$_prod" in
+		2c7c:030b:*EM060K-GL*) echo '{"available":1,"active":0}'; exit 0 ;;
+	esac
 	esim_capable "$_vp" "$_prod" && { echo '{"available":1,"active":0}'; exit 0; }
 	echo '{"available":0,"active":0}'
 	exit 0

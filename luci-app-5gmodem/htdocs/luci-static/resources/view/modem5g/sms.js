@@ -743,7 +743,7 @@ function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40015, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40016, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -838,6 +838,7 @@ return view.extend({
 			view: 'dlg',
 			screen: isPhone() ? 'list' : 'thread',
 			open: null, autoOpen: true, selMode: false, sel: new Set(), filter: '',
+			threadSelMode: false, threadSel: new Set(), msgSource: null,
 			sent: {}, deleting: false, pushed: false, listY: null
 		};
 		self._S = S;
@@ -993,10 +994,14 @@ return view.extend({
 		lp.bFwd = ibtn('fwd', _('To e-mail'), '', { 'title': _('Forward SMS to E-mail'), 'id': 'forward', 'click': function() { self.handleForward(selectedMsgs()); } });
 		lp.bDel = ibtn('trash', _('Delete'), 'cbi-button-negative', { 'id': 'execute', 'click': function() { self.handleDelete(selectedMsgs()); } });
 		lp.selbar = E('div', { 'class': 'tg-sms-selbar', 'style': 'display:none' }, [ lp.selN, lp.bRead, lp.bFwd, lp.bDel ]);
-		lp.progTxt = E('span', { 'class': 'spinning' }, '');
-		lp.progFill = E('div', { 'class': 'tg-mbar-fill', 'style': 'background:var(--tg-accent)' });
-		lp.prog = E('div', { 'class': 'tg-sms-prog', 'id': 'deleteinfo', 'style': 'display:none' }, [ lp.progTxt,
-			E('div', { 'class': 'tg-mbar' }, E('div', { 'class': 'tg-mbar-t' }, lp.progFill)) ]);
+		function deleteProgress(id) {
+			var label = E('span', { 'class': 'spinning' }, '');
+			var fill = E('div', { 'class': 'tg-mbar-fill', 'style': 'background:var(--tg-accent)' });
+			var el = E('div', { 'class': 'tg-sms-prog', 'id': id, 'role': 'status', 'style': 'display:none' }, [ label,
+				E('div', { 'class': 'tg-mbar' }, E('div', { 'class': 'tg-mbar-t' }, fill)) ]);
+			return { el: el, label: label, fill: fill };
+		}
+		lp.prog = deleteProgress('deleteinfo');
 		lp.items = E('div', { 'class': 'tg-sms-items', 'id': 'smsList' });
 		// new message: a compact pen next to search (on a phone the round button at the bottom does it)
 		lp.newBtn = ibtn('pen', '', 'tg-sms-ico tg-sms-newbtn', { 'title': _('New SMS'), 'aria-label': _('New SMS'),
@@ -1007,7 +1012,7 @@ return view.extend({
 				E('div', { 'class': 'tg-sms-search' }, [ icon('search', 15, 'x'), lp.search ]),
 				lp.selBtn, lp.newBtn
 			]),
-			lp.selbar, lp.prog, lp.items
+			lp.selbar, lp.prog.el, lp.items
 		]);
 
 		/* ---------- composer ---------- */
@@ -1091,15 +1096,28 @@ return view.extend({
 		th.name = E('b', {}, '');
 		th.sub = E('span', {}, '');
 		th.back = ibtn('back', '', 'tg-sms-ico tg-sms-back', { 'aria-label': _('Back'), 'title': _('Back'), 'click': function() { goBack(); } });
+		th.selBtn = ibtn('selbox', '', 'tg-sms-ico', { 'title': _('Select several'), 'aria-label': _('Select several'),
+			'click': function() { setThreadSelMode(!S.threadSelMode); } });
 		th.fwd = ibtn('fwd', _('To e-mail'), '', { 'title': _('Forward SMS to E-mail'),
 			'click': function() { var d = openDlg(); if (d) { self.handleForward(d.msgs); } } });
 		th.del = ibtn('trash', _('Delete'), 'cbi-button-negative', { 'title': _('Delete the conversation'),
 			'click': function() {
 				var d = openDlg();
-				if (!d || !d.msgs.length) { return; }
+				if (!d || !threadCanSelect(d)) { return; }
 				if (!window.confirm(_('Delete the conversation (%d messages)?').format(d.msgs.length))) { return; }
-				self.handleDelete(d.msgs);
+				self.handleDelete(d.msgs, S.msgSource);
 			} });
+		th.selN = E('b', {}, '');
+		th.selDel = ibtn('trash', _('Delete'), 'cbi-button-negative', { 'click': function() {
+			var d = openDlg();
+			if (!d || !threadCanSelect(d) || !S.threadSelMode) { return; }
+			self.handleDelete(d.msgs.filter(function(m) { return S.threadSel.has(threadMessageKey(m)); }), S.msgSource);
+		} });
+		th.selCancel = E('button', { 'class': 'cbi-button', 'type': 'button',
+			'click': function() { setThreadSelMode(false); } }, [ _('Cancel') ]);
+		th.selbar = E('div', { 'class': 'tg-sms-selbar', 'style': 'display:none' },
+			[ th.selN, th.selCancel, th.selDel ]);
+		th.prog = deleteProgress();
 		th.body = E('div', { 'class': 'tg-sms-body' });
 		var reply = makeComposer({ rows: 1, sendLabel: _('Send SMS'), onSend: function(c) {
 			var d = openDlg();
@@ -1108,8 +1126,8 @@ return view.extend({
 		th.ph = E('div', { 'class': 'tg-sms-ph tg-sms-empty' }, E('div', {}, [ icon('msg', 28), E('span', {}, [ _('Select a conversation on the left') ]) ]));
 		var threadSec = E('div', { 'class': 'cbi-section tg-sms-pane tg-sms-thsec none' }, [
 			E('div', { 'class': 'tg-sms-th' }, [ th.back, th.av, E('div', { 'class': 'tg-sms-who' }, [ th.name, th.sub ]),
-				E('div', { 'class': 'tg-sms-thact' }, [ th.fwd, th.del ]) ]),
-			th.body, reply.el, th.ph
+				E('div', { 'class': 'tg-sms-thact' }, [ th.selBtn, th.fwd, th.del ]) ]),
+			th.body, E('div', { 'class': 'tg-sms-thread-actions' }, [ th.prog.el, th.selbar ]), reply.el, th.ph
 		]);
 
 		/* ---------- new message ---------- */
@@ -1195,6 +1213,7 @@ return view.extend({
 		/* ---------- state helpers ---------- */
 		function setScreen(s) {
 			S.screen = s;
+			if (s !== 'thread') { S.threadSelMode = false; S.threadSel.clear(); }
 			root.setAttribute('data-screen', s);
 			paintOpen();
 			// back on the phone list: return to the conversation the user came from, not to the top
@@ -1240,6 +1259,7 @@ return view.extend({
 			});
 			S.sel.clear();
 			setSelMode(false);
+			setThreadSelMode(false);
 		}
 		function setSelMode(on) {
 			S.selMode = on;
@@ -1418,6 +1438,7 @@ return view.extend({
 		}
 
 		function openDialog(key, user) {
+			if (S.open !== key) { S.threadSelMode = false; S.threadSel.clear(); }
 			S.open = key;
 			S.autoOpen = false;
 			var d = openDlg();
@@ -1443,6 +1464,22 @@ return view.extend({
 				it.classList.toggle('on', on !== null && it.getAttribute('data-key') === on);
 			});
 		}
+		function setThreadSelMode(on) {
+			S.threadSelMode = on;
+			S.threadSel.clear();
+			renderThread(false);
+		}
+		function threadCanSelect(d) {
+			return !smsReadOnly && d.msgs.length > 0 && S.msgSource === sms_cache_key();
+		}
+		function threadMessageKey(m) {
+			return JSON.stringify([ m.index, m.raw, m.local, m.text ]);
+		}
+		function paintThreadSelection() {
+			th.selN.textContent = _('selected: %d').format(S.threadSel.size);
+			th.selDel.disabled = !S.threadSel.size || S.deleting;
+			th.selCancel.disabled = S.deleting;
+		}
 
 		var lastThreadSig = '';
 		function renderThread(scroll) {
@@ -1452,6 +1489,9 @@ return view.extend({
 			threadSec.classList.toggle('none', !d);
 			if (!d) {
 				lastThreadSig = '';
+				S.threadSelMode = false;
+				S.threadSel.clear();
+				th.selbar.style.display = 'none';
 				if (isPhone() && S.screen === 'thread') { goBack(); }
 				return;
 			}
@@ -1465,18 +1505,34 @@ return view.extend({
 			else if (d.shown.replace(/\D/g, '').length <= 6) { sub.push(_('short number')); }
 			sub.push(_('messages: %d').format(d.msgs.length + d.out.length));
 			th.sub.textContent = sub.join(' · ');
+			var canSelect = threadCanSelect(d);
+			if (!canSelect) { S.threadSelMode = false; S.threadSel.clear(); }
+			var selecting = S.threadSelMode;
+			if (selecting) {
+				var keys = new Set(d.msgs.map(threadMessageKey));
+				S.threadSel.forEach(function(key) { if (!keys.has(key)) { S.threadSel.delete(key); } });
+			}
+			th.selBtn.classList.toggle('on', selecting);
+			th.selBtn.setAttribute('aria-pressed', String(selecting));
+			th.selBtn.style.display = canSelect ? '' : 'none';
+			th.selBtn.disabled = S.deleting;
+			th.selbar.style.display = selecting ? '' : 'none';
+			reply.el.style.display = selecting || S.deleting ? 'none' : '';
+			paintThreadSelection();
 			th.fwd.disabled = !d.msgs.length;
-			th.del.disabled = !d.msgs.length || S.deleting;
-			th.del.style.display = smsReadOnly ? 'none' : '';
+			th.fwd.style.display = selecting ? 'none' : '';
+			th.del.disabled = !canSelect || S.deleting;
+			th.del.style.display = smsReadOnly || selecting ? 'none' : '';
 
 			var all = d.msgs.map(function(m) { return { m: m, epoch: m.epoch }; })
 				.concat(d.out.map(function(o) { return { o: o, epoch: o.epoch }; }))
 				.sort(function(a, b) { return a.epoch - b.epoch; });
-			var sig = d.key + '\u0001' + all.map(function(x) {
-				return x.m ? x.m.index + (x.m.isNew ? '*' : '') + x.m.text.length : 'o' + x.o.id + x.o.state;
-			}).join(',');
+			var sig = JSON.stringify([ d.key, selecting, selecting && S.deleting, all.map(function(x) {
+				return x.m ? [ threadMessageKey(x.m), x.m.isNew ] : [ x.o.id, x.o.state ];
+			}) ]);
 			if (sig !== lastThreadSig) {
-				var atBottom = th.body.scrollHeight - th.body.scrollTop - th.body.clientHeight < 40;
+				var keepY = th.body.scrollTop;
+				var atBottom = th.body.scrollHeight - keepY - th.body.clientHeight < 40;
 				lastThreadSig = sig;
 				var nodes = [], lastDay = '', hadOut = false;
 				all.forEach(function(x) {
@@ -1495,7 +1551,21 @@ return view.extend({
 							if (codeEl) { sms_copy_code(codeEl); }
 							if (m.isNew) { markRead([ m ]); }
 						});
-						nodes.push(b);
+						if (selecting) {
+							var key = threadMessageKey(m);
+							var check = E('input', { 'type': 'checkbox', 'aria-label': _('Select') + ' · ' + sms_hm(m.local) });
+							check.checked = S.threadSel.has(key);
+							check.disabled = S.deleting;
+							b.classList.toggle('sel', check.checked);
+							check.addEventListener('change', function() {
+								if (check.checked) { S.threadSel.add(key); } else { S.threadSel.delete(key); }
+								b.classList.toggle('sel', check.checked);
+								paintThreadSelection();
+							});
+							nodes.push(E('div', { 'class': 'tg-sms-bub-row' }, [ check, b ]));
+						} else {
+							nodes.push(b);
+						}
 					} else {
 						var o = x.o;
 						hadOut = true;
@@ -1506,7 +1576,7 @@ return view.extend({
 				});
 				if (hadOut) { nodes.push(E('div', { 'class': 'tg-sms-outnote' }, [ _('sent from this page') ])); }
 				dom.content(th.body, nodes);
-				if (scroll || atBottom) { th.body.scrollTop = th.body.scrollHeight; }
+				th.body.scrollTop = scroll || atBottom ? th.body.scrollHeight : keepY;
 			}
 			if (scroll && isPhone() && S.screen === 'thread') { phoneShowThread(); }
 			if (smsReadOnly) { reply.lock(_('Android SMS storage is read-only.')); }
@@ -1655,6 +1725,7 @@ return view.extend({
 		}
 
 		function doRefresh(updateCount, busy) {
+			if (S.deleting) { return Promise.resolve(); }
 			if (busy) { window._smsForceRender = true; if (!S.msgs.length) { S.loading = true; renderAll(); } }
 			var p = doRefreshInner(updateCount);
 			var done = function() { if (S.loading) { S.loading = false; renderAll(); } };
@@ -1663,6 +1734,7 @@ return view.extend({
 		}
 
 		function doRefreshInner(updateCount) {
+			var source = sms_cache_key();
 			var storeL = uci.get('5gmodem', 'sms', 'storage') || 'ME';
 			var portR = uci.get('5gmodem', 'sms', 'readport');
 			var _mv = uci.get('5gmodem', 'sms', 'mergesms');
@@ -1680,13 +1752,13 @@ return view.extend({
 			// LuCI's CGI transport stringifies arguments, including an unset port.
 			var readArgs = portR ? [ storeL, portR ] : [ storeL ];
 			return L.resolveDefault(fs.exec_direct(BRIDGE, [ 'status' ].concat(readArgs))).then(function(res) {
-				if (!res) { return; }
+				if (!res || S.deleting || source !== sms_cache_key()) { return; }
 				var st = sms_parse_status(res);
 				var t = st.t, u = st.u;
 				S.u = u; S.t = t;
 				if (u != null) { msg_bar(Math.floor(u), t); }
 				return L.resolveDefault(fs.exec_direct(BRIDGE, [ 'recv' ].concat(readArgs))).then(function(res2) {
-					if (!res2) { return; }
+					if (!res2 || S.deleting || source !== sms_cache_key()) { return; }
 					res2 = res2.replace(/\\u([0-9a-fA-F]{2})f{6}([0-9a-fA-F]{2})/g, '\\u$1$2');
 					res2 = res2.replace(/[\u0000-\u001F]+/g, ' ');
 					var json;
@@ -1706,7 +1778,7 @@ return view.extend({
 					var _sig = [ storeL, portR, smsM, hide, direct, algo, smsReadOnly, res2 ].join('\u0001');
 					var wasErr = S.error;
 					S.error = false;
-					if (!window._smsForceRender && _sig === window._smsLastSig && S.msgs.length) {
+					if (!window._smsForceRender && _sig === window._smsLastSig && S.msgSource === source && S.msgs.length) {
 						if (wasErr) { renderHead(); }
 						return;
 					}
@@ -1745,6 +1817,7 @@ return view.extend({
 					}
 
 					S.loading = false;
+					S.msgSource = source;
 					setMessages(result);
 					sms_seen_sync(result);
 					sms_cache_save(result, u, t);
@@ -1773,11 +1846,12 @@ return view.extend({
 		}
 
 		self._doRefresh = doRefresh;
-		self._listProgress = function(done, total) {
-			if (done == null) { lp.prog.style.display = 'none'; return; }
-			lp.prog.style.display = '';
-			lp.progTxt.textContent = _('Please wait... deleted') + ' ' + done + ' ' + _('of') + ' ' + total + ' ' + _('selected messages');
-			lp.progFill.style.width = Math.max(3, Math.round(100 * done / Math.max(1, total))) + '%';
+		self._listProgress = function(done, total, inThread) {
+			if (done == null) { lp.prog.el.style.display = 'none'; th.prog.el.style.display = 'none'; return; }
+			var progress = inThread ? th.prog : lp.prog;
+			progress.el.style.display = '';
+			progress.label.textContent = _('Please wait... deleted') + ' ' + done + ' ' + _('of') + ' ' + total + ' ' + _('selected messages');
+			progress.fill.style.width = Math.max(3, Math.round(100 * done / Math.max(1, total))) + '%';
 		};
 		self._removeMsgs = function(indexes) {
 			var gone = new Set(indexes);
@@ -1812,6 +1886,7 @@ return view.extend({
 	/* ---------- actions ---------- */
 	handleModemChange: function(ev) {
 		var self = this;
+		if (this._S.deleting) { return; }
 		var serialModems = serial_modems();
 		if (!serialModems.length) { return; }
 		var currentPort = uci.get('5gmodem', 'sms', 'readport');
@@ -1825,6 +1900,7 @@ return view.extend({
 			var label = newModem.modem + (newModem.user_desc ? ' (' + newModem.user_desc + ')' : '');
 			document.querySelectorAll('.tg-sms .modem-display-text').forEach(function(el) { el.textContent = label; });
 			self._S.msgs = [];
+			self._S.msgSource = null;
 			self._S.open = null;
 			self._S.autoOpen = true;
 			return sms_seen_load().then(function() {
@@ -1836,8 +1912,10 @@ return view.extend({
 
 	handleSWarea: function(stg) {
 		var self = this;
+		if (this._S.deleting) { return; }
 		return sms_persist({ 'storage': stg }).then(function() {
 			self._paintStore();
+			if (self._renderAll) { self._renderAll(); }
 			if (typeof self._doRefresh == 'function') { self._doRefresh(false, true); }
 		});
 	},
@@ -1962,7 +2040,7 @@ return view.extend({
 		});
 	},
 
-	handleDelete: function(msgs) {
+	handleDelete: function(msgs, source) {
 		if (smsReadOnly) { ui.addNotification(null, E('p', _('Android SMS storage is read-only.')), 'info'); return; }
 		var self = this;
 		if (!msgs || !msgs.length) {
@@ -1971,6 +2049,7 @@ return view.extend({
 		}
 		if (this._S.deleting) { return; }
 		return uci.load('5gmodem').then(function() {
+			if (self._S.deleting || (source && source !== sms_cache_key())) { return; }
 			var storeL = uci.get('5gmodem', 'sms', 'storage') || 'ME';
 			var portR = uci.get('5gmodem', 'sms', 'readport') || '';
 
@@ -1988,7 +2067,7 @@ return view.extend({
 			});
 			if (!idx.length) { return; }
 
-			var showProgress = function(done) { self._listProgress(done, idx.length); };
+			var showProgress = function(done) { self._listProgress(done, idx.length, !!source); };
 			var hideProgress = function() { self._listProgress(null); self._setDeleting(false); };
 			var parse = function(out) {
 				try { return JSON.parse(out || '{}') || {}; } catch (e) { return {}; }

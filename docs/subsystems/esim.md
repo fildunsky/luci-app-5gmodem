@@ -15,7 +15,9 @@ Verbs: `status`, `status-cached`, `status-probe`, `recheck`, `dump`, `dump-cache
 
 ## Visibility vs. real probing
 
-- `status` decides tab visibility statically (vid:pid list + "eSIM" in the model name, manual `esim_show` override wins). It must not touch the port: it is called on every page load and on modem switch, and the old CCHO probe took `at_lock` and starved metrics polling.
+- `status` shows the tab for a modem with a successful cached probe or a matching static hint (vid:pid list or "eSIM" in the model name). A manual `esim_show` override wins. Menu checks run without opening the modem port.
+- Quectel EM060K-GL can access a removable eUICC through `uqmi`. The menu checks both the model name and its shared USB ID so it can offer the tab even before the first probe.
+- `setshow` saves tab visibility and preserves the last chip status and profile list. Opening the eSIM page can probe the chip as needed.
 - `status-cached` answers instantly from the last good `status-probe` verdict (`/tmp/5gmodem/esimstat_<usbpath>`), or `{"unknown":1}`; the page then runs the real probe in the background instead of blocking `load()`.
 - `_scache_get`: a positive verdict is kept indefinitely, a negative one only for 600 s. A negative answer is usually momentary (modem initialising, channel busy); it used to be cached forever and the tab kept telling the user to report the vid:pid.
 - `status-probe` returns specific reasons: `nolpac`, `modemmanager`, `noeuicc`, `uplink` (channel held by a live connection, not cached), `slot` (physical SIM slot active, not cached), `takeover` (modem under ModemManager, consent needed).

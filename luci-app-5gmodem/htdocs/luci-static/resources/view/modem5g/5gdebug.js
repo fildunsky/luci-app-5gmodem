@@ -242,7 +242,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40015, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40016, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1396,7 +1396,7 @@ return view.extend({
 		o.write = function(section_id, value) {
 			var v = (value === '1' || value === '0') ? value : 'auto';
 			return fs.exec('/usr/share/5gmodem/esim.sh', [ 'setshow', v ])
-				.then(function() { return fs.exec('/usr/share/5gmodem/esim.sh', [ 'recheck' ]); })
+				.then(function(res) { if (res.code === 0) { modemtabs.refreshEsimTab(); } })
 				.catch(function() {});
 		};
 		o.load = function() {

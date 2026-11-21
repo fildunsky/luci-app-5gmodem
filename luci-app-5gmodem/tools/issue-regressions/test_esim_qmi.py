@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -15,6 +16,8 @@ class EsimQmiTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
         self.calls = root / 'calls'
+        self.show = root / 'visibility'
+        self.runtime = root / 'runtime'
         lpac = root / 'lpac'
         drivers = lpac / 'driver'
         drivers.mkdir(parents=True)
@@ -27,14 +30,23 @@ printf '{"type":"lpa","payload":{"code":%s,"data":{"eidValue":"00000000000000000
 ''')
         binary.chmod(0o755)
         (root / 'esim-apdu-bridge.sh').write_text('cat > "$2"\n')
-        (root / 'esimcaps.sh').touch()
+        listmodems = root / 'listmodems.sh'
+        listmodems.write_text('#!/bin/sh\nprintf "%s\\n" "$TEST_PRODUCT"\n')
+        listmodems.chmod(0o755)
+        shutil.copyfile(SCRIPT.with_name('esimcaps.sh'), root / 'esimcaps.sh')
         (root / 'atlock.sh').write_text(r'''
 uci() {
     [ "$1" != -q ] || shift
     case "$1:$2" in
         get:5gmodem.*.esim_apdu) printf '%s\n' "$TEST_MANUAL" ;;
-        get:5gmodem.*.active_modem) echo usb0 ;;
+        get:5gmodem.*.active_modem) echo "$TEST_ACTIVE" ;;
+        get:5gmodem.m_*.esim_show) cat "$TEST_SHOW" 2>/dev/null ;;
+        get:5gmodem.m_*.vidpid) echo "$TEST_VIDPID" ;;
+        get:5gmodem.m_usb0) echo modem ;;
         get:5gmodem.m_usb0.network) echo "$TEST_INTERFACE" ;;
+        set:5gmodem.m_*.esim_show=*) printf '%s\n' "${2##*=}" > "$TEST_SHOW" ;;
+        delete:5gmodem.m_*.esim_show) rm -f "$TEST_SHOW" ;;
+        commit:5gmodem) : ;;
         get:network.wan.proto) echo "$TEST_PROTO" ;;
         get:network.other.proto) echo modemmanager ;;
         get:lpac.mbim.slot) echo 1 ;;
@@ -43,6 +55,7 @@ uci() {
         *) return 1 ;;
     esac
 }
+jsonfilter() { case "$2" in *.product) cat ;; *) return 1 ;; esac; }
 ubus() { printf '{"%s": true}\n' "$TEST_LINK"; }
 logger() { :; }
 uqmi() { :; }
@@ -52,7 +65,7 @@ ifup() { printf 'ifup %s\n' "$*" >> "$TEST_CALLS"; }
 killall() { :; }
 sleep() { command sleep 0.02; }
 ''')
-        script = SCRIPT.read_text().replace('/tmp/5gmodem', str(root / 'runtime'))
+        script = SCRIPT.read_text().replace('/tmp/5gmodem', str(self.runtime))
         script = script.replace('/usr/lib/lpac', str(lpac)).replace('/usr/share/5gmodem', str(root))
         # Feed the detected device/driver at the same boundary as the real modem registry and sysfs.
         markers = 'case "$1" in\nreapply)'
@@ -64,13 +77,14 @@ _wdm_driver() { printf '%s\\n' "$TEST_DRIVER"; }
         self.script = root / 'esim.sh'
         self.script.write_text(script)
 
-    def run_esim(self, action, **overrides):
+    def run_esim(self, action, *args, **overrides):
         env = dict(os.environ, TEST_CALLS=str(self.calls), TEST_INTERFACE='wan',
                    TEST_PROTO='qmi', TEST_LINK='up', TEST_NODE='/dev/null',
-                   TEST_DRIVER='qmi_wwan', TEST_MANUAL='', TEST_CODE='0', ESIM_READONLY='1')
+                   TEST_DRIVER='qmi_wwan', TEST_MANUAL='', TEST_CODE='0', ESIM_READONLY='1',
+                   TEST_SHOW=str(self.show), TEST_ACTIVE='usb0', TEST_VIDPID='2c7c:030b', TEST_PRODUCT='')
         env.update(overrides)
         self.calls.unlink(missing_ok=True)
-        result = subprocess.run(['sh', str(self.script), action], env=env, text=True,
+        result = subprocess.run(['sh', str(self.script), action, *args], env=env, text=True,
                                 capture_output=True, check=True, timeout=10)
         calls = self.calls.read_text().splitlines() if self.calls.exists() else []
         return result.stdout, calls
@@ -112,6 +126,42 @@ _wdm_driver() { printf '%s\\n' "$TEST_DRIVER"; }
                 self.assertEqual(json.loads(result)['profiles']['payload']['code'], code)
                 self.assertEqual(calls, ['uqmi /dev/null chip info'] * (code + 1)
                                  + ['uqmi /dev/null profile list'] * (code + 1))
+
+    def test_auto_visibility_reuses_successful_probe_without_opening_channel(self):
+        result, calls = self.run_esim('status')
+        self.assertEqual(json.loads(result)['available'], 0)
+        self.assertEqual(calls, [])
+
+        result, calls = self.run_esim('status-probe')
+        self.assertEqual(json.loads(result), {'available': 1, 'active': 1})
+        self.assertEqual(calls, ['uqmi /dev/null chip info'])
+        (self.runtime / 'esimdump_usb0').write_text('{"profiles":[]}\n')
+
+        for mode, available in [('0', 0), ('1', 1), ('auto', 1)]:
+            with self.subTest(mode=mode):
+                result, calls = self.run_esim('setshow', mode)
+                self.assertEqual(json.loads(result), {'result': 'ok'})
+                self.assertEqual(calls, [])
+                result, calls = self.run_esim('status')
+                self.assertEqual(json.loads(result)['available'], available)
+                self.assertEqual(calls, [])
+        result, _ = self.run_esim('status-cached')
+        self.assertEqual(json.loads(result), {'available': 1, 'active': 1})
+        result, _ = self.run_esim('dump-cached')
+        self.assertEqual(json.loads(result), {'profiles': []})
+        result, calls = self.run_esim('status', TEST_ACTIVE='usb1')
+        self.assertEqual(json.loads(result)['available'], 0)
+        self.assertEqual(calls, [])
+
+    def test_em060k_visibility_is_specific_to_the_model_and_usb_id(self):
+        for model, vidpid, available in [
+            ('EM060K-GL', '2c7c:030b', 1), ('EM06', '2c7c:030b', 0),
+            ('EM060K-GL', '0000:0000', 0), ('RM520N-GL', '2c7c:0801', 1),
+        ]:
+            with self.subTest(model=model, vidpid=vidpid):
+                result, calls = self.run_esim('status', TEST_PRODUCT=model, TEST_VIDPID=vidpid)
+                self.assertEqual(json.loads(result)['available'], available)
+                self.assertEqual(calls, [])
 
 
 if __name__ == '__main__':

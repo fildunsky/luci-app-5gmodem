@@ -66,7 +66,7 @@
 .tg-sms-search { position: relative; flex: 1 1 140px; min-width: 0; }
 .tg-sms-search > span { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--tg-muted); pointer-events: none; }
 .tg-sms .tg-sms-search input { width: 100% !important; min-width: 0 !important; padding-left: 28px !important; margin: 0 !important; box-sizing: border-box; }
-.tg-sms-tool .cbi-button.on { border-color: var(--tg-accent) !important; color: var(--tg-accent); }
+.tg-sms-tool .cbi-button.on, .tg-sms-thact .cbi-button.on { border-color: var(--tg-accent) !important; color: var(--tg-accent); }
 .tg-sms-selbar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: var(--tg-sms-info-bg); border-bottom: 1px solid var(--tg-sms-line); flex-wrap: wrap; font-size: 13px; }
 .tg-sms-selbar b { margin-right: auto; }
 .tg-sms-prog { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 6px 12px; border-bottom: 1px solid var(--tg-sms-line); }
@@ -129,6 +129,12 @@
 .tg-sms-bub.out { align-self: flex-end; background: var(--tg-sms-bub-out); color: #fff; border-bottom-left-radius: 12px; border-bottom-right-radius: 4px; }
 .tg-sms-bub.new { box-shadow: inset 3px 0 0 var(--tg-accent); }
 .tg-sms-bub.err { background: var(--tg-sms-bad-bg); color: inherit; border: 1px solid rgba(229,72,77,.45); }
+.tg-sms-bub-row { display: flex; align-items: center; gap: 8px; }
+.tg-sms-bub-row > input[type="checkbox"] { flex: none; margin: 0; width: 20px; height: 20px; accent-color: var(--tg-accent); cursor: pointer; }
+.tg-sms-bub-row .tg-sms-bub { min-width: 0; box-sizing: border-box; }
+.tg-sms-bub.sel { outline: 1px solid var(--tg-accent); background: var(--tg-sms-info-bg); }
+.tg-sms-thread-actions { flex: none; }
+.tg-sms-thread-actions > * { border-top: 1px solid var(--tg-sms-line); border-bottom: 0; }
 .tg-sms-meta { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 11px; opacity: .7; margin-top: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tg-sms-parts { font-size: 10.5px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; opacity: .85; }
 .tg-sms-outnote { align-self: flex-end; font-size: 11px; color: var(--tg-muted); }
@@ -195,8 +201,8 @@
   .tg-sms .cbi-section.tg-sms-pane { height: auto !important; min-height: 0; overflow: visible; }
   .tg-sms-items { overflow: visible; }
   .tg-sms-body { overflow: visible; min-height: 180px; }
-  .tg-sms-comp { position: sticky; bottom: 0; z-index: 2; background: var(--background-color-high, #fff); border-radius: 0 0 8px 8px; }
-  :root[data-darkmode="true"] .tg-sms-comp { background: #1a2029; }
+  .tg-sms-comp, .tg-sms-thread-actions { position: sticky; bottom: 0; z-index: 2; background: var(--background-color-high, #fff); border-radius: 0 0 8px 8px; }
+  :root[data-darkmode="true"] .tg-sms-comp, :root[data-darkmode="true"] .tg-sms-thread-actions { background: #1a2029; }
   .tg-sms-thsec .tg-sms-back { display: inline-flex !important; }
   .tg-sms-thact .lbl { display: none; }
   .tg-sms-thact { flex-wrap: nowrap; gap: 6px; }
