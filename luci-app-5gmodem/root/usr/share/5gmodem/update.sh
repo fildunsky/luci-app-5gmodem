@@ -18,6 +18,14 @@ STEP=/tmp/5gmodem/update.step
 
 mkdir -p "$TMP" 2>/dev/null
 
+run_install() {
+	if command -v nice >/dev/null 2>&1; then
+		nice -n 5 "$@"
+	else
+		"$@"
+	fi
+}
+
 # apk downloads package lists with an external "wget" found through PATH. This stand-in sends
 # them through the device chosen under "Download through" (curl --interface) and puts a hard
 # limit on uclient-fetch, whose -T covers reads only: a connection that never opens hangs it.
@@ -60,7 +68,9 @@ SHIM
 	chmod 755 "$_an_d/wget"
 	_an_dev=$(uci -q get 5gmodem.@5gmodem[0].fetch_dev)
 	case "$_an_dev" in *[!A-Za-z0-9._@-]*) _an_dev="" ;; esac
-	PM_REAL_WGET=$(command -v wget) PM_FETCH_DEV="$_an_dev" PATH="$_an_d:$PATH" apk "$@"
+	_an_run=command
+	[ "$1" = add ] && _an_run=run_install
+	PM_REAL_WGET=$(command -v wget) PM_FETCH_DEV="$_an_dev" PATH="$_an_d:$PATH" "$_an_run" apk "$@"
 }
 
 json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\r' | tr '\n\t' '  '; }
@@ -217,7 +227,7 @@ install)
 			# The file alone is enough when its dependencies are installed: no package lists, so
 			# no network. Without this apk fetched every list first, and on a link where only a
 			# VPN gets out the install hung at "unpacking" for minutes.
-			apk add --no-network --allow-untrusted "$F" >"$LOG" 2>&1 && return 0
+			run_install apk add --no-network --allow-untrusted "$F" >"$LOG" 2>&1 && return 0
 			grep -q 'unable to select packages' "$LOG" 2>/dev/null || return 1
 			logger -t 5gmodem "update: the package needs something not installed - fetching package lists"
 			echo deps > "$STEP"
@@ -295,7 +305,7 @@ install)
 				if [ "$PM" = apk ]; then
 					apk_install
 				else
-					opkg install --force-reinstall "$F" >"$LOG" 2>&1
+					run_install opkg install --force-reinstall "$F" >"$LOG" 2>&1
 				fi
 				echo $? > "$F.rc"
 			) >/dev/null 2>&1 </dev/null &

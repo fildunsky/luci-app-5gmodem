@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from test_runtime_audit import SHARE
+from test_runtime_audit import SHARE, function, shell
 
 SRC = (SHARE / 'update.sh').read_text()
 
@@ -23,10 +23,38 @@ def shim():
 class UpdateOffline(unittest.TestCase):
     def test_offline_install_first_then_lists(self):
         body = re.search(r'apk_install\(\) \{(.*?)\n\t\t\}', SRC, re.S).group(1)
-        lines = [l.strip() for l in body.splitlines() if l.strip().startswith(('apk', 'echo deps'))]
-        self.assertTrue(lines[0].startswith('apk add --no-network --allow-untrusted'), lines)
+        lines = [l.strip() for l in body.splitlines() if l.strip().startswith(('run_install', 'apk', 'echo deps'))]
+        self.assertTrue(lines[0].startswith('run_install apk add --no-network --allow-untrusted'), lines)
         self.assertEqual(lines[1], 'echo deps > "$STEP"')
         self.assertTrue(all(l.startswith(('apk_net', 'echo')) for l in lines[1:]), lines)
+
+    def test_install_priority_preserves_arguments_and_failure_with_or_without_nice(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'bin'
+            path.mkdir()
+            calls = root / 'calls'
+            for program in ('apk', 'opkg'):
+                manager = path / program
+                manager.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nexit 17\n')
+                manager.chmod(0o755)
+            nice = path / 'nice'
+            nice.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\nshift 2\nexec "$@"\n')
+            nice.chmod(0o755)
+            for has_nice in (True, False):
+                if not has_nice:
+                    nice.unlink()
+                for command in ('apk add --no-network', 'opkg install --force-reinstall'):
+                    with self.subTest(has_nice=has_nice, command=command):
+                        calls.unlink(missing_ok=True)
+                        source = function('run_install', 'update.sh')
+                        result = shell(source + '\nPATH="$PROGRAMS"\nrun_install ' + command + ' "test package"',
+                                       dict(os.environ, PROGRAMS=str(path), CALLS=str(calls)))
+                        self.assertEqual(result.returncode, 17, result.stderr)
+                        expected = [command.split(' ', 1)[1] + ' test package']
+                        if has_nice:
+                            expected.insert(0, '-n 5 ' + command + ' test package')
+                        self.assertEqual(calls.read_text().splitlines(), expected)
 
     def run_shim(self, dev, curl_ok, out='-'):
         with tempfile.TemporaryDirectory() as d:

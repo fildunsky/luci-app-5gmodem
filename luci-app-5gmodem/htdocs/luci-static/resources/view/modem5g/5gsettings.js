@@ -498,10 +498,16 @@ var CACHED_RES = [
 
 function refreshResources() {
 	if (typeof window.fetch !== 'function') { return Promise.resolve(); }
-	return Promise.all(CACHED_RES.map(function(r) {
-		return fetch(L.resource(r), { cache: 'reload', credentials: 'same-origin' })
-			.catch(function() {});
-	}));
+	var next = 0;
+	function refreshNext() {
+		if (next >= CACHED_RES.length) { return Promise.resolve(); }
+		return fetch(L.resource(CACHED_RES[next++]), { cache: 'reload', credentials: 'same-origin' })
+			// The fetch promise resolves at the headers. Keep the slot until the body finishes.
+			.then(function(res) { return res.arrayBuffer(); })
+			.catch(function() {})
+			.then(refreshNext);
+	}
+	return Promise.all([ refreshNext(), refreshNext(), refreshNext() ]);
 }
 
 function finishUpdate(ver) {
@@ -986,7 +992,7 @@ function wlList(cfg, persist) {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40016, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40017, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
