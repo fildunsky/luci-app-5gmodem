@@ -1014,6 +1014,9 @@ msgstr ""
 msgid "Select a conversation on the left"
 msgstr ""
 
+msgid "Select"
+msgstr ""
+
 msgid "Select several"
 msgstr ""
 

@@ -156,14 +156,29 @@ function sms_daystr(off) {
 function sms_parts_of(local) {
 	return String(local || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
 }
-// List time: today HH:MM, yesterday, otherwise DD.MM.
+function sms_format_date(day, withYear) {
+	// The timestamp already uses local time. Format its calendar day without another time zone conversion.
+	var d = new Date(day + 'T00:00:00Z');
+	if (isNaN(d.getTime())) { return day; }
+	var lang = document.documentElement.lang;
+	if (!lang && document.body) {
+		var m = String(document.body.className || '').match(/(?:^|\s)lang_(\S+)/);
+		lang = m ? m[1] : '';
+	}
+	lang = String(lang || (L.env && L.env.lang) || '').replace(/_/g, '-') || undefined;
+	var options = { day: '2-digit', month: '2-digit', timeZone: 'UTC' };
+	if (withYear) { options.year = 'numeric'; }
+	try { return d.toLocaleDateString(lang, options); }
+	catch (e) { return d.toLocaleDateString(undefined, options); }
+}
+// List time shows HH:MM today, yesterday's label, or the localized day and month.
 function sms_short_time(local) {
 	var m = sms_parts_of(local);
 	if (!m) { return String(local || ''); }
 	var day = m[1] + '-' + m[2] + '-' + m[3];
 	if (day === sms_daystr(0)) { return m[4] ? m[4] + ':' + m[5] : ''; }
 	if (day === sms_daystr(1)) { return _('yesterday'); }
-	return m[3] + '.' + m[2];
+	return sms_format_date(day, false);
 }
 function sms_day_label(local) {
 	var m = sms_parts_of(local);
@@ -171,7 +186,12 @@ function sms_day_label(local) {
 	var day = m[1] + '-' + m[2] + '-' + m[3];
 	if (day === sms_daystr(0)) { return _('today'); }
 	if (day === sms_daystr(1)) { return _('yesterday'); }
-	return m[3] + '.' + m[2] + '.' + m[1];
+	return sms_format_date(day, true);
+}
+function sms_feed_time(local) {
+	var stamp = String(local || '');
+	if (!sms_parts_of(stamp)) { return stamp; }
+	return sms_format_date(stamp.slice(0, 10), true) + stamp.slice(10).replace(/^T/, ' ');
 }
 function sms_hm(local) {
 	var m = sms_parts_of(local);
@@ -743,7 +763,7 @@ function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40017, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40018, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1374,7 +1394,7 @@ return view.extend({
 					var sel = S.sel.has(m.index);
 					var card = E('button', { 'type': 'button', 'class': 'cbi-button tg-sms-card' + (m.isNew ? ' new' : '') + (sel ? ' sel' : ''),
 						'aria-pressed': sel ? 'true' : 'false', 'data-index': m.index }, [
-						E('div', { 'class': 'h' }, [ E('span', {}, [ sms_fmt_sender(m.shown) ]), E('small', {}, [ m.local ]) ]),
+						E('div', { 'class': 'h' }, [ E('span', {}, [ sms_fmt_sender(m.shown) ]), E('small', {}, [ sms_feed_time(m.local) ]) ]),
 						E('div', { 'class': 't' }, sms_rich(m.text))
 					]);
 					card.addEventListener('click', function(ev) {

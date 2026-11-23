@@ -6900,6 +6900,9 @@ msgstr "Поиск по отправителю и тексту"
 msgid "Select a conversation on the left"
 msgstr "Выберите диалог слева"
 
+msgid "Select"
+msgstr "Выбрать"
+
 msgid "Select several"
 msgstr "Выбрать несколько"
 

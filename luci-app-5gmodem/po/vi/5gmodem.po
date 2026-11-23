@@ -6615,6 +6615,9 @@ msgstr "Tìm theo người gửi và nội dung"
 msgid "Select a conversation on the left"
 msgstr "Chọn một hội thoại bên trái"
 
+msgid "Select"
+msgstr "Chọn"
+
 msgid "Select several"
 msgstr "Chọn nhiều"
 

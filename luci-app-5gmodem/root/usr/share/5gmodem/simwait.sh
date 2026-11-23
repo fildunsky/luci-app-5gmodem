@@ -29,6 +29,22 @@ simwait_run() {
 	return "$result"
 }
 
+simwait_mbim_idle() {
+	local interface="$1" device="$2" config peers name status flags
+	config=$(uci -q show network 2>/dev/null) || return 1
+	peers=$(printf '%s\n' "$config" | awk -F= -v device="'$device'" -v interface="$interface" '
+		$1 ~ /^network\.[^.]+\.device$/ && $2 == device {
+			split($1, key, ".")
+			if (key[2] != interface) print key[2]
+		}') || return 1
+	for name in $peers "$interface"; do
+		status=$(ubus -t 2 call "network.interface.$name" status 2>/dev/null) || return 1
+		flags=$(printf '%s\n' "$status" | jsonfilter -e '@.up' -e '@.pending' 2>/dev/null) || return 1
+		[ "$flags" = "false
+false" ] || return 1
+	done
+}
+
 simwait_control_state() {
 	local interface="$1" path="$2" device proto real answer
 	device=$(uci -q get "network.$interface.device")
@@ -67,6 +83,9 @@ simwait_control_state() {
 			fi ;;
 
 		mbim)
+			# A standalone subscriber query opens and closes the MBIM control session.
+			# Check netifd immediately before polling so a live or starting session keeps that channel.
+			simwait_mbim_idle "$interface" "$device" || { echo unknown; return; }
 			answer=$(simwait_run 5 umbim -d "$device" subscriber)
 			case "$(printf '%s\n' "$answer" | sed -n 's/^[[:space:]]*readystate: *[0-9]* *(\([^)]*\)).*/\1/p' | head -1)" in
 				initialized) echo ready; return ;;

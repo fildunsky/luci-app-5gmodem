@@ -6615,6 +6615,9 @@ msgstr "Cari menurut pengirim dan teks"
 msgid "Select a conversation on the left"
 msgstr "Pilih percakapan di kiri"
 
+msgid "Select"
+msgstr "Pilih"
+
 msgid "Select several"
 msgstr "Pilih beberapa"
 

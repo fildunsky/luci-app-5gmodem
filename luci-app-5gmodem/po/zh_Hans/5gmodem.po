@@ -6615,6 +6615,9 @@ msgstr "按发件人和内容搜索"
 msgid "Select a conversation on the left"
 msgstr "请在左侧选择会话"
 
+msgid "Select"
+msgstr "选择"
+
 msgid "Select several"
 msgstr "多选"
 

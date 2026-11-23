@@ -19,10 +19,15 @@ class SimWaitTests(unittest.TestCase):
 import json,sys
 try:
  value=json.load(sys.stdin)
- for key in sys.argv[-1].removeprefix('@.').replace('[0]', '.0').split('.'):
-  value=value[int(key)] if isinstance(value,list) else value[key]
- print(str(value).lower() if isinstance(value,bool) else value)
-except (ValueError,KeyError,IndexError,TypeError): pass
+except ValueError:
+ sys.exit(1)
+for expr in sys.argv[2::2]:
+ try:
+  field=value
+  for key in expr.removeprefix('@.').replace('[0]', '.0').split('.'):
+   field=field[int(key)] if isinstance(field,list) else field[key]
+  print(str(field).lower() if isinstance(field,bool) else field)
+ except (KeyError,IndexError,TypeError): pass
 ''')
             jsonfilter.chmod(0o755)
             functions = folder / 'functions.sh'
@@ -48,9 +53,11 @@ AUTOSTART=true
 ERROR=
 uptime_s() {{ echo 200; }}
 logger() {{ :; }}
+standby_active() {{ return 1; }}
 usb_path_present() {{ return 0; }}
 uci() {{
  case "$*" in
+  *'show network') printf "%s\\n" "network.modem.device='/dev/cdc-wdm0'" ;;
   *network.modem.auto) echo "$AUTO" ;;
   *network.modem.disabled) echo "$DISABLED" ;;
   *network.modem.device) echo /dev/cdc-wdm0 ;;
@@ -323,6 +330,81 @@ mbimcli() { printf '%s' ''' + shlex.quote(reply) + '''; }
 simwait_state m_test test - us
 ''', mock_state=False)
                 self.assertEqual(result.strip(), expected)
+
+    def test_direct_mbim_poll_requires_netifd_to_confirm_idle(self):
+        for condition in ('UP=true', 'PENDING=true',
+                          'ubus() { return 1; }',
+                          'ubus() { echo unavailable; }',
+                          'ubus() { echo \'{"up":false}\'; }'):
+            with self.subTest(condition=condition):
+                result = self.run_shell('''
+set -e
+PROTO=mbim
+readlink() { echo /sys/devices/test/test:1.0/usbmisc/cdc-wdm0; }
+pgrep() { return 1; }
+umbim() { echo called > "$TRACE"; echo 'readystate: 3 (sim-not-inserted)'; }
+''' + condition + '''
+simwait_state m_test test - us
+[ ! -f "$TRACE" ]
+''', mock_state=False)
+                self.assertEqual(result.strip(), 'unknown')
+
+    def test_direct_mbim_poll_respects_another_interface_on_the_same_device(self):
+        result = self.run_shell('''
+readlink() { echo /sys/devices/test/test:1.0/usbmisc/cdc-wdm0; }
+pgrep() { return 1; }
+uci() {
+ case "$*" in
+  *'show network') printf "%s\\n" "network.modem.device='/dev/cdc-wdm0'" "network.other.device='/dev/cdc-wdm0'" "network.third.device='/dev/cdc-wdm1'" ;;
+  *network.modem.device) echo /dev/cdc-wdm0 ;;
+  *network.modem.proto) echo mbim ;;
+ esac
+}
+ubus() {
+ case "$*" in
+  *"network.interface.modem status") echo '{"up":false,"pending":false}' ;;
+  *"network.interface.other status") printf '{"up":%s,"pending":false}\\n' "$OTHER_UP" ;;
+  *"network.interface.third status") echo '{"up":true,"pending":false}' ;;
+ esac
+}
+umbim() { echo 'readystate: 1 (initialized)'; }
+OTHER_UP=true; simwait_control_state modem test
+OTHER_UP=false; simwait_control_state modem test
+''', mock_state=False)
+        self.assertEqual(result.splitlines(), ['unknown', 'ready'])
+
+    def test_active_mbim_still_detects_sim_removal_over_at(self):
+        self.run_shell('''
+set -e
+PROTO=mbim; UP=true
+tty_usbpath() { echo test; }
+readlink() { echo /sys/devices/test/test:1.0/usbmisc/cdc-wdm0; }
+pgrep() { return 1; }
+umbim() { echo called >> "$RUNTIME/umbim"; }
+mkdir -p "$RUNTIME"
+at_query() { echo "$REPLY"; }
+REPLY='+CPIN: READY'; tick || :
+[ ! -f "$TRACE" ]
+REPLY='+CME ERROR: 10'; tick || :
+grep -q '"available":false' "$TRACE"
+[ -f "$SIMWAIT_DIR/modem" ]
+[ ! -f "$RUNTIME/umbim" ]
+''', mock_state=False)
+
+    def test_idle_mbim_can_wait_and_resume_without_at(self):
+        self.run_shell('''
+PROTO=mbim
+tty_usbpath() { return 1; }
+readlink() { echo /sys/devices/test/test:1.0/usbmisc/cdc-wdm0; }
+pgrep() { return 1; }
+umbim() { echo "$REPLY"; }
+REPLY='readystate: 3 (sim-not-inserted)'; tick
+[ -f "$SIMWAIT_DIR/modem" ] || exit 1
+REPLY='readystate: 1 (initialized)'; tick
+[ ! -f "$SIMWAIT_DIR/modem" ] || exit 1
+tick
+[ "$(grep -c 'interface up' "$TRACE")" = 1 ]
+''', mock_state=False)
 
     def test_mm_backend(self):
         for reply, expected in [('modem.generic.state-failed-reason : sim-missing', 'absent'),
