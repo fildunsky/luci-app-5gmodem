@@ -46,8 +46,12 @@
 /* templates */
 .tg-at .tg-at-file { width: 100%; margin: 0 0 8px; }
 .tg-at-list { display: grid; gap: 2px; margin: 0 -6px; max-height: 55vh; overflow-y: auto; }
-.tg-at-grp { font-size: 11.5px; font-weight: 600; color: var(--tg-muted); text-transform: uppercase; letter-spacing: .04em; margin: 8px 6px 2px; }
-.tg-at-grp:first-child { margin-top: 0; }
+.tg-at-group { min-width: 0; }
+.tg-at-grp { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; list-style: none; font-size: 11.5px; font-weight: 600; color: var(--tg-muted); text-transform: uppercase; letter-spacing: .04em; }
+.tg-at-group > .tg-at-grp { width: 100%; margin: 0; border: 0; background: none; box-shadow: none; text-align: left; font-family: inherit; line-height: inherit; }
+.tg-at-grp:hover, .tg-at-grp:focus-visible { background: rgba(127,127,127,.10); }
+.tg-at-grp::after { content: ""; flex: none; width: 6px; height: 6px; margin-right: 3px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); }
+.tg-at-group.open > .tg-at-grp::after { transform: rotate(45deg); }
 .tg-at-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 6px; border-radius: 6px; cursor: pointer; font-size: 13px; align-items: baseline; }
 .tg-at-row.same { grid-template-columns: minmax(0, 1fr); }
 .tg-at-row:hover, .tg-at-row:focus-visible { background: rgba(127,127,127,.10); outline: none; }

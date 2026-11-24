@@ -335,13 +335,31 @@ return view.extend({
 			host.appendChild(E('div', { 'class': 'tg-at-none' }, _('No AT commands available')));
 			return;
 		}
+		var rows = host, openGroup = null;
+		function setGroup(group, expanded) {
+			group.classList.toggle('open', expanded);
+			group.firstElementChild.setAttribute('aria-expanded', String(expanded));
+			group.lastElementChild.classList.toggle('open', expanded);
+			group.lastElementChild.inert = !expanded;
+		}
 		items.forEach(function(it) {
 			if (it.type === 'section') {
-				host.appendChild(E('div', { 'class': 'tg-at-grp' }, [ it.name ]));
+				var summary = E('button', { 'type': 'button', 'class': 'tg-at-grp', 'click': function() {
+					var expanded = openGroup !== group;
+					if (openGroup) { setGroup(openGroup, false); }
+					setGroup(group, expanded);
+					openGroup = expanded ? group : null;
+				} }, [ it.name ]);
+				rows = E('div', { 'class': 'tg-collapse-inner' });
+				var group = E('div', { 'class': 'tg-at-group' }, [ summary,
+					E('div', { 'class': 'tg-collapse' }, [ rows ]) ]);
+				setGroup(group, !openGroup);
+				if (!openGroup) { openGroup = group; }
+				host.appendChild(group);
 				return;
 			}
 			var same = (it.name === it.code);
-			host.appendChild(E('div', {
+			rows.appendChild(E('div', {
 				'class': 'tg-at-row' + (same ? ' same' : ''), 'role': 'button', 'tabindex': '0', 'title': it.code,
 				'click': function() { self.handleCopy(it.code); },
 				'keydown': function(ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); self.handleCopy(it.code); } }
@@ -384,7 +402,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40018, [ editors, modemtabs, mutil, atexplain ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40019, [ editors, modemtabs, mutil, atexplain ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
