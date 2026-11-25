@@ -1381,7 +1381,8 @@ if [ "$_PORT_OK" = 1 ]; then
 	else
 		_bo_if=$(uci -q get "5gmodem.$_bs_sec.network")
 		[ -n "$_bo_if" ] || _bo_if=$(_global_opt network)
-		if [ "$(uci -q get "network.$_bo_if.proto" 2>/dev/null)" != "modemmanager" ] \
+		_bo_proto=$(uci -q get "network.$_bo_if.proto" 2>/dev/null)
+		if [ "$_bo_proto" != "modemmanager" ] && [ "$_bo_proto" != "mbimp" ] \
 		   && pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1; then
 			_bo_c="/tmp/5gmodem/mmowns_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g')"
 			if [ -s "$_bo_c" ] && [ -n "$(find "$_bo_c" -mmin -1 2>/dev/null)" ]; then
@@ -1395,7 +1396,7 @@ if [ "$_PORT_OK" = 1 ]; then
 		fi
 		_MM_AT_STATIC=""
 		if [ "$_PORT_OK" = 1 ] \
-		   && [ "$(uci -q get "network.$_bo_if.proto" 2>/dev/null)" = "modemmanager" ]; then
+		   && { [ "$_bo_proto" = "modemmanager" ] || [ "$_bo_proto" = "mbimp" ]; }; then
 			. /usr/share/5gmodem/quirks.sh 2>/dev/null
 			mm_at_allowed "$_bs_am" "$_bs_sec"
 			case "$?" in
