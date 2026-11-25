@@ -111,6 +111,10 @@ The module runs QMI, but under `proto=qmi`/`qmiraw` the generic QMI supplement i
 - The prefix is matched with awk `index()`, not a sed pattern. Inside double quotes `\$$1` expands to the shell PID, and the first version silently matched nothing.
 - Triples are split with parameter expansion, not `set --`: the profile is sourced with `.`, so the positional parameters belong to the dispatcher.
 - Neighbours come from the same triples. A separate scan (`$QCACQDBC` and similar) is not used because it blocks the port for seconds and breaks SMS.
+- When the QMI supplement is safe to use, its cell-location response provides neighbour RSSI and fractional RSRP/RSRQ. For this profile it replaces the AT neighbour list only if the cached serving PCI and EARFCN match the current AT reading. Direct QMI connections retain the AT fallback.
+- GPS RAW/NMEA works through ModemManager, including obtaining a position fix. The standard GPS tab uses the ModemManager location interface; an AT GPS command is not required.
+- Keep mode and band management on the ModemManager path when it owns the connection. `^SLMODE?` can return `^SLMODE:31-GWL`, rather than the comma-separated response used by the T77W968 profile; reusing that profile would misread the selected mode.
+- The `^SLBAND=?` command catalogue can include B25/B26 even when ModemManager's supported-band list excludes them. Do not substitute the command catalogue for the reported device capabilities without verifying those bands.
 
 ## PCIe / MHI variants (`modem/pci/`)
 

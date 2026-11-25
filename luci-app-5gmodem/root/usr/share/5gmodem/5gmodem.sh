@@ -2114,6 +2114,21 @@ _qmi_supplement() {
 	_qmi_kick
 }
 
+_qmi_neighbors() {
+	[ -s "$_QS_P.nb" ] || return 0
+	_qn_nb=$(cat "$_QS_P.nb")
+	if [ -z "$NEIGHBORS" ]; then
+		NEIGHBORS="$_qn_nb"
+	elif [ "$VIDPID" = "usb/03f09d1d" ]; then
+		# The AT profile has no neighbour RSSI. Prefer the richer QMI sample
+		# only while its serving cell still matches the current AT reading.
+		_qn_serv=$(printf '%s' "$_qn_nb" | tr '}' '\n' \
+			| sed -n 's/.*"earfcn":"\([0-9][0-9]*\)".*"pci":"\([0-9][0-9]*\)".*"serving":1.*/\1:\2/p' | head -1)
+		[ "$_qn_serv" = "$EARFCN:$PCI" ] && NEIGHBORS="$_qn_nb"
+	fi
+	return 0
+}
+
 _qmi_fill() {
 	case "$MODE" in
 		UMTS*|WCDMA*|HSDPA*|HSUPA*|HSPA*|3G*) : ;;
@@ -2124,7 +2139,7 @@ _qmi_fill() {
 			fi ;;
 	esac
 
-	[ -z "$NEIGHBORS" ] && [ -s "$_QS_P.nb" ] && NEIGHBORS=$(cat "$_QS_P.nb")
+	_qmi_neighbors
 	[ -z "$ANTPORTS" ] && [ -s "$_QS_P.ant" ] && ANTPORTS=$(cat "$_QS_P.ant")
 	[ -z "$RXDIV" ] && [ -s "$_QS_P.rxd" ] && RXDIV=$(cat "$_QS_P.rxd")
 	if [ -s "$_QS_P.ca" ]; then

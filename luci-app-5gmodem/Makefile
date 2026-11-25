@@ -22,7 +22,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=4.0.19
+PKG_VERSION:=4.0.20
 PKG_RELEASE:=1
 PKG_PROVIDES:=luci-5gmodem-ui
 PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
@@ -97,6 +97,11 @@ done
 		/www/luci-static/resources/protocol/qmiraw.js \
 		/www/luci-static/resources/protocol/mbimp.js \
 		/www/luci-static/resources/icons -exec touch -d "@$$_5gm_ts" {} + 2>/dev/null
+	if command -v setsid >/dev/null 2>&1; then
+		setsid /usr/share/5gmodem/postinst-logout.sh "$$PPID" </dev/null >/dev/null 2>&1 &
+	else
+		/usr/share/5gmodem/postinst-logout.sh "$$PPID" </dev/null >/dev/null 2>&1 &
+	fi
 }
 exit 0
 endef

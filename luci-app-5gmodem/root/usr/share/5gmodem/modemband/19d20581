@@ -16,7 +16,10 @@ _zx_bands() {
 		for (i = 1; i <= 8 && i <= NF; i++) {
 			v = $i + 0
 			for (b = 0; b < 8; b++) {
-				if (int(v / 2 ^ b) % 2) o = o (o == "" ? "" : " ") ((i - 1) * 8 + b + 1)
+				n = (i - 1) * 8 + b + 1
+				# M100 advertises bits 55/56, which are reserved LTE band numbers.
+				if (n != 55 && n != 56 && int(v / 2 ^ b) % 2)
+					o = o (o == "" ? "" : " ") n
 			}
 		}
 		print o
