@@ -18,15 +18,23 @@ _SNAP="/tmp/5gmodem/metrics_${_KEY}.json"
 
 _jf() { jsonfilter -i "$_SNAP" -e "@.$1" 2>/dev/null; }
 
-_tele_device() {
+_tele_node() {
 	[ -n "$_AM" ] || return 1
 	for _td_dir in "/sys/bus/usb/devices/$_AM" "/sys/bus/pci/devices/${_AM##*/}" \
 	               "/sys/bus/platform/devices/${_AM##*/}/remoteproc"; do
 		[ -d "$_td_dir" ] || continue
-		# The sysfs inode changes when a different device enumerates at the same path.
-		ls -diL "$_td_dir" 2>/dev/null | awk 'NR == 1 { print $1 }'
+		printf '%s\n' "$_td_dir"
 		return
 	done
+	[ -r "${G5_LIB:-/usr/share/5gmodem/lib.sh}" ] || return 1
+	( . "${G5_LIB:-/usr/share/5gmodem/lib.sh}"; soc_modem_node "$_AM" )
+}
+
+_tele_device() {
+	_td_node=$(_tele_node) || return 1
+	[ -d "$_td_node" ] || return 1
+	# A different device at the same path gets a different sysfs inode.
+	ls -diL "$_td_node" 2>/dev/null | awk 'NR == 1 { print $1 }'
 }
 
 _keep_radio() {
@@ -390,7 +398,7 @@ _refresh_snap() {
 case "$1" in
 	tick)      tele_enabled || exit 0
 	           [ -n "$_AM" ] || exit 0
-	           [ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || [ -d "/sys/bus/platform/devices/${_AM##*/}/remoteproc" ] || exit 0
+	           _tele_node >/dev/null || exit 0
 	           _refresh_snap
 	           if _mqtt_args >/dev/null 2>&1; then tele_publish; else tele_write; fi ;;
 	write)     tele_enabled && tele_write ;;
