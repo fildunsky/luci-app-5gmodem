@@ -7858,3 +7858,6 @@ msgstr "Модем не подтвердил операцию с PIN"
 
 msgid "The modem is busy"
 msgstr "Модем занят"
+
+msgid "Could not update the installed MediaTek helper package."
+msgstr "Не удалось обновить установленный вспомогательный пакет MediaTek."

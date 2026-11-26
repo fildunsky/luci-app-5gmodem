@@ -145,6 +145,85 @@ version_gt() {
 	}'
 }
 
+# Optional companions join the existing transaction only when already installed.
+mtk_helper_version() {
+	local packages
+	case "$1" in
+		apk)
+			packages=$(apk info -v 2>/dev/null) || return 1
+			printf '%s\n' "$packages" | sed -n 's/^5gmodem-mtk-at-\([0-9].*\)$/\1/p' | head -n1 ;;
+		opkg)
+			packages=$(opkg list-installed 2>/dev/null) || return 1
+			printf '%s\n' "$packages" | sed -n 's/^5gmodem-mtk-at - \(.*\)$/\1/p' | head -n1 ;;
+	esac
+}
+
+mtk_helper_newer() {
+	awk -v target="$1" -v current="$2" 'BEGIN {
+		split(target, t, "-r"); split(current, c, "-r")
+		n=split(t[1], a, "."); m=split(c[1], b, ".")
+		for (i=1; i<=n || i<=m; i++) {
+			if (a[i]+0 > b[i]+0) exit 0
+			if (a[i]+0 < b[i]+0) exit 1
+		}
+		exit !(t[2]+0 > c[2]+0)
+	}'
+}
+
+mtk_helper_prepare() {
+	local current manifest target sum size base
+	MTK_FILE=""; MTK_TARGET=""; MTK_SIZE=0; MTK_SUM=""; MTK_URL=""
+	current=$(mtk_helper_version "$PM") || {
+		echo 'Could not read installed MediaTek helper status' >> "$LOG"; return 1
+	}
+	[ -n "$current" ] || return 0
+	base="https://raw.githubusercontent.com/$REPO/master/dist/5gmodem-mtk-at"
+	manifest=$(net_fetch 15 "$base/manifest.json") || {
+		echo 'Could not fetch the MediaTek helper manifest' >> "$LOG"; return 1
+	}
+	target=$(printf '%s' "$manifest" | jsonfilter -e '@.version' 2>/dev/null)
+	printf '%s\n' "$target" "$current" | grep -Eqv '^[0-9]+([.][0-9]+)*-r[0-9]+$' && {
+		echo 'Invalid MediaTek helper version metadata' >> "$LOG"; return 1
+	}
+	mtk_helper_newer "$target" "$current" || return 0
+	sum=$(printf '%s' "$manifest" | jsonfilter -e "@.packages[\"5gmodem-mtk-at.$EXT\"]" 2>/dev/null)
+	printf '%s\n' "$sum" | grep -Eq '^[0-9a-f]{64}$' || {
+		echo 'Missing MediaTek helper checksum' >> "$LOG"; return 1
+	}
+	size=$(printf '%s' "$manifest" | jsonfilter -e "@.sizes[\"5gmodem-mtk-at.$EXT\"]" 2>/dev/null)
+	case "$size" in ''|*[!0-9]*)
+		echo 'Missing MediaTek helper download size' >> "$LOG"; return 1 ;;
+	esac
+	[ "$size" -gt 0 ] || { echo 'Invalid MediaTek helper download size' >> "$LOG"; return 1; }
+	MTK_FILE="$TMP/5gmodem-mtk-at.$EXT"; MTK_TARGET="$target"
+	MTK_SIZE="$size"; MTK_SUM="$sum"; MTK_URL="$base/5gmodem-mtk-at.$EXT"
+	logger -t 5gmodem "update: including installed MediaTek helper update $current -> $target"
+}
+
+mtk_helper_download() {
+	local offset="$1" total="$2" pid actual
+	[ -n "$MTK_FILE" ] || return 0
+	rm -f "$MTK_FILE" "$MTK_FILE.ok"
+	st download "$offset" "$total" mtk
+	( net_fetch 60 "$MTK_URL" "$MTK_FILE" && : > "$MTK_FILE.ok" ) >/dev/null 2>&1 </dev/null &
+	pid=$!
+	while kill -0 "$pid" 2>/dev/null; do
+		st download "$((offset + $(fsize "$MTK_FILE")))" "$total" mtk
+		sleep 1
+	done
+	wait "$pid" 2>/dev/null
+	if [ ! -f "$MTK_FILE.ok" ] || [ "$(fsize "$MTK_FILE")" != "$MTK_SIZE" ]; then
+		rm -f "$MTK_FILE" "$MTK_FILE.ok"
+		echo 'MediaTek helper download failed or is incomplete' >> "$LOG"; return 1
+	fi
+	rm -f "$MTK_FILE.ok"
+	actual=$(sha256sum "$MTK_FILE" 2>/dev/null | cut -c1-64)
+	[ "$actual" = "$MTK_SUM" ] || {
+		rm -f "$MTK_FILE"; echo 'MediaTek helper checksum mismatch' >> "$LOG"; return 1
+	}
+	st download "$((offset + MTK_SIZE))" "$total" mtk
+}
+
 st() {
 	printf '{"running":true,"stage":"%s","done":%s,"total":%s,"target":"%s","step":"%s"}\n' \
 		"$1" "${2:-0}" "${3:-0}" "$(json_esc "$TARGET")" "$(json_esc "$4")" > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
@@ -224,21 +303,23 @@ install)
 				/^  [^ ]/ { n = "" }' "$LOG" 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/ $//'
 		}
 		apk_install() {
+			set -- "$F"
+			[ -z "$MTK_FILE" ] || set -- "$@" "$MTK_FILE"
 			# The file alone is enough when its dependencies are installed: no package lists, so
 			# no network. Without this apk fetched every list first, and on a link where only a
 			# VPN gets out the install hung at "unpacking" for minutes.
-			run_install apk add --no-network --allow-untrusted "$F" >"$LOG" 2>&1 && return 0
+			run_install apk add --no-network --allow-untrusted "$@" >"$LOG" 2>&1 && return 0
 			grep -q 'unable to select packages' "$LOG" 2>/dev/null || return 1
 			logger -t 5gmodem "update: the package needs something not installed - fetching package lists"
 			echo deps > "$STEP"
-			apk_net add --allow-untrusted "$F" >"$LOG" 2>&1 && return 0
+			apk_net add --allow-untrusted "$@" >"$LOG" 2>&1 && return 0
 			grep -q 'unable to select packages' "$LOG" 2>/dev/null || return 1
 			[ -z "$(apk_world_blockers)" ] || return 1
 			apk_net update >/dev/null 2>&1
-			apk_net add --allow-untrusted "$F" >"$LOG" 2>&1
+			apk_net add --allow-untrusted "$@" >"$LOG" 2>&1
 		}
 		do_install() {
-			TARGET=""
+			TARGET=""; MTK_FILE=""; MTK_TARGET=""; MTK_SIZE=0; MTK_SUM=""; MTK_URL=""
 			PM=$(pkgman)
 			[ -n "$PM" ] || { fail "No package manager found"; return; }
 			PKG=$(detect_pkg "$PM")
@@ -267,19 +348,23 @@ install)
 			case "$TOTAL" in ''|*[!0-9]*) TOTAL=0 ;; esac
 			[ -n "$URL" ] || { fail "asset_pending"; return; }
 
+			mtk_helper_prepare || { fail "helper_update_failed"; return; }
+			DOWNLOAD_TOTAL=0
+			[ "$TOTAL" -eq 0 ] || DOWNLOAD_TOTAL=$((TOTAL + MTK_SIZE))
+
 			_free=$(df -k "$TMP" 2>/dev/null | awk 'NR==2 {print $4}')
 			case "$_free" in ''|*[!0-9]*) _free=0 ;; esac
-			if [ "$TOTAL" -gt 0 ] && [ "$_free" -gt 0 ] && [ $((_free * 1024)) -lt $((TOTAL * 2)) ]; then
+			if [ "$TOTAL" -gt 0 ] && [ "$_free" -gt 0 ] && [ $((_free * 1024)) -lt $(((TOTAL + MTK_SIZE) * 2)) ]; then
 				fail "no_space"; return
 			fi
 
 			F="$TMP/$PKG.$EXT"
-			rm -f "$F"
-			st download 0 "$TOTAL"
+			rm -f "$F" "$F.ok"
+			st download 0 "$DOWNLOAD_TOTAL"
 			( net_fetch 120 "$URL" "$F" "$ACC" && : > "$F.ok" ) >/dev/null 2>&1 </dev/null &
 			_dp=$!
 			while kill -0 "$_dp" 2>/dev/null; do
-				st download "$(fsize "$F")" "$TOTAL"
+				st download "$(fsize "$F")" "$DOWNLOAD_TOTAL"
 				sleep 1
 			done
 			wait "$_dp" 2>/dev/null
@@ -299,19 +384,25 @@ install)
 				fi
 			fi
 
+			mtk_helper_download "$_got" "$DOWNLOAD_TOTAL" || {
+				rm -f "$F"; fail "helper_update_failed"; return
+			}
+			_downloaded=$((_got + MTK_SIZE))
 			rm -f "$STEP" "$F.rc"
-			st install "$_got" "$TOTAL"
+			st install "$_downloaded" "$DOWNLOAD_TOTAL"
 			(
 				if [ "$PM" = apk ]; then
 					apk_install
 				else
-					run_install opkg install --force-reinstall "$F" >"$LOG" 2>&1
+					set -- "$F"
+					[ -z "$MTK_FILE" ] || set -- "$@" "$MTK_FILE"
+					run_install opkg install --force-reinstall "$@" >"$LOG" 2>&1
 				fi
 				echo $? > "$F.rc"
 			) >/dev/null 2>&1 </dev/null &
 			_ip=$!
 			while kill -0 "$_ip" 2>/dev/null; do
-				st install "$_got" "$TOTAL" "$(cat "$STEP" 2>/dev/null)"
+				st install "$_downloaded" "$DOWNLOAD_TOTAL" "$(cat "$STEP" 2>/dev/null)"
 				sleep 1
 			done
 			wait "$_ip" 2>/dev/null
@@ -319,7 +410,7 @@ install)
 			[ -n "$_rc" ] || _rc=1
 			rm -f "$F" "$F.rc" "$STEP"
 
-			st finish "$_got" "$TOTAL"
+			st finish "$_downloaded" "$DOWNLOAD_TOTAL"
 			case "$PM" in
 				apk)  apk del "$I18N" >/dev/null 2>&1 ;;
 				opkg) opkg remove "$I18N" >/dev/null 2>&1 ;;
@@ -331,6 +422,10 @@ install)
 
 			CUR=$(installed_version "$PM")
 			if [ -n "$TARGET" ] && [ "$CUR" = "$TARGET" ]; then
+				if [ -n "$MTK_TARGET" ] && [ "$(mtk_helper_version "$PM")" != "$MTK_TARGET" ]; then
+					echo "MediaTek helper $MTK_TARGET was not installed" >> "$LOG"
+					fail "helper_update_failed"; return
+				fi
 				[ "$_rc" = 0 ] || logger -t 5gmodem "update: $PM returned $_rc, but $PKG $TARGET is installed - treating as success"
 				printf '{"success":true,"current":"%s","previous":"%s","target":"%s"%s}\n' \
 					"$(json_esc "$CUR")" "$(json_esc "$PREV")" "$(json_esc "$TARGET")" \
@@ -350,6 +445,7 @@ install)
 			fail "version_mismatch"
 		}
 		do_install > "$STATUS.res" 2>/dev/null
+		[ -z "$MTK_FILE" ] || rm -f "$MTK_FILE" "$MTK_FILE.ok"
 		mv "$STATUS.res" "$STATUS"
 		rm -f "$LOCK"; rmdir "$LOCK.d" 2>/dev/null
 	) >/dev/null 2>&1 </dev/null &

@@ -7510,3 +7510,6 @@ msgstr "無法儲存數據機的網頁密碼。"
 
 msgid "Could not change the APN."
 msgstr "無法變更 APN。"
+
+msgid "Could not update the installed MediaTek helper package."
+msgstr "無法更新已安裝的 MediaTek 輔助套件。"

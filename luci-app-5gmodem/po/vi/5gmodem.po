@@ -7510,3 +7510,6 @@ msgstr "Không lưu được mật khẩu web của modem."
 
 msgid "Could not change the APN."
 msgstr "Không thể thay đổi APN."
+
+msgid "Could not update the installed MediaTek helper package."
+msgstr "Không thể cập nhật gói hỗ trợ MediaTek đã cài đặt."

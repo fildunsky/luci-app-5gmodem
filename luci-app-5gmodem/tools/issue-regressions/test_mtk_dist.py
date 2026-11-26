@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -31,6 +32,9 @@ class MtkDistributionTests(unittest.TestCase):
                                                capture_output=True, text=True)
             self.assertEqual(run('check').returncode, 1)
             self.assertEqual(run('write').returncode, 0)
+            manifest = json.loads((dist / 'manifest.json').read_text())
+            self.assertRegex(manifest['version'], r'^[0-9]+(?:[.][0-9]+)*-r[0-9]+$')
+            self.assertEqual(manifest['sizes'], {'5gmodem-mtk-at.apk': 3, '5gmodem-mtk-at.ipk': 3})
             self.assertEqual(run('check').returncode, 0)
             for name in ('5gmodem-mtk-at/src/usock.c', '5gmodem-mtk-at/root/etc/init.d/5gmodem-mtkat',
                          '.github/scripts/fast-build.sh', '.github/workflows/build-mtk.yml',

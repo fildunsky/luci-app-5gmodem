@@ -7510,3 +7510,6 @@ msgstr "无法保存调制解调器的网页密码。"
 
 msgid "Could not change the APN."
 msgstr "无法更改 APN。"
+
+msgid "Could not update the installed MediaTek helper package."
+msgstr "无法更新已安装的 MediaTek 辅助软件包。"

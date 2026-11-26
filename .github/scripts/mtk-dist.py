@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -28,8 +29,13 @@ def inputs():
 
 
 def snapshot():
-    return {'inputs_sha256': inputs(), 'packages': {
+    makefile = (ROOT / '5gmodem-mtk-at/Makefile').read_text()
+    version = re.search(r'^PKG_VERSION:=(.+)$', makefile, re.M).group(1).strip()
+    release = re.search(r'^PKG_RELEASE:=(.+)$', makefile, re.M).group(1).strip()
+    return {'version': f'{version}-r{release}', 'inputs_sha256': inputs(), 'packages': {
         f'5gmodem-mtk-at.{ext}': digest(DIST / f'5gmodem-mtk-at.{ext}')
+        for ext in ('apk', 'ipk')}, 'sizes': {
+        f'5gmodem-mtk-at.{ext}': (DIST / f'5gmodem-mtk-at.{ext}').stat().st_size
         for ext in ('apk', 'ipk')}}
 
 

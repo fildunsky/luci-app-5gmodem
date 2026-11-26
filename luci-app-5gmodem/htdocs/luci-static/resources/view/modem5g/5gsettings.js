@@ -140,6 +140,8 @@ function updLines(main, sub) {
 
 function updErrText(e, fb, pk) {
 	switch (e) {
+	case 'helper_update_failed':
+		return _('Could not update the installed MediaTek helper package.');
 	case 'world_broken':
 		return _('The package manager refuses to install anything: /etc/apk/world lists %s, which apk cannot find (usually a package installed from a file). If that package is no longer installed, delete its line from /etc/apk/world; otherwise install it again from its file. Then try the update again.').format(pk || '?');
 	case 'asset_pending':
@@ -463,6 +465,7 @@ function updProgress(d) {
 		floor = 95; cap = 99;
 		txt = _('Finishing: refreshing translations and caches…');
 	}
+	if (d.stage === 'download' && d.step === 'mtk') { txt = '5gmodem-mtk-at · ' + txt; }
 	updBar.floor = Math.max(updBar.floor, floor);
 	updBar.cap = Math.max(updBar.cap, cap);
 	updBar.text = txt;

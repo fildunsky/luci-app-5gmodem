@@ -7510,3 +7510,6 @@ msgstr "モデムのWebパスワードを保存できませんでした。"
 
 msgid "Could not change the APN."
 msgstr "APN を変更できませんでした。"
+
+msgid "Could not update the installed MediaTek helper package."
+msgstr "インストール済みの MediaTek 補助パッケージを更新できませんでした。"

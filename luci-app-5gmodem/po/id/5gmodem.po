@@ -7510,3 +7510,6 @@ msgstr "Gagal menyimpan kata sandi web modem."
 
 msgid "Could not change the APN."
 msgstr "Tidak dapat mengubah APN."
+
+msgid "Could not update the installed MediaTek helper package."
+msgstr "Tidak dapat memperbarui paket pembantu MediaTek yang terpasang."
