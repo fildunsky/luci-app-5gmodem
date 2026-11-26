@@ -1154,9 +1154,10 @@ webpass)
 			fi
 			uci -q commit "$CFG" || exit 1
 			_wp_key=${_wp_sec#m_}
-			for _wp_prefix in hilink tendaauth ztestok tendaapi asrsid; do
+			for _wp_prefix in hilink tendaauth ztestok ztejar tendaapi asrsid; do
 				rm -f /tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key" \
 					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".fail \
+					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".sha256 \
 					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".msmweb \
 					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".msmweb.fail \
 					/tmp/5gmodem/"$_wp_prefix"_*_"$_wp_key".sid \

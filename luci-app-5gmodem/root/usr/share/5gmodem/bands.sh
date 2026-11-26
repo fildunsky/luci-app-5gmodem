@@ -1098,8 +1098,20 @@ if [ -n "$_bs_at" ] && ! at_lock "$_bs_at" 15 && [ "$(uci -q get "5gmodem.$_bs_s
 			exit 1 ;;
 	esac
 fi
+_bands_hilink_api() {
+	local api
+	api=$(uci -q get "5gmodem.$_bs_sec.hl_api")
+	[ -z "$api" ] || { printf '%s' "$api"; return 0; }
+	[ -z "$_bs_at" ] || return 0
+	[ "$(uci -q get "5gmodem.$_bs_sec.kind")" = hilink ] || return 0
+	# Older configurations may lack the API classification although metrics work.
+	case "$(uci -q get "5gmodem.$_bs_sec.vidpid")" in
+		19d2:*) /usr/share/5gmodem/hilink.sh probe "$_bs_am" 2>/dev/null | jsonfilter -e '@.classify' 2>/dev/null ;;
+	esac
+}
+_bs_hl_api=$(_bands_hilink_api)
 if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = hilink ] \
-   && [ "$(uci -q get "5gmodem.$_bs_sec.hl_api")" = zte ]; then
+   && [ "$_bs_hl_api" = zte ]; then
 	_HL=/usr/share/5gmodem/hilink.sh
 	_bs_mtk=""; _bs_bandget=""; _bs_bandset=""
 	case "$(uci -q get "5gmodem.$_bs_sec.vidpid")" in
@@ -1175,7 +1187,7 @@ if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kin
 fi
 if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ] \
    && ! case "$(uci -q get "5gmodem.$_bs_sec.vidpid")" in 19d2:*|05c6:90b4) true ;; *) false ;; esac \
-   && [ "$(uci -q get "5gmodem.$_bs_sec.hl_api")" != zte ]; then
+   && [ "$_bs_hl_api" != zte ]; then
 	_HL=/usr/share/5gmodem/hilink.sh
 	_bs_full=$(uci -q get "5gmodem.$_bs_sec.band_full")
 	if [ -z "$_bs_full" ] && [ -n "$_bs_at" ] && [ -c "$_bs_at" ]; then

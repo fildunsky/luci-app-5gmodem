@@ -294,6 +294,26 @@ _zte_b64() {
 	printf '%s' "$1"
 }
 
+_zte_login_secret() {
+	local reply nonce first secret
+	reply=$(_zte_get "$1" 'LD&nomd' "$2")
+	nonce=$(_zj "$reply" LD)
+	[ -n "$nonce" ] || [ ! -f "$CACHE_DIR/ztestok_$(_sk "$1" "$2").sha256" ] || return 1
+	if [ -n "$nonce" ]; then
+		case "$nonce" in *[!A-Za-z0-9]*) return 1 ;; esac
+		command -v sha256sum >/dev/null 2>&1 || return 1
+		first=$(printf '%s' "$(_zte_pass "$2")" | sha256sum | awk '{print toupper($1)}')
+		case "$first" in ''|*[!0-9A-F]*) return 1 ;; esac
+		[ "${#first}" = 64 ] || return 1
+		secret=$(printf '%s' "$first$nonce" | sha256sum | awk '{print toupper($1)}')
+		case "$secret" in ''|*[!0-9A-F]*) return 1 ;; esac
+		[ "${#secret}" = 64 ] || return 1
+		printf 'sha256:%s' "$secret"
+	else
+		printf 'base64:%s' "$(_zte_b64 "$(_zte_pass "$2")" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')"
+	fi
+}
+
 # $2: modem path, so that the web password is the one of this modem and not of the active one.
 _zte_login() {
 	_zl_f="$CACHE_DIR/ztestok_$(_sk "$1" "$2")"
@@ -308,21 +328,30 @@ _zte_login() {
 		return 1
 	fi
 	_zl_src=$(_hl_src "$1" "$2")
+	_zl_secret=$(_zte_login_secret "$1" "$2") || return 1
+	_zl_jar="$CACHE_DIR/ztejar_$(_sk "$1" "$2")"
 	_zl_h=$(curl -s -i --max-time 8 ${_zl_src:+--interface "$_zl_src"} -A "$UA" \
+		-b "$_zl_jar" -c "$_zl_jar" \
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
-		-d "isTest=false&goformId=LOGIN&password=$(_zte_b64 "$(_zte_pass "$2")")" \
+		-d "isTest=false&goformId=LOGIN&password=${_zl_secret#*:}" \
 		"http://$1/$(_zte_setpath "$1" "$2")" 2>/dev/null)
 	_zl_t=$(printf '%s' "$_zl_h" | sed -n 's/.*[Ss]et-[Cc]ookie: *stok=\([^;[:space:]]*\).*/\1/p' | head -1)
+	_zl_result=$(printf '%s' "$_zl_h" | sed -n 's/.*"result"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | tail -1)
 	if [ -z "$_zl_t" ]; then
-		case "$_zl_h" in *'"result":"0"'*|*'"result":"4"'*) _zl_t="-" ;; esac
+		case "$_zl_result" in 0|4) _zl_t="-" ;; esac
 	fi
+	case "$_zl_result" in ''|0|4) : ;; *) _zl_t="" ;; esac
 	# no HTTP answer at all (stick rebooting, web server stuck) is not a wrong password:
 	# no 15-minute back-off, or the levels would stay hidden long after the stick is back
 	[ -n "$_zl_t" ] || [ -n "$_zl_h" ] || return 1
 	if [ -n "$_zl_t" ]; then
 		rm -f "$_zl_bad"
+		case "$_zl_secret" in
+			sha256:*) : > "$_zl_f.sha256" ;;
+			*) rm -f "$_zl_f.sha256" ;;
+		esac
 		printf '%s' "$_zl_t" > "$_zl_f"
 		printf '%s' "$_zl_t"
 		return 0
@@ -357,6 +386,12 @@ _zte_setpath() { _zsp=$(_zte_paths "$1" "$2"); printf '%s' "${_zsp##* }"; }
 _zte_get() {
 	_zg_src=$(_hl_src "$1" "$3")
 	_zg_tok=$(cat "$CACHE_DIR/ztestok_$(_sk "$1" "$3")" 2>/dev/null)
+	_zg_jar="$CACHE_DIR/ztejar_$(_sk "$1" "$3")"
+	if [ -s "$_zg_jar" ]; then
+		_zg_cookie="$_zg_jar"
+	else
+		_zg_cookie=""; [ -z "$_zg_tok" ] || [ "$_zg_tok" = - ] || _zg_cookie="stok=$_zg_tok"
+	fi
 	[ "$_zg_tok" = "-" ] && _zg_tok=""
 	_zg_md='multi_data=1&'
 	case "${2%%&*}" in sms_data_total) _zg_md= ;; esac
@@ -364,18 +399,46 @@ _zte_get() {
 	curl -s --max-time 6 ${_zg_src:+--interface "$_zg_src"} -A "$UA" \
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
-		${_zg_tok:+-b "stok=$_zg_tok"} \
+		${_zg_cookie:+-b "$_zg_cookie"} \
 		"http://$1/$(_zte_getpath "$1" "$3")?isTest=false&${_zg_md}cmd=$2" 2>/dev/null
+}
+
+_zte_ad() {
+	local reply nonce version release token signature
+	reply=$(_zte_get "$1" 'wa_inner_version,cr_version,RD' "$2")
+	nonce=$(_zj "$reply" RD)
+	version=$(_zj "$reply" wa_inner_version)
+	release=$(_zj "$reply" cr_version)
+	[ -n "$nonce" ] && [ -n "$version$release" ] || return 1
+	case "$nonce" in *[!A-Za-z0-9]*) return 1 ;; esac
+	command -v md5sum >/dev/null 2>&1 || return 1
+	token=$(printf '%s' "$version$release" | md5sum | cut -d' ' -f1)
+	case "$token" in ''|*[!0-9a-f]*) return 1 ;; esac
+	[ "${#token}" = 32 ] || return 1
+	signature=$(printf '%s' "$token$nonce" | md5sum | cut -d' ' -f1)
+	case "$signature" in ''|*[!0-9a-f]*) return 1 ;; esac
+	[ "${#signature}" = 32 ] || return 1
+	printf '%s' "$signature"
 }
 
 _zte_set() {
 	_zs_src=$(_hl_src "$1" "$4")
+	_zs_body="$2"; _zs_jar="$3"
+	[ -n "$_zs_jar" ] || { [ ! -s "$CACHE_DIR/ztejar_$(_sk "$1" "$4")" ] || _zs_jar="$CACHE_DIR/ztejar_$(_sk "$1" "$4")"; }
+	case "$_zs_body" in
+		goformId=LOGIN\&*) : ;;
+		*)
+			if [ -f "$CACHE_DIR/ztestok_$(_sk "$1" "$4").sha256" ]; then
+				_zs_ad=$(_zte_ad "$1" "$4") || return 1
+				_zs_body="$_zs_body&AD=$_zs_ad"
+			fi ;;
+	esac
 	curl -s --max-time 8 ${_zs_src:+--interface "$_zs_src"} -A "$UA" \
-		${3:+-b "$3" -c "$3"} \
+		${_zs_jar:+-b "$_zs_jar" -c "$_zs_jar"} \
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
-		-d "isTest=false&$2" \
+		-d "isTest=false&$_zs_body" \
 		"http://$1/$(_zte_setpath "$1" "$4")" 2>/dev/null
 }
 
@@ -939,7 +1002,7 @@ zte_metrics_json() {
 	_HLP=$(_hl_path "$1")
 	_hl_ctx "$_HLP" || return 1
 	_a="$_HC_A"
-	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,cr_version,wan_apn,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes,nv_rsrp,nv_rsrq,nv_sinr,nv_pci,nv_arfcn,mcc,mnc,tac_code"
+	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,cr_version,wan_apn,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes,nv_rsrp,nv_rsrq,nv_sinr,nv_pci,nv_arfcn,mcc,mnc,tac_code,rsrq,Z_SINR"
 	_z_mt60=""
 	if olax_mt60_usb "$_HLP"; then
 		_z_mt60=1
@@ -971,9 +1034,11 @@ zte_metrics_json() {
 	[ -n "$_op" ] || _op=$(_zj "$_r" network_provider)
 	_bars=$(_zj "$_r" signalbar | tr -cd '0-9')
 	_pct=""; [ -n "$_bars" ] && _pct=$(( _bars * 20 )) && [ "$_pct" -gt 100 ] && _pct=100
-	_rsrp=$(_zj "$_r" lte_rsrp | tr -cd '0-9-')
+	_rsrp=$(_zj "$_r" lte_rsrp | grep -oE -- '-?[0-9]+(\.[0-9]+)?' | head -1)
 	_rsrq=$(_zj "$_r" lte_rsrq | tr -cd '0-9.-')
+	[ -n "$_rsrq" ] || _rsrq=$(_zj "$_r" rsrq | tr -cd '0-9.-')
 	_sinr=$(_zj "$_r" lte_snr | tr -cd '0-9.-')
+	[ -n "$_sinr" ] || _sinr=$(_zj "$_r" Z_SINR | tr -cd '0-9.-')
 	_rssi=$(_zj "$_r" lte_rssi | grep -oE -- '-?[0-9]+' | head -1)
 	if [ -n "$_z_mt60" ]; then
 		case "$_ntype" in *LTE*)
@@ -1007,7 +1072,7 @@ zte_metrics_json() {
 	_zpci=$(_zj "$_r" lte_pci | tr -cd '0-9')
 	case "$_ntype" in *LTE*) [ -n "$_zpci" ] || _zpci=$(_zj "$_r" nv_pci | tr -cd '0-9') ;; esac
 	_zearfcn=""; case "$_ntype" in *LTE*) _zearfcn=$(_zj "$_r" nv_arfcn | tr -cd '0-9') ;; esac
-	_zband=$(_zj "$_r" lte_band | tr -cd '0-9')
+	_zband=$(_zj "$_r" lte_band | sed -nE 's/^(B|Band *)?([0-9]{1,3})$/\2/p')
 	[ -n "$_zband" ] || _zband=$(_zj "$_r" wan_active_band | sed -n 's/^LTE[^0-9]*\([0-9][0-9]*\).*/\1/p')
 	# The MT60's band_reg may keep the old band after a handover or RAT change.
 	_zpband=""; [ -n "$_zband" ] && _zpband="B$_zband"
@@ -1195,7 +1260,7 @@ ZX_EOF
 			_ztm=$(mtk_temps "$_a" "$_HLP")
 			[ -n "$_ztm" ] && printf '"temps":"%s",' "$_ztm" ;;
 	esac
-	_zct=$(_zj "$_r" realtime_time | tr -cd '0-9')
+	_zct=$(_zj "$_r" realtime_time | awk '/^[0-9]+$/ { printf "%.0f", $0 + 0 }')
 	if [ -n "$_zct" ] && [ "$_pps" = ppp_connected ]; then
 		printf '"conn_time":"%s","conn_time_sec":"%s",' "$(printf "%dd, %02d:%02d:%02d" \
 			$(( _zct / 86400 )) $(( _zct / 3600 % 24 )) $(( _zct / 60 % 60 )) $(( _zct % 60 )))" "$_zct"
@@ -2284,15 +2349,25 @@ hl_setbands3g() { _hl_setbands 3g "$1" "$2"; }
 hl_setbands2g() { _hl_setbands 2g "$1" "$2"; }
 
 _zte_login_jar() {
+	_zlj_nonce=""
+	if [ "$3" = 1 ] && [ ! -f "$CACHE_DIR/ztestok_$(_sk "$1" "$2").sha256" ]; then
+		_zlj_nonce=$(_zj "$(_zte_get "$1" 'LD&nomd' "$2")" LD)
+	fi
+	if [ "$3" != 1 ] || [ -n "$_zlj_nonce" ] || [ -f "$CACHE_DIR/ztestok_$(_sk "$1" "$2").sha256" ]; then
+		rm -f "$CACHE_DIR/ztestok_$(_sk "$1" "$2")"
+		_zte_login "$1" "$2" >/dev/null
+		return $?
+	fi
 	_zlj_p=$(_zte_pass "$2")
 	if [ "$3" = 1 ]; then
 		_zlj_u=$(uci -q get "$CFG.m_$(echo "$2" | sed 's/[^A-Za-z0-9]/_/g').web_user")
 		_zlj_p="${_zlj_u:-admin}
 $_zlj_p"
 	fi
-	case "$(_zte_set "$1" "goformId=LOGIN&password=$(_zte_b64 "$_zlj_p" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')" \
-		"$CACHE_DIR/ztejar_$(_sk "$1" "$2")" "$2")" in
-		*'"result":"0"'*|*'"result":"4"'*) return 0 ;;
+	_zlj_r=$(_zte_set "$1" "goformId=LOGIN&password=$(_zte_b64 "$_zlj_p" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')" \
+		"$CACHE_DIR/ztejar_$(_sk "$1" "$2")" "$2")
+	case "$(_zj "$_zlj_r" result)" in
+		0|4) return 0 ;;
 	esac
 	return 1
 }

@@ -34,13 +34,14 @@ curl() { _i=""; while [ $# -gt 0 ]; do [ "$1" = --interface ] && _i="$2"; shift;
 _zte_getpath() { echo goform/goform_get_cmd_process; }
 _zte_setpath() { echo goform/goform_set_cmd_process; }
 _zte_b64() { printf '%s' "$1"; }
+_zte_login_secret() { printf 'base64:test'; }
 logger() { :; }
 '''
 
 HELPERS = ('_netdev_for', '_srcip_for', '_addr_for', '_hl_ctx', '_hl_src',
            '_web_opt', '_zte_get', '_zte_set', '_zte_login',
            '_tenda_raw', '_tenda_post', '_yota_get')
-ONE_LINERS = ('_hl_path', '_web_pass', '_zte_pass', '_tk')
+ONE_LINERS = ('_hl_path', '_web_pass', '_zte_pass', '_tk', '_sk')
 MSM_CONFIG = {'reply': 'ok', 'simnum': 2, 'simhaspwd': False}
 
 
@@ -79,6 +80,8 @@ read_auth() {
 touch "$CACHE_DIR"/tendaauth_192_168_8_1_1_1.fail "$CACHE_DIR"/tendaauth_192_168_8_1_1_2.fail
 touch "$CACHE_DIR"/hilink_192_0_2_1_1_1.msmweb "$CACHE_DIR"/hilink_192_0_2_1_1_1.msmweb.fail
 touch "$CACHE_DIR"/hilink_192_0_2_1_1_2.msmweb.fail
+touch "$CACHE_DIR"/ztestok_192_0_2_1_1_1.sha256 "$CACHE_DIR"/ztejar_192_0_2_1_1_1
+touch "$CACHE_DIR"/ztestok_192_0_2_1_1_2.sha256 "$CACHE_DIR"/ztejar_192_0_2_1_1_2
 read_auth
 webpass webpass 1-1 empty
 test ! -e "$CACHE_DIR"/tendaauth_192_168_8_1_1_1.fail || exit 1
@@ -86,6 +89,10 @@ test -e "$CACHE_DIR"/tendaauth_192_168_8_1_1_2.fail || exit 1
 test ! -e "$CACHE_DIR"/hilink_192_0_2_1_1_1.msmweb || exit 1
 test ! -e "$CACHE_DIR"/hilink_192_0_2_1_1_1.msmweb.fail || exit 1
 test -e "$CACHE_DIR"/hilink_192_0_2_1_1_2.msmweb.fail || exit 1
+test ! -e "$CACHE_DIR"/ztestok_192_0_2_1_1_1.sha256 || exit 1
+test ! -e "$CACHE_DIR"/ztejar_192_0_2_1_1_1 || exit 1
+test -e "$CACHE_DIR"/ztestok_192_0_2_1_1_2.sha256 || exit 1
+test -e "$CACHE_DIR"/ztejar_192_0_2_1_1_2 || exit 1
 (webpass webpass 1-1 get)
 read_auth
 webpass webpass 1-1 set 'synthetic password'
