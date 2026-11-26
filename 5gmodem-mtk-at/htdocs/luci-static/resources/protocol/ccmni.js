@@ -4,6 +4,8 @@
 
 network.registerErrorCode('NO_AT_CLIENT',   _('No AT control port found'));
 network.registerErrorCode('NO_ATCI',        _('No AT control port found'));
+network.registerErrorCode('NO_ATTACH_CONTEXT', _('Unable to read the modem connection settings'));
+network.registerErrorCode('ATTACH_CONTEXT_FAILED', _('Unable to configure the modem connection settings'));
 network.registerErrorCode('NO_ADDRESS',     _('Modem did not provide an IP address'));
 network.registerErrorCode('NOT_REGISTERED', _('The modem is not registered on any network — check the antennas and the signal level'));
 
@@ -45,7 +47,7 @@ return network.registerProtocol('ccmni', {
 		o.default = 'ccmni0';
 
 		o = s.taboption('general', form.Value, 'apn', _('APN'));
-		o.placeholder = _('As set in the modem');
+		o.placeholder = _('Automatic');
 		o.validate = function(section_id, value) {
 			if (value == null || value == '')
 				return true;

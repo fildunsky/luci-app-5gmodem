@@ -66,7 +66,7 @@ proto_ccmni_init_config() {
 
 proto_ccmni_setup() {
 	local interface="$1"
-	local ifname at_device apn pdptype regtimeout defaultroute peerdns metric i ip rdp dns1 dns2 ctx cur_pdp cur_apn zone6
+	local ifname at_device apn pdptype regtimeout defaultroute peerdns metric i ip rdp dns1 dns2 ctx cur_pdp cur_apn zone6 context_changed=0
 	json_get_vars ifname at_device apn pdptype regtimeout defaultroute peerdns metric
 	[ -n "$at_device" ] && MTK_SOCK="$at_device"
 	ifname="${ifname:-ccmni0}"
@@ -110,40 +110,44 @@ proto_ccmni_setup() {
 				done
 				;;
 		esac
+	fi
+
+	# SIM reinsertion can restore the modem's placeholder attach context.
+	# An unset APN means automatic selection, not reuse of that context.
+	ctx=$(ccmni_ctx)
+	[ -n "$ctx" ] || {
+		proto_notify_error "$interface" NO_ATTACH_CONTEXT
+		return 1
+	}
+	cur_pdp="${ctx%% *}"
+	cur_apn="${ctx#* }"
+	[ "$ctx" = "$cur_pdp" ] && cur_apn=""
+	[ -n "$pdptype" ] || pdptype="$cur_pdp"
+	if [ "$pdptype" != "$cur_pdp" ] || [ "$apn" != "$cur_apn" ]; then
+		echo "ccmni: configuring attach context before registration"
 		case "$(ccmni_at 'AT+CFUN?')" in
-			*"CFUN: 0"*|*"CFUN: 4"*)
-				ctx=$(ccmni_ctx)
-				cur_pdp="${ctx%% *}"
-				cur_apn="${ctx#* }"
-				[ "$ctx" = "$cur_pdp" ] && cur_apn=""
-				[ -n "$apn" ] || apn="$cur_apn"
-				[ -n "$pdptype" ] && { [ "$pdptype" != "$cur_pdp" ] || [ "$apn" != "$cur_apn" ]; } && \
-					ccmni_at "AT+CGDCONT=0,\"$pdptype\",\"$apn\"" >/dev/null
+			*"CFUN: 0"*|*"CFUN: 4"*) ;;
+			*)
+				ccmni_at "AT+EFUN=0" 15000 | grep -q '^OK$' || {
+					proto_notify_error "$interface" ATTACH_CONTEXT_FAILED
+					return 1
+				}
+				sleep 3
 				;;
 		esac
+		ccmni_at "AT+CGDCONT=0,\"$pdptype\",\"$apn\"" | grep -q '^OK$' || {
+			proto_notify_error "$interface" ATTACH_CONTEXT_FAILED
+			return 1
+		}
+		context_changed=1
+	fi
+
+	if [ "$context_changed" = 1 ] || ! ccmni_registered; then
 		ccmni_at "AT+CMEE=1" >/dev/null
 		ccmni_at "AT+EMSR=0,0" >/dev/null
 		ccmni_at "AT+EGFB=0,1" >/dev/null
 		ccmni_at "AT+EGTYPE=3" >/dev/null
 		ccmni_at "AT+EGTYPE=2" >/dev/null
-		ccmni_at "AT+EFUN=1" 15000 >/dev/null
-		for i in $(seq 1 "$regtimeout"); do
-			ccmni_registered && break
-			sleep 1
-		done
-		ccmni_registered || ccmni_cycle "$regtimeout"
-	fi
-	ctx=$(ccmni_ctx)
-	cur_pdp="${ctx%% *}"
-	cur_apn="${ctx#* }"
-	[ "$ctx" = "$cur_pdp" ] && cur_apn=""
-	[ -n "$pdptype" ] || pdptype="$cur_pdp"
-	[ -n "$apn" ] || apn="$cur_apn"
-	if [ -n "$pdptype" ] && { [ "$pdptype" != "$cur_pdp" ] || [ "$apn" != "$cur_apn" ]; }; then
-		echo "ccmni: attach context ($cur_pdp \"$cur_apn\") -> ($pdptype \"$apn\"), restarting the radio"
-		ccmni_at "AT+EFUN=0" 15000 >/dev/null
-		sleep 3
-		ccmni_at "AT+CGDCONT=0,\"$pdptype\",\"$apn\"" >/dev/null
 		ccmni_at "AT+EFUN=1" 15000 >/dev/null
 		for i in $(seq 1 "$regtimeout"); do
 			ccmni_registered && break
