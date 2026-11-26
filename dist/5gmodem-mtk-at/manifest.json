@@ -1,7 +1,7 @@
 {
-  "inputs_sha256": "dfe6609b92d6e60f23e02cfdb235cab9ec393bdcf183aaa0a0f2001b031628f9",
+  "inputs_sha256": "9191a6f2a5a1a129456756663e1f671a8ef19eaf689e6e7e2d9dba66181d8d7d",
   "packages": {
-    "5gmodem-mtk-at.apk": "fb3565522f18efd6d518df471d52f390f6f7fb75ee55cae0e0aa7cdd9224da5d",
-    "5gmodem-mtk-at.ipk": "54078a7f0022e09c5a0cf62aa4f37dfd165f80297e868a22e88580e6be137c7e"
+    "5gmodem-mtk-at.apk": "a32264f509e4ad6e4370d67ba0a4d95f31e470af44c094650d6125598c595d32",
+    "5gmodem-mtk-at.ipk": "5cfb180f238d9c87646138b95ff01f05b7a55b74e50a304704d30a5c3f9cb44c"
   }
 }
