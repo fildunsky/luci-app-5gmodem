@@ -6,6 +6,8 @@ network.registerErrorCode('NO_AT_CLIENT',   _('No AT control port found'));
 network.registerErrorCode('NO_ATCI',        _('No AT control port found'));
 network.registerErrorCode('NO_ATTACH_CONTEXT', _('Unable to read the modem connection settings'));
 network.registerErrorCode('ATTACH_CONTEXT_FAILED', _('Unable to configure the modem connection settings'));
+network.registerErrorCode('PACKET_ATTACH_FAILED', _('Unable to restore the modem data session after SIM insertion'));
+network.registerErrorCode('RADIO_PREPARE_FAILED', _('Unable to prepare the modem radio after SIM insertion'));
 network.registerErrorCode('NO_ADDRESS',     _('Modem did not provide an IP address'));
 network.registerErrorCode('NOT_REGISTERED', _('The modem is not registered on any network — check the antennas and the signal level'));
 

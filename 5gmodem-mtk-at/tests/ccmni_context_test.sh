@@ -20,10 +20,16 @@ ccmni_at() {
   'AT+CEREG?')
    if [ "$(cat "$work/registered")" = 1 ]; then echo '+CEREG: 2,1'; else echo '+CEREG: 2,2'; fi ;;
   'AT+CGDCONT?') cat "$work/context" ;;
-  AT+EFUN=0) echo 0 > "$work/registered"; echo OK ;;
+  AT+EFUN=0)
+   if [ "${reject_efun:-0}" = 1 ]; then echo '+CME ERROR: 3'; return; fi
+   echo 0 > "$work/registered"; echo OK ;;
   AT+CGDCONT=*)
    if [ "$reject_write" = 1 ]; then echo ERROR; else echo "$1" > "$work/written"; echo OK; fi ;;
   AT+EFUN=1) echo 1 > "$work/registered"; echo OK ;;
+  'AT+CGATT?') printf '+CGATT: %s\n' "$(cat "$work/registered")" ;;
+  AT+CFUN=4)
+   if [ "${reject_prepare:-0}" = 1 ]; then echo ERROR; else echo OK; fi ;;
+  AT+CGATT=1) echo 1 > "$work/registered"; echo OK ;;
   'AT+CGPADDR=0') : ;;
   *) echo OK ;;
  esac
@@ -63,4 +69,25 @@ initial_registered=0 current_apn=placeholder.invalid reject_write=1
 run_case
 [ "$(cat "$work/error")" = ATTACH_CONTEXT_FAILED ]
 ! grep -q '^AT+EFUN=1$' "$work/commands"
-echo 'PASS: ccmni attach context (6 scenarios)'
+# EFUN=0 can be rejected after insertion while packet registration is off.
+reject_write=0 reject_efun=1
+run_case
+[ "$(cat "$work/written")" = 'AT+CGDCONT=0,"IPV4V6",""' ]
+[ "$(cat "$work/error")" = NO_ADDRESS ]
+grep -q '^AT+CGATT=1$' "$work/commands"
+! grep -q '^AT+EFUN=1$' "$work/commands"
+# A rejected radio shutdown with a live packet session is not safe to ignore.
+initial_registered=1
+run_case
+[ ! -e "$work/written" ]
+[ "$(cat "$work/error")" = ATTACH_CONTEXT_FAILED ]
+# A SIM-wait cancellation can leave the radio in CFUN=0.
+initial_cfun=0 initial_registered=0 reject_efun=0
+run_case; assert_write IPV4V6 ''
+awk '/^AT\+CFUN=4$/{prepared=1} /^AT\+EFUN=1$/{if (!prepared) exit 1; attached=1} END {if (!attached) exit 1}' "$work/commands"
+# Preparation failure must not advertise a successful link or start attaching.
+reject_prepare=1
+run_case
+[ "$(cat "$work/error")" = RADIO_PREPARE_FAILED ]
+! grep -q '^AT+EFUN=1$' "$work/commands"
+echo 'PASS: ccmni attach context (10 scenarios)'
