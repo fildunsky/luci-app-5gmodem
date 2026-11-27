@@ -38,6 +38,11 @@ function mapByKey(k) {
 	for (var i = 0; i < MAPS.length; i++) { if (MAPS[i].k === k) { return MAPS[i]; } }
 	return null;
 }
+var OPENFREEMAP_ATT = '<a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a> &copy; <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> ' + OSM_ATT;
+[ 'liberty', 'positron', 'bright', 'dark' ].forEach(function(style) {
+	MAPS.push({ k: 'ofm-' + style, n: 'OpenFreeMap ' + style.charAt(0).toUpperCase() + style.slice(1),
+		u: 'https://tiles.openfreemap.org/styles/' + style, vector: true, z: 20, a: OPENFREEMAP_ATT });
+});
 var POLL_MS = 5000;
 var TRACK_MAX = 2000;
 var PHONE_MQ = '(max-width: 700px)';
@@ -80,6 +85,53 @@ function loadLeaflet() {
 		return exp;
 	}).catch(function(e) { _leaflet = null; throw e; });
 	return _leaflet;
+}
+
+// Keep the optional vector engine out of router flash and out of the raster-map path.
+// Fetch integrity is checked before evaluating pinned CommonJS builds with private exports.
+var MAPLIBRE_ASSETS = {
+	js: [ 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.1/dist/maplibre-gl.js', 'sha384-nXMl9YiLoSG5KBPTFgvxVuIqQQcqIvo0bFrvoEaGJC6r7IibIzF1S36Zbf/sKBtL' ],
+	css: [ 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.1/dist/maplibre-gl.css', 'sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK' ],
+	adapter: [ 'https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js', 'sha384-tXYNKOHx4T02jMP7YYCtBxPIv1B5gaA5mcVPBzqMp6d7VzWzxJgI2aWF/nJLrQdS' ]
+};
+var _maplibre = null, _maplibreCss = null;
+function fetchMapCode(asset) {
+	var abort = new AbortController();
+	var timer = window.setTimeout(function() { abort.abort(); }, 20000);
+	return window.fetch(asset[0], { integrity: asset[1], mode: 'cors', credentials: 'omit', signal: abort.signal }).then(function(r) {
+		if (!r.ok) { throw new Error('HTTP ' + r.status); }
+		return r.text();
+	}).finally(function() { window.clearTimeout(timer); });
+}
+function loadMapLibreCss() {
+	if (_maplibreCss) { return _maplibreCss; }
+	_maplibreCss = new Promise(function(resolve, reject) {
+		var link = E('link', { rel: 'stylesheet', href: MAPLIBRE_ASSETS.css[0],
+			integrity: MAPLIBRE_ASSETS.css[1], crossorigin: 'anonymous' });
+		var timer = window.setTimeout(function() { link.remove(); reject(new Error('map CSS timeout')); }, 20000);
+		link.onload = function() { window.clearTimeout(timer); resolve(); };
+		link.onerror = function() { window.clearTimeout(timer); link.remove(); reject(new Error('map CSS')); };
+		document.head.appendChild(link);
+	}).catch(function(e) { _maplibreCss = null; throw e; });
+	return _maplibreCss;
+}
+function loadMapLibre(lf) {
+	if (_maplibre) { return _maplibre; }
+	_maplibre = Promise.all([ fetchMapCode(MAPLIBRE_ASSETS.js), fetchMapCode(MAPLIBRE_ASSETS.adapter), loadMapLibreCss() ]).then(function(parts) {
+		var glModule = { exports: {} }, adapterModule = { exports: {} };
+		(new Function('exports', 'module', parts[0]))(glModule.exports, glModule);
+		var gl = glModule.exports;
+		if (typeof gl.Map !== 'function' || (typeof gl.supported === 'function' && !gl.supported())) { throw new Error('WebGL unavailable'); }
+		(new Function('exports', 'module', 'require', parts[1]))(adapterModule.exports, adapterModule, function(name) {
+			if (name === 'leaflet') { return lf; }
+			if (name === 'maplibre-gl') { return gl; }
+			throw new Error('Unknown map dependency');
+		});
+		var adapter = adapterModule.exports;
+		if (typeof adapter.maplibreGL !== 'function') { throw new Error('map adapter'); }
+		return adapter;
+	}).catch(function(e) { _maplibre = null; throw e; });
+	return _maplibre;
 }
 
 function num(v, digits) {
@@ -238,21 +290,48 @@ return view.extend({
 
 		// Paints the chosen style: tile layer, projection, the dark-interface filter.
 		function setMapStyle(k, remember) {
-			var m = styleOf(k);
+			var m = styleOf(k), serial = (st.styleSerial || 0) + 1;
+			st.styleSerial = serial;
 			mapKey = m.k;
+			mp.style.value = mapKey;
 			if (remember) { try { window.localStorage.setItem('5gmodem.gps.map', m.k); } catch (e) {} }
-			mapSec.classList.toggle('tg-gps-dark', !!m.inv && isDarkUI(mapSec));
-			if (!st.map || !st.lf) { return; }
-			var lf = st.lf, c = st.map.getCenter(), z = Math.min(st.map.getZoom(), m.z);
-			if (st.tiles) { st.map.removeLayer(st.tiles); st.tiles = null; }
-			var crs = (m.crs === 3395) ? lf.CRS.EPSG3395 : lf.CRS.EPSG3857;
-			var crsChanged = st.map.options.crs !== crs;
-			st.map.options.crs = crs;
-			st.map.setMaxZoom(m.z);
-			st.tiles = lf.tileLayer(m.u, { 'maxZoom': m.z, 'maxNativeZoom': m.nz || m.z, 'attribution': m.a || '' }).addTo(st.map);
-			st.tiles.bringToBack();
-			// another projection: every layer is laid out again around the same point
-			if (crsChanged) { if (st.map._resetView) { st.map._resetView(c, z); } else { st.map.setView(c, z, { 'animate': false }); } }
+			if (!st.map || !st.lf) { return Promise.resolve(); }
+			function apply(adapter) {
+				if (serial !== st.styleSerial || !st.map) { return; }
+				var lf = st.lf, map = st.map, old = st.tiles, c = map.getCenter(), z = Math.min(map.getZoom(), m.z);
+				var crs = m.crs === 3395 ? lf.CRS.EPSG3395 : lf.CRS.EPSG3857;
+				var crsChanged = map.options.crs !== crs;
+				map.options.crs = crs;
+				map.setMaxZoom(m.z);
+				map.setMinZoom(m.vector ? 1 : 0);
+				map.setMaxBounds(m.vector ? [[-85.05112878, -180], [85.05112878, 180]] : null);
+				if (crsChanged) { if (map._resetView) { map._resetView(c, z); } else { map.setView(c, z, { animate: false }); } }
+				var next = m.vector ? adapter.maplibreGL({ style: m.u, interactive: false,
+					attributionControl: { customAttribution: m.a } }) :
+					lf.tileLayer(m.u, { maxZoom: m.z, maxNativeZoom: m.nz || m.z, attribution: m.a || '' });
+				try { next.addTo(map); } catch (e) {
+					// A failed WebGL constructor leaves a registered Leaflet layer
+					// without a GL map. Remove that partial container and its events.
+					if (m.vector && next.getMaplibreMap && !next.getMaplibreMap()) {
+						if (next._container) { next._container.remove(); }
+						next.onRemove = function() {};
+					}
+					try { map.removeLayer(next); } catch (ignored) {}
+					throw e;
+				}
+				if (old) { map.removeLayer(old); }
+				st.tiles = next;
+				if (next.bringToBack) { next.bringToBack(); }
+				mapSec.classList.toggle('tg-gps-dark', !!m.inv && isDarkUI(mapSec));
+			}
+			function failed() {
+				if (serial !== st.styleSerial || !st.map) { return; }
+				ui.addNotification(null, E('p', {}, _('Could not load the map component.')), 'warning');
+				return setMapStyle('osm', remember);
+			}
+			if (m.vector) { return loadMapLibre(st.lf).then(apply).catch(failed); }
+			apply();
+			return Promise.resolve();
 		}
 		setMapStyle(mapKey, false);
 
@@ -521,7 +600,8 @@ return view.extend({
 				setFollow(st.follow);
 				st.map.on('dragstart', function() { setFollow(false); });
 				if (window.ResizeObserver) {
-					new ResizeObserver(function() { if (st.map) { st.map.invalidateSize(); } }).observe(mp.box);
+					st.resizeObserver = new ResizeObserver(function() { if (st.map) { st.map.invalidateSize(); } });
+					st.resizeObserver.observe(mp.box);
 				}
 				mapMsg('');
 				drawMap();
@@ -700,6 +780,9 @@ return view.extend({
 			if (st.timer) { window.clearTimeout(st.timer); st.timer = null; }
 			if (!document.body.contains(root)) {
 				if (st.ageTimer) { window.clearInterval(st.ageTimer); st.ageTimer = null; }
+				st.styleSerial = (st.styleSerial || 0) + 1;
+				if (st.resizeObserver) { st.resizeObserver.disconnect(); st.resizeObserver = null; }
+				if (st.map) { st.map.remove(); st.map = null; }
 				return;
 			}
 			var next = function() { st.timer = window.setTimeout(tick, POLL_MS); };

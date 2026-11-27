@@ -294,7 +294,7 @@ nodes, nothing is rebuilt on a poll.
 
 The map is Leaflet 1.9.4 (BSD-2, `htdocs/luci-static/resources/5gmodem/leaflet.js` and
 `leaflet.css`, license in `root/usr/share/5gmodem/licenses/Leaflet-BSD-2.txt`). It ships in the
-package, so nothing is loaded from a CDN. The default marker images are not shipped: the marker is a
+package. Raster maps use no CDN scripts. The default marker images are not shipped: the marker is a
 `circleMarker`, with an accuracy circle of HDOP × 5 m around it when HDOP is known.
 
 Leaflet assigns `window.L` at the end of its bundle, and `L` is LuCI itself. `gps.js` therefore
@@ -316,12 +316,38 @@ dimmed with a CSS filter; the track and marker keep their colours.
 The attribution corner shows only the tile provider's credit: the "Leaflet" prefix (link and
 flag) is removed with `attributionControl.setPrefix(false)`.
 
-Tiles come from OpenStreetMap (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) with attribution,
-or from `gps_tiles` (an `https://` template with `{z}`, `{x}`, `{y}`). The browser loads the tiles,
-so the tile server learns the area shown; the note under the map names the server. Yandex Maps and
-2GIS are offered only as links: their map APIs need a key, and their tile servers are not meant for
-third-party pages. The track is kept in the page (at most 2000 points) and is lost when the page
-closes.
+Raster presets include OpenStreetMap, OpenStreetMap HOT, OpenTopoMap, Esri and Yandex,
+with provider attribution, or a custom `gps_tiles` HTTPS template containing `{z}`, `{x}`, `{y}`.
+Yandex uses EPSG:3395; other presets use EPSG:3857. The browser loads the tiles, so the
+provider learns the area shown. The Open in links open the position in external map sites.
+The track is kept in the page (at most 2000 points) and is lost when the page closes.
+
+### Optional OpenFreeMap vector basemaps
+
+The existing map picker also offers OpenFreeMap Liberty, Positron, Bright and Dark.
+These use the Leaflet map with MapLibre GL Leaflet, so the position marker, accuracy
+circle, track and controls remain Leaflet layers. Switching to or from Yandex also
+switches EPSG:3395/EPSG:3857 while preserving the current center. Native dark vector
+styles are not passed through the raster dark-theme filter.
+
+Only selecting one of these styles loads the additional engine: MapLibre GL JS
+5.24.1, its stylesheet and MapLibre GL Leaflet 0.1.4, from version-pinned jsDelivr
+URLs. The router package does not include these bundles or GeoLibre. The browser
+checks SHA-384 integrity on all three assets. JavaScript runs with private CommonJS
+exports; the adapter receives our Leaflet instance through an explicit require
+function and never takes LuCI's global `L`. Requests time out and can be retried.
+
+While a vector engine is loading, the current basemap remains visible. A newer
+selection cancels the old selection's eventual application. Loading or WebGL
+initialization failures show the existing map-component warning and select OSM.
+Changing back removes the WebGL layer; leaving the GPS view also removes the map
+and disconnects its resize observer. No renderer is loaded for a raster-only session.
+The browser requests vector styles, tiles, glyphs and sprites from the provider;
+existing automatic/manual map-loading preferences still apply. Provider attribution
+is retained in Leaflet's attribution control.
+
+References: <https://openfreemap.org/quick_start/#using-leaflet> and
+<https://github.com/maplibre/maplibre-gl-leaflet>.
 
 ### Settings block on the tab
 

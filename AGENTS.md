@@ -16,6 +16,7 @@ history. Follow these rules strictly.
 ## Git
 - Do not commit or push unless the maintainer asks for it.
 - Before a release, inspect every worktree for staged, unstaged, and untracked work. Include all in-scope pending fixes and verify them in the release candidate before pushing the tag.
+- Before releasing, read `docs/subsystems/ci.md`. Prepare the English release body and all six UTF-8 translation assets (`ru`, `id`, `ja`, `vi`, `zh_Hans`, `zh_Hant`) on the draft, then run `.github/scripts/check-release-notes.py <tag>` before pushing the tag. Do not publish English-only notes as a substitute for the translations.
 - Never bypass hooks (`--no-verify`, `-n`, `core.hooksPath`), never force-add ignored
   files, never rewrite history or force-push without an explicit order.
 - If a hook blocks a commit or push, fix the content instead of working around it.

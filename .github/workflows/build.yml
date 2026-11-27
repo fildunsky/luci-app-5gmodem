@@ -37,6 +37,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Test release note validation
+        run: python3 -m unittest discover -s .github/tests -p 'test_release_notes.py'
+
       - name: Find SDK
         id: sdk
         run: CHECK_ONLY=1 .github/scripts/fetch-sdk.sh ${{ matrix.ver }} x86/64 sdk
@@ -157,6 +160,9 @@ jobs:
           [ "$MISSING" = 0 ]
           echo "PKG_V=$V" >> "$GITHUB_ENV"
           echo "PKG_R=$R" >> "$GITHUB_ENV"
+
+      - name: Check translated release notes
+        run: python3 .github/scripts/check-release-notes.py "$TAG"
 
       - name: Publish release
         run: gh release edit "$TAG" --draft=false --latest
