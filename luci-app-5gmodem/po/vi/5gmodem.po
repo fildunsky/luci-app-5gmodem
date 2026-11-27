@@ -7513,3 +7513,238 @@ msgstr "Không thể thay đổi APN."
 
 msgid "Could not update the installed MediaTek helper package."
 msgstr "Không thể cập nhật gói hỗ trợ MediaTek đã cài đặt."
+
+msgid "Layers"
+msgstr "Lớp bản đồ"
+
+msgid "Track"
+msgstr "Đường đi"
+
+msgid "Position accuracy"
+msgstr "Độ chính xác vị trí"
+
+msgid "A password is saved. Leave this field empty to keep it."
+msgstr "Mật khẩu đã được lưu. Để trống để giữ nguyên."
+
+msgid "An account operation is already running."
+msgstr "Một thao tác tài khoản đang chạy."
+
+msgid "Check sign-in"
+msgstr "Kiểm tra đăng nhập"
+
+msgid "Check the login and password."
+msgstr "Kiểm tra tên đăng nhập và mật khẩu."
+
+msgid "Could not connect to the service"
+msgstr "Không thể kết nối dịch vụ"
+
+msgid "Could not save the account."
+msgstr "Không thể lưu tài khoản."
+
+msgid "Enter the password for this account."
+msgstr "Nhập mật khẩu cho tài khoản này."
+
+msgid "Install curl to connect to these services."
+msgstr "Cài curl để kết nối các dịch vụ này."
+
+msgid "Login"
+msgstr "Tên đăng nhập"
+
+msgid "One account for 4Cells and Speedmetrics. Saving it does not send measurements."
+msgstr "Một tài khoản cho 4Cells và Speedmetrics. Lưu tài khoản không gửi số đo."
+
+msgid "Remove saved account"
+msgstr "Xóa tài khoản đã lưu"
+
+msgid "Save the account first."
+msgstr "Hãy lưu tài khoản trước."
+
+msgid "Service unavailable"
+msgstr "Dịch vụ không khả dụng"
+
+msgid "Sign-in rejected"
+msgstr "Đăng nhập bị từ chối"
+
+msgid "Sign-in verified"
+msgstr "Đã xác nhận đăng nhập"
+
+msgid "Too many requests. Try again later."
+msgstr "Quá nhiều yêu cầu. Hãy thử lại sau."
+
+msgid "Check sign-in in the 4Cells / Speedmetrics settings."
+msgstr "Kiểm tra đăng nhập trong cài đặt 4Cells / Speedmetrics."
+
+msgid "Could not load the external layer."
+msgstr "Không thể tải lớp bản đồ bên ngoài."
+
+msgid "Loading external layers…"
+msgstr "Đang tải các lớp bên ngoài…"
+
+msgid "Mbit/s"
+msgstr "Mbit/giây"
+
+msgid "Network type"
+msgstr "Loại mạng"
+
+msgid "Select operator"
+msgstr "Chọn nhà mạng"
+
+msgid "Speed measurements (Speedmetrics)"
+msgstr "Đo tốc độ (Speedmetrics)"
+
+msgid "Towers (4Cells)"
+msgstr "Trạm phát (4Cells)"
+
+msgid "Towers (Speedmetrics)"
+msgstr "Trạm phát (Speedmetrics)"
+
+msgid "Zoom in to load external layers."
+msgstr "Phóng to để tải các lớp bên ngoài."
+
+msgid "Sign in"
+msgstr "Đăng nhập"
+
+msgid "Signed in"
+msgstr "Đã đăng nhập"
+
+msgid "Sign in to use the map layers. No measurements are sent."
+msgstr "Đăng nhập để dùng các lớp bản đồ. Không gửi số đo."
+
+msgid "Sign in under Settings → Telemetry."
+msgstr "Đăng nhập trong Cài đặt → Dữ liệu đo từ xa."
+
+msgid "Towers"
+msgstr "Trạm phát"
+
+msgid "4Cells login"
+msgstr "Đăng nhập 4Cells"
+
+msgid "Measurements"
+msgstr "Số đo"
+
+msgid "Terrain"
+msgstr "Địa hình:"
+
+msgid "Hillshade"
+msgstr "Đổ bóng địa hình"
+
+msgid "Contour lines"
+msgstr "Đường đồng mức"
+
+msgid "Could not load elevation data."
+msgstr "Không thể tải dữ liệu độ cao."
+
+msgid "Calculated position"
+msgstr "Vị trí tính toán"
+
+msgid "Manually set position"
+msgstr "Vị trí đặt thủ công"
+
+msgid "Verified position"
+msgstr "Vị trí đã xác minh"
+
+msgid "Position inherited from site"
+msgstr "Vị trí theo địa điểm trạm"
+
+msgid "Position needs clarification"
+msgstr "Vị trí cần làm rõ"
+
+msgid "GPS time"
+msgstr "Giờ GPS"
+
+msgid "Buildings"
+msgstr "Tòa nhà"
+
+msgid "Labels"
+msgstr "Nhãn"
+
+msgid "Points of interest"
+msgstr "Điểm quan tâm"
+
+msgid "Roads"
+msgstr "Đường"
+
+msgid "3D buildings"
+msgstr "Tòa nhà 3D"
+
+
+msgid "The service denied access. Layer requests are paused."
+msgstr "Dịch vụ từ chối truy cập. Đã tạm dừng tải lớp bản đồ."
+
+msgid "Layer requests are temporarily paused after a service error."
+msgstr "Tạm dừng tải lớp bản đồ sau lỗi dịch vụ."
+
+msgid "The service returned an unexpected page. Layer requests are paused."
+msgstr "Dịch vụ trả về trang không mong đợi. Đã tạm dừng tải lớp bản đồ."
+
+msgid "Measurements (4Cells)"
+msgstr "Đo kiểm (4Cells)"
+
+msgid "Change PIN"
+msgstr "Đổi mã PIN"
+
+msgid "Could not read the SIM PIN status"
+msgstr "Không đọc được trạng thái mã PIN SIM"
+
+msgid "Current PIN"
+msgstr "Mã PIN hiện tại"
+
+msgid "Disable PIN protection"
+msgstr "Tắt bảo vệ bằng mã PIN"
+
+msgid "Enable PIN protection"
+msgstr "Bật bảo vệ bằng mã PIN"
+
+msgid "Enter PIN"
+msgstr "Nhập mã PIN"
+
+msgid "Incorrect SIM PIN"
+msgstr "Mã PIN SIM không đúng"
+
+msgid "New PIN"
+msgstr "Mã PIN mới"
+
+msgid "Next"
+msgstr "Tiếp"
+
+msgid "No SIM card"
+msgstr "Không có thẻ SIM"
+
+msgid "Please wait…"
+msgstr "Vui lòng chờ…"
+
+msgid "Previous"
+msgstr "Trước"
+
+msgid "SIM PIN"
+msgstr "Mã PIN SIM"
+
+msgid "SIM PIN operation"
+msgstr "Thao tác mã PIN SIM"
+
+msgid "SIM PIN operation completed"
+msgstr "Đã hoàn tất thao tác mã PIN SIM"
+
+msgid "SIM is locked"
+msgstr "SIM bị khóa"
+
+msgid "SIM is ready"
+msgstr "SIM đã sẵn sàng"
+
+msgid "SIM requires PIN"
+msgstr "SIM yêu cầu mã PIN"
+
+msgid "SIM requires PUK"
+msgstr "SIM yêu cầu mã PUK"
+
+msgid "Switching antennas"
+msgstr "Đang chuyển ăng-ten"
+
+msgid "The PIN must contain 4–8 digits"
+msgstr "Mã PIN phải gồm 4–8 chữ số"
+
+msgid "The modem did not confirm the SIM PIN operation"
+msgstr "Modem không xác nhận thao tác mã PIN SIM"
+
+msgid "The modem is busy"
+msgstr "Modem đang bận"

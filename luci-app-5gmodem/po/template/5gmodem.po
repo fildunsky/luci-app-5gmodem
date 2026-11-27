@@ -1990,3 +1990,175 @@ msgstr ""
 
 msgid "Could not update the installed MediaTek helper package."
 msgstr ""
+
+msgid "Layers"
+msgstr ""
+
+msgid "Track"
+msgstr ""
+
+msgid "Position accuracy"
+msgstr ""
+
+msgid "A password is saved. Leave this field empty to keep it."
+msgstr ""
+
+msgid "An account operation is already running."
+msgstr ""
+
+msgid "Check sign-in"
+msgstr ""
+
+msgid "Check the login and password."
+msgstr ""
+
+msgid "Could not connect to the service"
+msgstr ""
+
+msgid "Could not save the account."
+msgstr ""
+
+msgid "Enter the password for this account."
+msgstr ""
+
+msgid "Install curl to connect to these services."
+msgstr ""
+
+msgid "Login"
+msgstr ""
+
+msgid "One account for 4Cells and Speedmetrics. Saving it does not send measurements."
+msgstr ""
+
+msgid "Remove saved account"
+msgstr ""
+
+msgid "Save the account first."
+msgstr ""
+
+msgid "Service unavailable"
+msgstr ""
+
+msgid "Sign-in rejected"
+msgstr ""
+
+msgid "Sign-in verified"
+msgstr ""
+
+msgid "Too many requests. Try again later."
+msgstr ""
+
+msgid "Check sign-in in the 4Cells / Speedmetrics settings."
+msgstr ""
+
+msgid "Could not load the external layer."
+msgstr ""
+
+msgid "Loading external layers…"
+msgstr ""
+
+msgid "Mbit/s"
+msgstr ""
+
+msgid "Network type"
+msgstr ""
+
+msgid "Select operator"
+msgstr ""
+
+msgid "Speed measurements (Speedmetrics)"
+msgstr ""
+
+msgid "Towers (4Cells)"
+msgstr ""
+
+msgid "Towers (Speedmetrics)"
+msgstr ""
+
+msgid "Zoom in to load external layers."
+msgstr ""
+
+msgid "Sign in"
+msgstr ""
+
+msgid "Signed in"
+msgstr ""
+
+msgid "Sign in to use the map layers. No measurements are sent."
+msgstr ""
+
+msgid "Sign in under Settings → Telemetry."
+msgstr ""
+
+msgid "Towers"
+msgstr ""
+
+msgid "4Cells login"
+msgstr ""
+
+msgid "Measurements"
+msgstr ""
+
+msgid "Terrain"
+msgstr ""
+
+msgid "Hillshade"
+msgstr ""
+
+msgid "Contour lines"
+msgstr ""
+
+msgid "Could not load elevation data."
+msgstr ""
+
+msgid "Calculated position"
+msgstr ""
+
+msgid "Manually set position"
+msgstr ""
+
+msgid "Verified position"
+msgstr ""
+
+msgid "Position inherited from site"
+msgstr ""
+
+msgid "Position needs clarification"
+msgstr ""
+
+msgid "GPS time"
+msgstr ""
+
+msgid "Buildings"
+msgstr ""
+
+msgid "Labels"
+msgstr ""
+
+msgid "Points of interest"
+msgstr ""
+
+msgid "Roads"
+msgstr ""
+
+msgid "3D buildings"
+msgstr ""
+
+
+msgid "The service denied access. Layer requests are paused."
+msgstr ""
+
+msgid "Layer requests are temporarily paused after a service error."
+msgstr ""
+
+msgid "The service returned an unexpected page. Layer requests are paused."
+msgstr ""
+
+msgid "Measurements (4Cells)"
+msgstr ""
+
+msgid "Next"
+msgstr ""
+
+msgid "Previous"
+msgstr ""

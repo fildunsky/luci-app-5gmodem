@@ -1,0 +1,639 @@
+#!/bin/sh
+# Account credentials never travel through command-line arguments or diagnostics.
+. /usr/share/libubox/jshn.sh
+umask 077
+
+ACCOUNT_DIR=/etc/5gmodem-private
+ACCOUNT_FILE=$ACCOUNT_DIR/maps.json
+RUNTIME=/tmp/5gmodem-private/maps
+FOURCELLS_UA=luci-app-5gmodem
+
+cache_valid() {
+	local stamp key
+	[ -s "$1.body" ] || return 1
+	key=$(cat "$1.key" 2>/dev/null)
+	[ "$key" = "$2" ] || return 1
+	stamp=$(cat "$1.t" 2>/dev/null)
+	case "$stamp" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$((now-stamp))" -ge 0 ] && [ "$((now-stamp))" -lt 300 ]
+}
+
+cache_store() {
+	# Cache bodies are bounded and published atomically for concurrent readers.
+	[ "$(wc -c < "$2")" -le 262144 ] || return 0
+	cp "$2" "$1.body.$$" || return 0
+	mv "$1.body.$$" "$1.body" || return 0
+	printf '%s\n' "$3" > "$1.key"
+	printf '%s\n' "$now" > "$1.t"
+}
+
+emit_map_data() { printf '{"ok":true,"data":'; cat "$1"; printf '}\n'; }
+emit_map_tile() { printf '{"ok":true,"image":"data:image/png;base64,'; base64 "$1" | tr -d '\r\n'; printf '"}\n'; }
+
+# The site's normal client first obtains a short-lived request identifier, then
+# hashes the exact API path, identifier and its own User-Agent for each request.
+# Both the seed and Authorization header stay in private files, never curl argv.
+fourcells_sign_headers() {
+	local path="$1" seed expiry binding cached_binding now http ttl digest
+	sign_error=network
+	command -v sha256sum >/dev/null 2>&1 || { sign_error=unavailable; return 1; }
+	# Only renewal of the shared seed is serialized, not the data GET.
+	if [ "$lock_mode" = flock ]; then
+		exec 8>"$RUNTIME/sign.lock" || return 1
+		flock 8 || return 1
+	fi
+	now=$(cut -d. -f1 /proc/uptime)
+	binding=$(printf '%s' "$token:$FOURCELLS_UA" | sha256sum | awk '{print $1}')
+	seed=$(jsonfilter -i "$RUNTIME/fourcells-sign.json" -e '@.seed' 2>/dev/null)
+	expiry=$(jsonfilter -i "$RUNTIME/fourcells-sign.json" -e '@.until' 2>/dev/null)
+	cached_binding=$(jsonfilter -i "$RUNTIME/fourcells-sign.json" -e '@.binding' 2>/dev/null)
+	case "$expiry" in ''|*[!0-9]*) expiry=0 ;; esac
+	if [ "$binding" != "$cached_binding" ] || [ "$now" -ge "$expiry" ] \
+	   || ! printf '%s\n' "$seed" | grep -Eq '^[a-f0-9]{64}$'; then
+		http=$(curl --silent --proto '=https' --connect-timeout 5 --max-time 12 --max-filesize 2097152 \
+			--user-agent "$FOURCELLS_UA" --header "@$work/header" --header 'Content-Type: application/json' \
+			--data '{}' --dump-header "$work/sign.headers" --output "$work/sign.json" \
+			--write-out '%{http_code}' https://4cells.ru:4444/api/security/sign 2>/dev/null) || http=000
+		case "$http" in
+			200) ;;
+			401) sign_error=sign_in_required; return 1 ;;
+			403|429)
+				printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_fourcells"
+				sign_error=access_denied; [ "$http" = 429 ] && sign_error=rate_limited
+				return 1 ;;
+			*) return 1 ;;
+		esac
+		[ "$(jsonfilter -i "$work/sign.json" -e '@.success' 2>/dev/null)" = true ] \
+			|| { sign_error=unexpected_response; return 1; }
+		seed=$(awk 'tolower($1)=="x-request-id:" {gsub("\r", "", $2);v=$2} END {print v}' "$work/sign.headers")
+		printf '%s\n' "$seed" | grep -Eq '^[a-f0-9]{64}$' || { sign_error=unexpected_response; return 1; }
+		ttl=$(awk 'tolower($1)=="x-request-ttl:" {gsub("\r", "", $2);v=$2} END {print v}' "$work/sign.headers")
+		case "$ttl" in ''|*[!0-9]*) ttl=60 ;; esac
+		[ "${#ttl}" -le 5 ] && [ "$ttl" -le 86400 ] || ttl=60
+		[ "$ttl" -gt 60 ] && ttl=$((ttl-30))
+		# These fields contain only a validated hex seed/hash and numeric uptime.
+		printf '{"seed":"%s","until":%s,"binding":"%s"}\n' "$seed" "$((now+ttl))" "$binding" > "$RUNTIME/fourcells-sign.json"
+	fi
+	digest=$(printf '%s' "$path-$seed-$FOURCELLS_UA" | sha256sum | awk '{print $1}')
+	printf 'x-request-id: %s\n' "$digest" >> "$work/header"
+	[ "$lock_mode" != flock ] || flock -u 8
+	return 0
+}
+
+reply_error() {
+	json_init
+	json_add_boolean ok 0
+	json_add_string error "$1"
+	[ -z "$2" ] || json_add_string service "$2"
+	json_dump
+}
+
+read_account() {
+	stored_login= stored_password=
+	[ -f "$ACCOUNT_FILE" ] || return 0
+	json_load "$(cat "$ACCOUNT_FILE")" 2>/dev/null || return 1
+	json_get_var stored_login login
+	json_get_var stored_password password
+}
+
+# Renew the normal web session before an expired bearer silently gets anonymous
+# map data. Refresh tokens and JWT payloads stay in private files, never argv.
+fourcells_login_saved() {
+	local stored_login stored_password result
+	read_account
+	[ -n "$stored_login" ] && [ -n "$stored_password" ] || { session_error=sign_in_required; return 1; }
+	json_init
+	json_add_string login "$stored_login"
+	json_add_string password "$stored_password"
+	json_dump > "$work/request.json"
+	authenticate fourcells
+	result=$(cat "$work/fourcells.result" 2>/dev/null)
+	case "$result" in
+		ok)
+			mv "$work/fourcells.session" "$RUNTIME/fourcells.json" || { session_error=storage; return 1; }
+			rm -f "$RUNTIME/refresh-retry"
+			return 0 ;;
+		rejected) session_error=sign_in_required ;;
+		rate_limited) session_error=rate_limited; printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_fourcells" ;;
+		*) session_error=${result:-network} ;;
+	esac
+	return 1
+}
+
+ensure_fourcells_session() {
+	local token expiry payload padding username refresh attempt clock_now now retry_at retry_error http new_token new_refresh refresh_locked=0
+	session_error=sign_in_required
+	for attempt in 1 2; do
+		token=$(jsonfilter -i "$RUNTIME/fourcells.json" -e '@.accessToken' 2>/dev/null)
+		expiry=$(jsonfilter -i "$RUNTIME/fourcells.json" -e '@.expires' 2>/dev/null)
+		if [ -z "$expiry" ]; then
+			payload=$(printf '%s' "$token" | cut -d. -f2)
+			case "$((${#payload}%4))" in 2) padding='==' ;; 3) padding='=' ;; *) padding='' ;; esac
+			printf '%s%s' "$payload" "$padding" | tr '_-' '/+' | base64 -d > "$work/session.jwt" 2>/dev/null || :
+			expiry=$(jsonfilter -i "$work/session.jwt" -e '@.exp' 2>/dev/null)
+		fi
+		# Opaque legacy tokens have no locally known expiry; do not log in repeatedly.
+		case "$expiry" in ''|*[!0-9]*) expiry=0 ;; esac
+		[ -n "$token" ] || expiry=1
+		clock_now=$(date +%s)
+		if [ "$expiry" -eq 0 ] || [ "$expiry" -gt "$((clock_now+60))" ]; then
+			[ "$refresh_locked" != 1 ] || flock -u 7
+			return 0
+		fi
+		if [ "$attempt" = 1 ] && [ "$lock_mode" = flock ]; then
+			exec 7>"$RUNTIME/refresh.lock" || { session_error=storage; return 1; }
+			flock 7 || { session_error=busy; return 1; }
+			refresh_locked=1
+		fi
+		# Re-read after taking the refresh lock: another request may have renewed it.
+	done
+	now=$(cut -d. -f1 /proc/uptime)
+	if read -r retry_at retry_error 2>/dev/null < "$RUNTIME/refresh-retry"; then
+		case "$retry_at" in ''|*[!0-9]*) retry_at=0 ;; esac
+		if [ "$now" -lt "$retry_at" ]; then session_error=$retry_error; return 1; fi
+	fi
+	username=$(jsonfilter -i "$RUNTIME/fourcells.json" -e '@.userName' 2>/dev/null)
+	[ -n "$username" ] || username=$(jsonfilter -i "$work/session.jwt" -e '@.unique_name' 2>/dev/null)
+	refresh=$(jsonfilter -i "$RUNTIME/fourcells.json" -e '@.refreshToken' 2>/dev/null)
+	if [ -z "$username" ] || [ -z "$refresh" ]; then
+		if fourcells_login_saved; then
+			[ "$refresh_locked" != 1 ] || flock -u 7
+			return 0
+		fi
+		printf '%s %s\n' "$((now+60))" "$session_error" > "$RUNTIME/refresh-retry"
+		return 1
+	fi
+	json_init
+	json_add_string userName "$username"
+	json_add_string refreshToken "$refresh"
+	json_dump > "$work/refresh.request"
+	http=$(curl --silent --proto '=https' --connect-timeout 5 --max-time 12 --max-filesize 262144 \
+		--user-agent "$FOURCELLS_UA" --header 'Content-Type: application/json' \
+		--data-binary "@$work/refresh.request" --output "$work/refresh.reply" \
+		--write-out '%{http_code}' https://4cells.ru:4444/api/auth/refresh 2>/dev/null) || http=000
+	case "$http" in
+		200)
+			new_token=$(jsonfilter -i "$work/refresh.reply" -e '@.data.accessToken' 2>/dev/null)
+			new_refresh=$(jsonfilter -i "$work/refresh.reply" -e '@.data.refreshToken' 2>/dev/null)
+			if [ -n "$new_token" ] && [ -n "$new_refresh" ]; then
+				payload=$(printf '%s' "$new_token" | cut -d. -f2)
+				case "$((${#payload}%4))" in 2) padding='==' ;; 3) padding='=' ;; *) padding='' ;; esac
+				printf '%s%s' "$payload" "$padding" | tr '_-' '/+' | base64 -d > "$work/session.jwt" 2>/dev/null || :
+				expiry=$(jsonfilter -i "$work/session.jwt" -e '@.exp' 2>/dev/null)
+				case "$expiry" in ''|*[!0-9]*) expiry=0 ;; esac
+				json_init
+				json_add_string accessToken "$new_token"
+				json_add_string refreshToken "$new_refresh"
+				json_add_string userName "$username"
+				json_add_int expires "$expiry"
+				json_dump > "$work/refreshed.session"
+				mv "$work/refreshed.session" "$RUNTIME/fourcells.json" || { session_error=storage; return 1; }
+				rm -f "$RUNTIME/refresh-retry"
+				[ "$lock_mode" != flock ] || flock -u 7
+				return 0
+			fi
+			session_error=unexpected_response ;;
+		401|403)
+			if fourcells_login_saved; then
+				[ "$refresh_locked" != 1 ] || flock -u 7
+				return 0
+			fi ;;
+		429) session_error=rate_limited; printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_fourcells" ;;
+		*) session_error=network ;;
+	esac
+	printf '%s %s\n' "$((now+60))" "$session_error" > "$RUNTIME/refresh-retry"
+	return 1
+}
+
+account_status() {
+	read_account
+	local login="$stored_login" configured=0 fourcells=not_checked speedmetrics=not_checked checked_at=0
+	[ -n "$stored_login" ] && [ -n "$stored_password" ] && configured=1
+	if [ -f "$RUNTIME/status.json" ]; then
+		json_load "$(cat "$RUNTIME/status.json")" 2>/dev/null && {
+			json_get_var fourcells fourcells
+			json_get_var speedmetrics speedmetrics
+			json_get_var checked_at checked_at
+		}
+	fi
+	json_init
+	json_add_boolean ok 1
+	json_add_boolean configured "$configured"
+	json_add_string login "$login"
+	json_add_string fourcells "${fourcells:-not_checked}"
+	json_add_string speedmetrics "${speedmetrics:-not_checked}"
+	json_add_int checked_at "${checked_at:-0}"
+	json_dump
+}
+
+acquire_lock() {
+	mkdir -p "$RUNTIME" || return 1
+	chmod 700 /tmp/5gmodem-private "$RUNTIME" || return 1
+	if command -v flock >/dev/null 2>&1; then
+		exec 9>"$RUNTIME/account.lock" || return 1
+		case "$1" in
+			layers|tile|tiles) flock -s -n 9 || return 1 ;;
+			*) flock -n 9 || return 1 ;;
+		esac
+		lock_mode=flock
+		trap 'cleanup' EXIT
+		trap 'exit 1' HUP INT TERM
+		return 0
+	fi
+	if ! mkdir "$RUNTIME/lock" 2>/dev/null; then
+		local pid age
+		pid=$(cat "$RUNTIME/lock/pid" 2>/dev/null)
+		case "$pid" in
+			''|*[!0-9]*)
+				age=$(stat -c %Y "$RUNTIME/lock" 2>/dev/null)
+				[ -n "$age" ] && [ $(( $(date +%s) - age )) -gt 60 ] || return 1 ;;
+			*) kill -0 "$pid" 2>/dev/null && return 1 ;;
+		esac
+		rm -rf "$RUNTIME/lock"
+		mkdir "$RUNTIME/lock" 2>/dev/null || return 1
+	fi
+	echo "$$" > "$RUNTIME/lock/pid"
+	trap 'cleanup' EXIT
+	trap 'exit 1' HUP INT TERM
+}
+
+cleanup() {
+	[ -z "$auth_pid_1" ] || kill "$auth_pid_1" 2>/dev/null
+	[ -z "$auth_pid_2" ] || kill "$auth_pid_2" 2>/dev/null
+	[ -z "$work" ] || rm -rf "$work"
+	[ "$lock_mode" = flock ] || rm -rf "$RUNTIME/lock"
+}
+
+read_candidate() {
+	local input kind
+	IFS= read -r input
+	json_load "$input" 2>/dev/null || { reply_error invalid; return 1; }
+	json_get_type kind login
+	[ "$kind" = string ] || { reply_error invalid; return 1; }
+	json_get_var candidate_login login
+	json_get_type kind password
+	[ "$kind" = string ] || { reply_error invalid; return 1; }
+	json_get_var candidate_password password
+	[ -n "$candidate_login" ] && [ "${#candidate_login}" -le 254 ] && [ "${#candidate_password}" -le 1024 ] || { reply_error invalid; return 1; }
+	read_account
+	if [ -z "$candidate_password" ] && [ "$candidate_login" = "$stored_login" ]; then candidate_password=$stored_password; fi
+	[ -n "$candidate_password" ] || { reply_error password_required; return 1; }
+}
+
+authenticate() {
+	local service="$1" url http result=network token refresh
+	case "$service" in
+		fourcells) url=https://4cells.ru:4444/api/auth/signIn ;;
+		speedmetrics) url=https://speedmetrics.ru/api/v1/speed_web/login ;;
+	esac
+	# Body and replies are private files; curl's argv contains no credentials/tokens.
+	http=$(curl --silent --proto '=https' --connect-timeout 6 --max-time 18 \
+		--header 'Content-Type: application/json' --data-binary "@$work/request.json" \
+		--cookie-jar "$work/$service.cookie" --output "$work/$service.reply" \
+		--write-out '%{http_code}' "$url" 2>/dev/null) || http=000
+	case "$http" in
+		401|403) result=rejected ;;
+		429) result=rate_limited ;;
+		200)
+			result=rejected
+			if json_load "$(cat "$work/$service.reply")" 2>/dev/null; then
+				if [ "$service" = speedmetrics ]; then
+					json_get_var token ok
+					if [ "$token" = 1 ] && grep -Eq '^#HttpOnly_|^[^#[:space:]]' "$work/$service.cookie"; then
+						mv "$work/$service.cookie" "$work/speedmetrics.session" && result=ok
+					fi
+				elif json_select data 2>/dev/null; then
+					json_get_var token accessToken
+					json_get_var refresh refreshToken
+					if [ -n "$token" ] && [ -n "$refresh" ]; then
+						json_init
+						json_add_string accessToken "$token"
+						json_add_string refreshToken "$refresh"
+						json_dump > "$work/fourcells.session" && result=ok
+					fi
+				fi
+			fi ;;
+		000) ;;
+		*) result=unavailable ;;
+	esac
+	printf '%s' "$result" > "$work/$service.result"
+}
+
+login_account() {
+	local candidate_login candidate_password service result tmp
+	read_candidate || return 0
+	command -v curl >/dev/null 2>&1 || { reply_error curl_required; return; }
+	work=$(mktemp -d "$RUNTIME/login.XXXXXX") || { reply_error storage; return; }
+	json_init
+	json_add_string login "$candidate_login"
+	json_add_string password "$candidate_password"
+	json_dump > "$work/request.json"
+	authenticate fourcells & auth_pid_1=$!
+	authenticate speedmetrics & auth_pid_2=$!
+	wait "$auth_pid_1"; auth_pid_1=
+	wait "$auth_pid_2"; auth_pid_2=
+	# A failed candidate must leave the saved account and both sessions intact.
+	for service in fourcells speedmetrics; do
+		result=$(cat "$work/$service.result" 2>/dev/null) || result=network
+		if [ "$result" != ok ]; then reply_error "${result:-network}" "$service"; return; fi
+	done
+	mkdir -p "$ACCOUNT_DIR" && chmod 700 "$ACCOUNT_DIR" || { reply_error storage; return; }
+	tmp=$(mktemp "$ACCOUNT_DIR/.maps.XXXXXX") || { reply_error storage; return; }
+	if ! cat "$work/request.json" > "$tmp" || ! mv -f "$tmp" "$ACCOUNT_FILE"; then
+		rm -f "$tmp"
+		reply_error storage
+		return
+	fi
+	mv "$work/fourcells.session" "$RUNTIME/fourcells.json"
+	mv "$work/speedmetrics.session" "$RUNTIME/speedmetrics.cookie"
+	json_init
+	json_add_string fourcells ok
+	json_add_string speedmetrics ok
+	json_add_int checked_at "$(date +%s)"
+	json_dump > "$work/status.json"
+	mv "$work/status.json" "$RUNTIME/status.json"
+	account_status
+}
+
+map_layers() {
+	local input kind south west north east zoom query url http value operator technology token service now until reason sign_error cache_key cache_prefix binding
+	IFS= read -r input
+	json_load "$input" 2>/dev/null || { reply_error invalid; return; }
+	json_get_var kind kind
+	json_get_var south south
+	json_get_var west west
+	json_get_var north north
+	json_get_var east east
+	json_get_var zoom zoom
+	json_get_var operator operator
+	json_get_var technology technology
+	case "$kind" in towers|speed|fourcells|operators) ;; *) reply_error invalid; return ;; esac
+	if [ "$kind" != operators ]; then
+		for value in "$south" "$west" "$north" "$east"; do
+			[ "${#value}" -le 16 ] && printf '%s\n' "$value" | grep -Eq '^-?[0-9]+([.][0-9]+)?$' || { reply_error invalid; return; }
+		done
+		case "$zoom" in ''|*[!0-9]*) reply_error invalid; return ;; esac
+		# 4Cells supports overview maps; retain Speedmetrics' smaller request area.
+		awk -v k="$kind" -v s="$south" -v w="$west" -v n="$north" -v e="$east" -v z="$zoom" \
+			'BEGIN { exit !(z >= 4 && z <= 22 && s >= -85 && n <= 85 && w >= -180 && e <= 180 && n > s && e > w && (k == "fourcells" || (z >= 12 && n-s <= 1 && e-w <= 1))) }' \
+			|| { reply_error zoom_in; return; }
+	fi
+	case "$kind" in
+		towers|speed) [ -s "$RUNTIME/speedmetrics.cookie" ] || { reply_error sign_in_required; return; } ;;
+		fourcells)
+			printf '%s\n' "$operator" | grep -Eq '^[0-9]{5,7}$' || { reply_error invalid; return; }
+			case "$technology" in gsm|wcdma|lte|nr) ;; *) reply_error invalid; return ;; esac ;;
+	esac
+	command -v curl >/dev/null 2>&1 || { reply_error curl_required; return; }
+	case "$kind" in fourcells|operators) service=fourcells ;; *) service=speedmetrics ;; esac
+	now=$(cut -d. -f1 /proc/uptime)
+	until=$(cat "$RUNTIME/pause_$service" 2>/dev/null)
+	case "$until" in ''|*[!0-9]*) until=0 ;; esac
+	if [ "$now" -lt "$until" ]; then
+		reason=$(cat "$RUNTIME/pause_reason_$service" 2>/dev/null)
+		case "$reason" in
+			api_access_required) rm -f "$RUNTIME/pause_$service" "$RUNTIME/pause_reason_$service" ;;
+			*) reply_error provider_paused; return ;;
+		esac
+	fi
+	if [ "$kind" = fourcells ]; then
+		work=$(mktemp -d "$RUNTIME/layers.XXXXXX") || { reply_error storage; return; }
+		ensure_fourcells_session || { reply_error "$session_error"; return; }
+	fi
+	query="$south,$west,$north,$east"
+	url=https://speedmetrics.ru/api/v1/speed_web
+	case "$kind" in
+		towers) url="$url/bs?z=$zoom&b=$query" ;;
+		speed) url="$url/all?days=30&lite=1&v=2&lim=1500&z=$zoom&b=$query" ;;
+		fourcells) url="https://4cells.ru:4444/api/map/enb/$technology/$operator?latStart=$south&latEnd=$north&lonStart=$west&lonEnd=$east" ;;
+		operators) url='https://4cells.ru:4444/api/Handbooks/countries?loadOperators=true' ;;
+	esac
+	binding=public
+	case "$kind" in
+		fourcells) binding=$(sha256sum "$RUNTIME/fourcells.json" | awk '{print $1}') ;;
+		towers|speed) binding=$(sha256sum "$RUNTIME/speedmetrics.cookie" | awk '{print $1}') ;;
+	esac
+	cache_key=$(printf '%s\n%s' "$url" "$binding" | sha256sum | awk '{print $1}')
+	cache_prefix="$RUNTIME/cache_$kind-$cache_key"
+	cache_valid "$cache_prefix" "$cache_key" && { emit_map_data "$cache_prefix.body"; return; }
+	[ -n "$work" ] || work=$(mktemp -d "$RUNTIME/layers.XXXXXX") || { reply_error storage; return; }
+	set -- --silent --proto '=https' --connect-timeout 5 --max-time 12 --max-filesize 2097152
+	case "$kind" in
+		fourcells)
+			token=$(jsonfilter -i "$RUNTIME/fourcells.json" -e '@.accessToken' 2>/dev/null)
+			[ -n "$token" ] || { reply_error sign_in_required; return; }
+			printf 'Authorization: Bearer %s\n' "$token" > "$work/header"
+			fourcells_sign_headers "${url#https://4cells.ru:4444}" || { reply_error "$sign_error"; return; }
+			set -- "$@" --user-agent "$FOURCELLS_UA" --header "@$work/header" ;;
+		towers|speed) set -- "$@" --cookie "$RUNTIME/speedmetrics.cookie" ;;
+	esac
+	http=$(curl "$@" --output "$work/data.json" --write-out '%{http_code}' "$url" 2>/dev/null) || http=000
+	rm -f "$RUNTIME/pause_reason_$service"
+	case "$http" in
+		401) reply_error sign_in_required ;;
+		403) printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_$service"; reply_error access_denied ;;
+		429) printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_$service"; reply_error rate_limited ;;
+		200)
+			if [ "$(wc -c < "$work/data.json")" -le 2097152 ] && jsonfilter -i "$work/data.json" -e '@' >/dev/null 2>&1; then
+				if [ "$(jsonfilter -i "$work/data.json" -e '@.needLogin' 2>/dev/null)" = true ]; then reply_error sign_in_required; return; fi
+				if [ -n "$(jsonfilter -i "$work/data.json" -e '@.error' 2>/dev/null)" ]; then reply_error unavailable; return; fi
+				cache_store "$cache_prefix" "$work/data.json" "$cache_key"
+				# Keep two viewports per endpoint; keys cannot mix concurrent replies.
+				for value in $(ls -t "$RUNTIME/cache_$kind-"*.body 2>/dev/null | tail -n +3); do
+					rm -f "$value" "${value%.body}.key" "${value%.body}.t"
+				done
+				emit_map_data "$work/data.json"
+			else printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_$service"; reply_error unexpected_response; fi ;;
+		*) reply_error network ;;
+	esac
+}
+
+map_tile() {
+	local input x y zoom operator technology token url now until http cache_key cache_prefix binding old
+	IFS= read -r input
+	json_load "$input" 2>/dev/null || { reply_error invalid; return; }
+	json_get_var x x; json_get_var y y; json_get_var zoom zoom
+	json_get_var operator operator; json_get_var technology technology
+	for old in "$x" "$y" "$zoom"; do
+		case "$old" in ''|*[!0-9]*) reply_error invalid; return ;; esac
+		[ "${#old}" -le 6 ] || { reply_error invalid; return; }
+	done
+	# The native client uses 512-pixel tiles at Leaflet zoom z (2^(z-1) columns).
+	[ "$zoom" -ge 6 ] && [ "$zoom" -le 17 ] && [ "$x" -lt "$((1 << (zoom-1)))" ] \
+		&& [ "$y" -lt "$((1 << (zoom-1)))" ] || { reply_error zoom_in; return; }
+	printf '%s\n' "$operator" | grep -Eq '^[0-9]{5,7}$' || { reply_error invalid; return; }
+	case "$technology" in gsm|wcdma|lte|nr) ;; *) reply_error invalid; return ;; esac
+	now=$(cut -d. -f1 /proc/uptime)
+	until=$(cat "$RUNTIME/pause_fourcells" 2>/dev/null)
+	case "$until" in ''|*[!0-9]*) until=0 ;; esac
+	[ "$now" -lt "$until" ] && { reply_error provider_paused; return; }
+	command -v curl >/dev/null 2>&1 || { reply_error curl_required; return; }
+	work=$(mktemp -d "$RUNTIME/tile.XXXXXX") || { reply_error storage; return; }
+	ensure_fourcells_session || { reply_error "$session_error"; return; }
+	url="https://4cells.ru/api/Map/v2/measurements/$technology/$operator?x=$x&y=$y&size=$zoom&metrics=0"
+	binding=$(sha256sum "$RUNTIME/fourcells.json" | awk '{print $1}')
+	cache_key=$(printf '%s\n%s' "$url" "$binding" | sha256sum | awk '{print $1}')
+	cache_prefix="$RUNTIME/tile-$cache_key"
+	cache_valid "$cache_prefix" "$cache_key" && { emit_map_tile "$cache_prefix.body"; return; }
+	token=$(jsonfilter -i "$RUNTIME/fourcells.json" -e '@.accessToken' 2>/dev/null)
+	[ -n "$token" ] || { reply_error sign_in_required; return; }
+	printf 'Authorization: Bearer %s\n' "$token" > "$work/header"
+	# The web client's image fetch uses Bearer auth on the main origin.
+	http=$(curl --silent --proto '=https' --connect-timeout 5 --max-time 12 --max-filesize 524288 \
+		--user-agent "$FOURCELLS_UA" --header "@$work/header" --output "$work/tile.png" \
+		--write-out '%{http_code}' "$url" 2>/dev/null) || http=000
+	case "$http" in
+		200)
+			[ "$(head -c 8 "$work/tile.png" | base64)" = iVBORw0KGgo= ] \
+				|| { reply_error unexpected_response; return; }
+			cache_store "$cache_prefix" "$work/tile.png" "$cache_key"
+			for old in $(ls -t "$RUNTIME"/tile-*.body 2>/dev/null | tail -n +9); do
+				rm -f "$old" "${old%.body}.key" "${old%.body}.t"
+			done
+			emit_map_tile "$work/tile.png" ;;
+		401) reply_error sign_in_required ;;
+		403|429)
+			printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_fourcells"
+			[ "$http" = 429 ] && reply_error rate_limited || reply_error access_denied ;;
+		*) reply_error network ;;
+	esac
+}
+
+map_tiles() {
+	local input tiles zoom operator technology pairs pair x y count=0 seen='' now until token binding
+	local i=0 url key prefix old code error='' total=0 bytes parallel http2 single_host
+	IFS= read -r input
+	json_load "$input" 2>/dev/null || { reply_error invalid; return; }
+	json_get_var tiles tiles; json_get_var zoom zoom
+	json_get_var operator operator; json_get_var technology technology
+	case "$tiles" in ''|*[!0-9,:]*|,*|*,|*,,*) reply_error invalid; return ;; esac
+	[ "${#tiles}" -le 167 ] || { reply_error invalid; return; }
+	case "$zoom" in 6|7|8|9|10|11|12|13|14|15|16|17) ;; *) reply_error zoom_in; return ;; esac
+	printf '%s\n' "$operator" | grep -Eq '^[0-9]{5,7}$' || { reply_error invalid; return; }
+	case "$technology" in gsm|wcdma|lte|nr) ;; *) reply_error invalid; return ;; esac
+	pairs=$(printf '%s' "$tiles" | tr ',' ' ')
+	# Validate the entire batch before starting any external transfer.
+	for pair in $pairs; do
+		x=${pair%:*}; y=${pair#*:}
+		case "$x:$y" in *[!0-9:]*|:*) reply_error invalid; return ;; esac
+		case "$x" in ''|*[!0-9]*) reply_error invalid; return ;; esac
+		case "$y" in ''|*[!0-9]*) reply_error invalid; return ;; esac
+		[ "$pair" = "$x:$y" ] && [ "${#x}" -le 6 ] && [ "${#y}" -le 6 ] \
+			&& [ "$x" -lt "$((1 << (zoom-1)))" ] && [ "$y" -lt "$((1 << (zoom-1)))" ] || { reply_error invalid; return; }
+		count=$((count+1)); [ "$count" -le 12 ] || { reply_error invalid; return; }
+	done
+	now=$(cut -d. -f1 /proc/uptime)
+	until=$(cat "$RUNTIME/pause_fourcells" 2>/dev/null)
+	case "$until" in ''|*[!0-9]*) until=0 ;; esac
+	[ "$now" -lt "$until" ] && { reply_error provider_paused; return; }
+	command -v curl >/dev/null 2>&1 || { reply_error curl_required; return; }
+	work=$(mktemp -d "$RUNTIME/tiles.XXXXXX") || { reply_error storage; return; }
+	ensure_fourcells_session || { reply_error "$session_error"; return; }
+	token=$(jsonfilter -i "$RUNTIME/fourcells.json" -e '@.accessToken' 2>/dev/null)
+	[ -n "$token" ] || { reply_error sign_in_required; return; }
+	printf 'Authorization: Bearer %s\n' "$token" > "$work/header"
+	binding=$(sha256sum "$RUNTIME/fourcells.json" | awk '{print $1}')
+	http2=$(cat "$RUNTIME/curl-http2" 2>/dev/null)
+	if [ -z "$http2" ]; then
+		http2=0; curl --version 2>/dev/null | grep -q 'Features:.*HTTP2' && http2=1
+		printf '%s\n' "$http2" > "$RUNTIME/curl-http2"
+	fi
+	: > "$work/jobs"; : > "$work/curl.conf"
+	for pair in $pairs; do
+		case " $seen " in *" $pair "*) continue ;; esac
+		seen="$seen $pair"; x=${pair%:*}; y=${pair#*:}
+		url="https://4cells.ru/api/Map/v2/measurements/$technology/$operator?x=$x&y=$y&size=$zoom&metrics=0"
+		key=$(printf '%s\n%s' "$url" "$binding" | sha256sum | awk '{print $1}')
+		prefix="$RUNTIME/tile-$key"
+		printf '%s %s %s\n' "$i" "$pair" "$key" >> "$work/jobs"
+		if cache_valid "$prefix" "$key"; then
+			emit_map_tile "$prefix.body" > "$work/$i.result"
+		else
+			[ ! -s "$work/curl.conf" ] || printf 'next\n' >> "$work/curl.conf"
+			[ "$http2" != 1 ] || printf 'http2\n' >> "$work/curl.conf"
+			# Config contains validated URLs and private file paths, never credentials.
+			cat >> "$work/curl.conf" <<EOF
+url = "$url"
+output = "$work/$i.png"
+header = "@$work/header"
+user-agent = "$FOURCELLS_UA"
+proto = "=https"
+connect-timeout = 5
+max-time = 12
+max-filesize = 262144
+fail
+write-out = "$i %{http_code} %{num_connects}\\n"
+EOF
+		fi
+		i=$((i+1))
+	done
+	if [ -s "$work/curl.conf" ]; then
+		# One curl connection cache for the viewport. Default parallel policy waits
+		# for HTTP/2 multiplexing; do not use --parallel-immediate (extra TLS setups).
+		set -- --silent --fail-early
+		parallel=$(cat "$RUNTIME/curl-parallel" 2>/dev/null)
+		if [ -z "$parallel" ]; then
+			parallel=0; curl --help all 2>/dev/null | grep -q -- '--parallel-max ' && parallel=1
+			printf '%s\n' "$parallel" > "$RUNTIME/curl-parallel"
+		fi
+		if [ "$parallel" = 1 ] && [ "$lock_mode" = flock ]; then
+			single_host=$(cat "$RUNTIME/curl-single-host" 2>/dev/null)
+			if [ -z "$single_host" ]; then
+				single_host=0; curl --help all 2>/dev/null | grep -q -- '--parallel-max-host ' && single_host=1
+				printf '%s\n' "$single_host" > "$RUNTIME/curl-single-host"
+			fi
+			# HTTP/2 may multiplex three streams, HTTP/1.1 reuses one connection.
+			# Older curl also keeps one TLS session by running its URL list serially.
+			[ "$single_host" != 1 ] || set -- "$@" --parallel --parallel-max 3 --parallel-max-host 1
+		fi
+		curl "$@" --config "$work/curl.conf" > "$work/status" 2>/dev/null || :
+		# fail-early stops outstanding transfers after an HTTP error, without retries.
+		if awk '$2==429 {found=1} END {exit !found}' "$work/status"; then error=rate_limited
+		elif awk '$2==403 {found=1} END {exit !found}' "$work/status"; then error=access_denied
+		elif awk '$2==401 {found=1} END {exit !found}' "$work/status"; then error=sign_in_required; fi
+		case "$error" in rate_limited|access_denied) printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_fourcells" ;; esac
+		[ -z "$error" ] || { reply_error "$error"; return; }
+	fi
+	while read -r i pair key; do
+		if [ ! -s "$work/$i.result" ]; then
+			code=$(awk -v i="$i" '$1==i {print $2}' "$work/status")
+			if [ "$code" = 200 ] && [ -s "$work/$i.png" ] \
+				&& [ "$(wc -c < "$work/$i.png")" -le 262144 ] \
+				&& [ "$(head -c 8 "$work/$i.png" | base64)" = iVBORw0KGgo= ]; then
+				cache_store "$RUNTIME/tile-$key" "$work/$i.png" "$key"
+				emit_map_tile "$work/$i.png" > "$work/$i.result"
+			else
+				error=network; [ "$code" != 200 ] || error=unexpected_response
+				reply_error "$error" > "$work/$i.result"
+			fi
+		fi
+		bytes=$(wc -c < "$work/$i.result"); total=$((total+bytes))
+	done < "$work/jobs"
+	for old in $(ls -t "$RUNTIME"/tile-*.body 2>/dev/null | tail -n +13); do
+		rm -f "$old" "${old%.body}.key" "${old%.body}.t"
+	done
+	[ "$total" -le 2097152 ] || { reply_error unexpected_response; return; }
+	printf '{"ok":true,"tiles":{'
+	local comma=''
+	while read -r i pair key; do
+		printf '%s"%s":' "$comma" "$pair"; cat "$work/$i.result"; comma=,
+	done < "$work/jobs"
+	printf '}}\n'
+}
+
+case "$1" in
+	list) echo '{"status":{},"login":{"login":"str","password":"str"},"layers":{"kind":"str","south":"str","west":"str","north":"str","east":"str","zoom":"str","operator":"str","technology":"str"},"tile":{"x":"str","y":"str","zoom":"str","operator":"str","technology":"str"},"tiles":{"tiles":"str","zoom":"str","operator":"str","technology":"str"}}' ;;
+	call)
+		case "$2" in
+			status) account_status ;;
+			login|layers|tile|tiles)
+				acquire_lock "$2" || { reply_error busy; exit 0; }
+				case "$2" in
+					login) login_account ;;
+					layers) map_layers ;;
+					tile) map_tile ;;
+					tiles) map_tiles ;;
+				esac ;;
+			*) reply_error invalid ;;
+		esac ;;
+esac

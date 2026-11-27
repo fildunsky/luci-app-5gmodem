@@ -7,6 +7,10 @@
 'require view.modem5g.modemtabs as modemtabs';
 'require view.modem5g.mutil as mutil';
 'require view.modem5g.fresh as fresh';
+'require view.modem5g.maplayers as maplayers';
+'require view.modem5g.terrainlayers as terrainlayers';
+'require view.modem5g.vectorlayers as vectorlayers';
+'require view.modem5g.measurementlayers as measurementlayers';
 
 // GNSS receiver of the modem, see docs/subsystems/gps.md
 var BIN = '/usr/share/5gmodem/gps.sh';
@@ -143,6 +147,7 @@ function num(v, digits) {
 function unitOf(fmt) { return fmt.format('').trim(); }
 
 var ICONS = {
+	layers: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 10 5-10 5L2 8Z"/><path d="m2 12 10 5 10-5M2 16l10 5 10-5"/></g>',
 	pin: '<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21.5s-6.5-6-6.5-11.5a6.5 6.5 0 0 1 13 0c0 5.5-6.5 11.5-6.5 11.5Z"/><circle cx="12" cy="10" r="2.4"/></g>',
 	sat: '<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></g>',
 	copy: '<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></g>',
@@ -204,9 +209,49 @@ function hdopLevel(h) { return h <= 2 ? 3 : h <= 5 ? 2 : h <= 10 ? 1 : 0; }
 
 var SRC_CHIP = { at: 'AT', nmea: 'NMEA', qmi: 'QMI', ugps: 'ugps', mm: 'MM', usbgps: 'USB', android: 'Android' };
 
+function createGPSClock(now) {
+	var epoch=null, at=0, raw='', zone=null, formatter=null;
+	now=now||function(){return window.performance ? window.performance.now() : Date.now();};
+	function localParts(ms,fmt){
+		var p={};fmt.formatToParts(new Date(ms)).forEach(function(v){p[v.type]=v.value;});
+		return {time:p.hour+':'+p.minute+':'+p.second,date:p.year+'-'+p.month+'-'+p.day,
+			offset:Math.round((Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)-Math.floor(ms/1000)*1000)/1000)};
+	}
+	return {
+		sample:function(utc){
+			utc=String(utc||'');
+			if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z?$/.test(utc)){epoch=null;raw='';return;}
+			var stamp=Date.parse(/Z$/.test(utc)?utc:utc+'Z');
+			if(!Number.isFinite(stamp)){epoch=null;raw='';return;}
+			// A repeated cached sample must not reset the estimate every poll.
+			if(utc!==raw || epoch===null){epoch=stamp;at=now();raw=utc;}
+		},
+		setZone:function(config){
+			if(!config || config.offset==null || !Number.isFinite(+config.offset) || Math.abs(+config.offset)>86400){return false;}
+			zone={offset:+config.offset};formatter=null;
+			try{
+				if(config.zone && +config.now>0){
+					var candidate=new Intl.DateTimeFormat('en-GB-u-nu-latn',{timeZone:config.zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+					// Runtime offset wins over a saved but unapplied timezone setting.
+					if(localParts(+config.now*1000,candidate).offset===zone.offset){formatter=candidate;}
+				}
+			}catch(e){}
+			return true;
+		},
+		read:function(){
+			if(epoch===null || !zone){return null;}
+			var ms=epoch+Math.max(0,now()-at), p;
+			if(formatter){p=localParts(ms,formatter);}
+			else {var iso=new Date(ms+zone.offset*1000).toISOString();p={date:iso.slice(0,10),time:iso.slice(11,19),offset:zone.offset};}
+			var minutes=Math.round(Math.abs(p.offset)/60), label='UTC'+(p.offset<0?'-':'+')+('0'+Math.floor(minutes/60)).slice(-2)+':'+('0'+minutes%60).slice(-2);
+			return {time:p.time,date:p.date,zone:p.offset===0?'UTC':label};
+		}
+	};
+}
+
 return view.extend({
 	load: function() {
-		return fresh.check(40023, [ modemtabs, mutil ]).then(function() {
+		return fresh.check(40100, [ modemtabs, mutil ]).then(function() {
 			return L.resolveDefault(uci.load('5gmodem'));
 		});
 	},
@@ -231,9 +276,10 @@ return view.extend({
 		var mapAuto = cfg('gps_map_auto', '1') !== '0';
 		var isPhone = !!(window.matchMedia && window.matchMedia(PHONE_MQ).matches);
 
-		var st = { last: null, track: [], timer: null, ageTimer: null, busy: false, seenAt: 0,
+		var st = { last: null, track: [], timer: null, clockTimer: null, busy: false,
 			map: null, marker: null, ring: null, line: null, lf: null, follow: true, followBtn: null,
 			mapWanted: mapAuto, mapState: '', mode: '' };
+		var gpsClock=createGPSClock(), clockNext=0, clockBusy=false;
 
 		/* ---------- header card ---------- */
 		var hd = {};
@@ -263,6 +309,15 @@ return view.extend({
 			]),
 			hd.powerMRow
 		]);
+		var updateTime = E('b', {}, '');
+		var updateBar = E('i');
+		var updateBox = E('span', { 'class': 'tg-updbar', 'hidden': true,
+			'title': _('Time of the latest modem data; the bar runs until the next update') }, [
+			E('span', {}, _('Updated')), updateTime,
+			E('span', { 'class': 'tg-upd-cd' }, updateBar)
+		]);
+		var updateRow = E('div', { 'class': 'tg-gps-update', 'style': 'display:none' }, [ updateBox ]);
+		var updateAt = 0, updatePeriod = 0;
 
 		/* ---------- map ---------- */
 		var mp = {};
@@ -286,7 +341,57 @@ return view.extend({
 			(customMap ? [ customMap ] : []).concat(MAPS).map(function(m) { return E('option', { 'value': m.k }, [ m.n ]); }));
 		mp.style.value = mapKey;
 		mp.styleBox = E('label', { 'class': 'tg-gps-style' }, [ E('span', {}, _('Map')), mp.style ]);
-		var mapSec = E('div', { 'class': 'cbi-section tg-gps-mapsec' }, [ mp.box, E('div', { 'class': 'tg-gps-mapfoot' }, [ mp.open, mp.styleBox ]) ]);
+		var overlayChoices = [ { key: 'line', label: _('Track') }, { key: 'ring', label: _('Position accuracy') } ];
+		var overlaysOn = {};
+		function syncOverlay(key) {
+			if (!st.map || !st[key]) { return; }
+			if (overlaysOn[key]) { if (!st.map.hasLayer(st[key])) { st[key].addTo(st.map); } }
+			else if (st.map.hasLayer(st[key])) { st.map.removeLayer(st[key]); }
+		}
+		st.measurements=measurementlayers.build({fetch:maplayers.tile,report:function(code){externalLayers.measurementStatus(code);}});
+		var externalLayers = maplayers.build({ measurements:st.measurements,onExplore: function() { setFollow(false); }, getOperator: function() {
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', args(['cached', '10'])), '{}').then(function(out) {
+				try { return JSON.parse(out || '{}'); } catch (e) { return {}; }
+			});
+		} });
+		st.terrain = terrainlayers.build();
+		st.vector = vectorlayers.build();
+		st.externalLayers = externalLayers;
+		mp.layers = E('div', { 'class': 'tg-gps-layers', 'id': '5gm-gps-layers', 'role': 'region', 'aria-label': _('Layers'), 'style': 'display:none' }, [
+			E('div', { 'class': 'tg-gps-layerhead' }, [ E('b', {}, _('Layers')),
+				E('button', { 'type': 'button', 'class': 'tg-gps-layerclose', 'aria-label': _('Close'), 'click': function() { setLayersOpen(false); mp.layersButton.focus(); } }, '×') ]),
+			mp.styleBox,
+			E('div', { 'class': 'tg-gps-layergroup' }, [ E('b', {}, _('GPS')) ].concat(overlayChoices.map(function(o) {
+				var stored = null;
+				try { stored = window.localStorage.getItem('5gmodem.gps.layer.' + o.key); } catch (e) {}
+				overlaysOn[o.key] = stored !== '0';
+				var input = E('input', { 'type': 'checkbox', 'change': function() {
+					overlaysOn[o.key] = input.checked;
+					try { window.localStorage.setItem('5gmodem.gps.layer.' + o.key, input.checked ? '1' : '0'); } catch (e) {}
+					syncOverlay(o.key);
+				} });
+				input.checked = overlaysOn[o.key];
+				return E('label', {}, [ input, ' ', o.label ]);
+			}))), st.vector.node, st.terrain.node, externalLayers.node
+		]);
+		mp.layersButton = E('button', { 'type': 'button', 'class': 'tg-gps-layerbutton', 'title': _('Layers'), 'aria-label': _('Layers'), 'aria-expanded': 'false', 'aria-controls': '5gm-gps-layers',
+			'click': function() { setLayersOpen(mp.layersButton.getAttribute('aria-expanded') !== 'true'); } }, [
+			icon('layers', 18) ]);
+		function layerOutside(ev) {
+			if (!mp.layers.contains(ev.target) && !mp.layersButton.contains(ev.target)) { setLayersOpen(false); }
+		}
+		function layerKey(ev) {
+			if (ev.key === 'Escape') { setLayersOpen(false); mp.layersButton.focus(); }
+		}
+		function setLayersOpen(open) {
+			mp.layers.style.display = open ? '' : 'none';
+			mp.layersButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+			document.removeEventListener('click', layerOutside);
+			document.removeEventListener('keydown', layerKey);
+			if (open) { document.addEventListener('click', layerOutside); document.addEventListener('keydown', layerKey); }
+		}
+		mp.box.appendChild(mp.layers);
+		var mapSec = E('div', { 'class': 'cbi-section tg-gps-mapsec' }, [ mp.box, E('div', { 'class': 'tg-gps-mapfoot' }, [ mp.open ]) ]);
 
 		// Paints the chosen style: tile layer, projection, the dark-interface filter.
 		function setMapStyle(k, remember) {
@@ -294,6 +399,7 @@ return view.extend({
 			st.styleSerial = serial;
 			mapKey = m.k;
 			mp.style.value = mapKey;
+			if (st.vector) { st.vector.select(!!m.vector); }
 			if (remember) { try { window.localStorage.setItem('5gmodem.gps.map', m.k); } catch (e) {} }
 			if (!st.map || !st.lf) { return Promise.resolve(); }
 			function apply(adapter) {
@@ -321,8 +427,12 @@ return view.extend({
 				}
 				if (old) { map.removeLayer(old); }
 				st.tiles = next;
+				if (m.vector && st.vector) { st.vector.attach(next.getMaplibreMap()); }
 				if (next.bringToBack) { next.bringToBack(); }
 				mapSec.classList.toggle('tg-gps-dark', !!m.inv && isDarkUI(mapSec));
+				if (st.terrain) { st.terrain.styleChanged(); }
+				if (st.measurements) { st.measurements.styleChanged(); }
+				if (st.externalLayers && st.externalLayers.styleChanged) { st.externalLayers.styleChanged(); }
 			}
 			function failed() {
 				if (serial !== st.styleSerial || !st.map) { return; }
@@ -362,7 +472,7 @@ return view.extend({
 				tile('course', _('Course'), ''),
 				tile('sats', _('Satellites'), _('used / in view'), true),
 				tile('hdop', 'HDOP', _('lower is more accurate'), true),
-				tile('utc', _('Time (UTC)'), '')
+				tile('utc', _('GPS time'), '')
 			])
 		]);
 		tl.course.val.insertBefore(arrow, tl.course.now);
@@ -582,6 +692,10 @@ return view.extend({
 				if (st.map.attributionControl) { st.map.attributionControl.setPrefix(false); }
 				setMapStyle(mapKey, false);
 				st.line = lf.polyline(st.track, { 'color': '#1e88e5', 'weight': 3 }).addTo(st.map);
+				syncOverlay('line');
+				externalLayers.attach(st.map, lf);
+				st.measurements.attach(st.map,lf);
+				st.terrain.attach(st.map, lf);
 				var Ctl = lf.Control.extend({
 					options: { position: 'topright' },
 					onAdd: function() {
@@ -592,6 +706,7 @@ return view.extend({
 							st.track = last ? [ last ] : [];
 							if (st.line) { st.line.setLatLngs(st.track); }
 						});
+						div.appendChild(mp.layersButton);
 						lf.DomEvent.disableClickPropagation(div);
 						return div;
 					}
@@ -622,6 +737,7 @@ return view.extend({
 					st.ring = lf.circle(ll, { 'radius': +h * 5, 'color': '#1e88e5', 'weight': 1, 'opacity': 0.35,
 						'fillColor': '#1e88e5', 'fillOpacity': 0.13, 'interactive': false }).addTo(st.map);
 				} else { st.ring.setLatLng(ll); st.ring.setRadius(+h * 5); }
+				syncOverlay('ring');
 			} else if (st.ring) { st.map.removeLayer(st.ring); st.ring = null; }
 			if (st.line) { st.line.setLatLngs(st.track); }
 			if (!st.marker) {
@@ -639,30 +755,50 @@ return view.extend({
 			el.style.visibility = '';
 		}
 
-		function ageText() {
-			var j = st.last || {};
-			if (!(+j.fix > 0) || j.lat === null || j.lat === undefined) { return null; }
+		function paintUpdate(j) {
 			var now = Date.now() / 1000, age = now - (+j.ts || 0);
 			// Router and browser clocks can differ: fall back to the time the answer arrived.
-			if (!(+j.ts > 0) || age < -5 || age > 86400) { age = now - st.seenAt / 1000; }
-			return _('updated %s s ago').format(Math.max(0, Math.round(age)));
+			if (!(+j.ts > 0) || age < -5 || age > 86400) { age = 0; }
+			age = Math.max(0, age);
+			var at = Date.now() - age * 1000;
+			if (updateAt && Math.abs(at - updateAt) < 2500) { return; }
+			if (updateAt) {
+				var gap = (at - updateAt) / 1000;
+				if (gap > 1 && gap < 60) { updatePeriod = updatePeriod ? updatePeriod * 0.6 + gap * 0.4 : gap; }
+			}
+			updateAt = at;
+			var d = new Date(at), p2 = function(n) { return (n < 10 ? '0' : '') + n; };
+			updateTime.textContent = p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+			updateBox.hidden = false;
+			var left = Math.max(0.3, (updatePeriod || POLL_MS / 1000) - age);
+			updateBar.style.transition = 'none'; updateBar.style.width = '100%';
+			void updateBar.offsetWidth;
+			updateBar.style.transition = 'width ' + left.toFixed(1) + 's linear';
+			updateBar.style.width = '0%';
 		}
-
-		function paintAge() {
-			var t = ageText();
-			if (t !== null) { hd.loc.textContent = t; }
+		function paintClock(){
+			var c=gpsClock.read();
+			setTile(tl.utc,c?c.time:null,'',c?c.date:'');
+		}
+		function loadClockZone(){
+			if(clockBusy || Date.now()<clockNext){return;}
+			clockBusy=true;
+			run(['clock']).then(function(j){clockNext=Date.now()+(gpsClock.setZone(j)?60000:5000);paintClock();})
+				.catch(function(){clockNext=Date.now()+5000;})
+				.finally(function(){clockBusy=false;});
 		}
 
 		function show(j) {
 			st.last = j;
-			st.seenAt = Date.now();
 			var src = j.source || '';
 			var sup = +j.supported === 1 || src === 'ugps' || src === 'usbgps';
 			unsup.style.display = sup ? 'none' : '';
 			head.style.display = sup ? '' : 'none';
+			updateRow.style.display = sup ? '' : 'none';
 			main.style.display = sup ? '' : 'none';
 			gpsSet.style.display = sup ? '' : 'none';
-			if (!sup) { return; }
+			if (!sup) { gpsClock.sample(null); return; }
+			paintUpdate(j);
 
 			mapSec.classList.toggle('tg-gps-dark', !!styleOf(mapKey).inv && isDarkUI(mapSec));
 			var passive = src === 'ugps' || src === 'usbgps';
@@ -683,13 +819,14 @@ return view.extend({
 			setPill(hd.pill, stCls, pillTxt);
 			setPill(hd.pillM, stCls, pillTxt);
 			if (fixed) {
+				hd.loc.style.display = 'none';
 				hd.badge.textContent = (+j.fix >= 3) ? _('3D') : _('2D');
 				hd.reg.textContent = _('Latitude, longitude');
 				hd.coordTxt.textContent = num(j.lat, 6) + ', ' + num(j.lon, 6);
 				hd.coord.classList.remove('none');
 				hd.copy.style.display = '';
-				paintAge();
 			} else {
+				hd.loc.style.display = '';
 				hd.copy.style.display = 'none';
 				hd.coord.classList.add('none');
 				if (off) {
@@ -749,8 +886,8 @@ return view.extend({
 			var h = fixed ? num(j.hdop, 1) : null, lvl = h !== null ? hdopLevel(+h) : null;
 			setTile(tl.hdop, h, lvl !== null ? [ _('Poor'), _('Fair'), _('Good'), _('Excellent') ][lvl] : '');
 			setBar(tl.hdop, h === null ? null : 100 * (1 - Math.log(Math.max(+h, 1)) / Math.log(20)), mutil.QUAL_GRAD[lvl] || '');
-			var um = (!off && j.utc) ? String(j.utc).match(/^(\d{4}-\d\d-\d\d)T(\d\d:\d\d:\d\d)/) : null;
-			setTile(tl.utc, um ? um[2] : null, '', um ? um[1] : '');
+			gpsClock.sample(off?null:j.utc);
+			paintClock();
 
 			/* receiver */
 			rxManaged.style.display = passive ? 'none' : '';
@@ -779,9 +916,14 @@ return view.extend({
 		function tick() {
 			if (st.timer) { window.clearTimeout(st.timer); st.timer = null; }
 			if (!document.body.contains(root)) {
-				if (st.ageTimer) { window.clearInterval(st.ageTimer); st.ageTimer = null; }
+				setLayersOpen(false);
+				if (st.clockTimer) { window.clearInterval(st.clockTimer); st.clockTimer = null; }
 				st.styleSerial = (st.styleSerial || 0) + 1;
 				if (st.resizeObserver) { st.resizeObserver.disconnect(); st.resizeObserver = null; }
+				externalLayers.destroy();
+				st.terrain.destroy();
+				st.vector.destroy();
+				st.measurements.destroy();
 				if (st.map) { st.map.remove(); st.map = null; }
 				return;
 			}
@@ -794,7 +936,10 @@ return view.extend({
 
 		window.__5gmInPlaceSwitch = function(path) {
 			pageModemPath = String(path || '');
+			externalLayers.modemChanged();
 			st.track = []; st.last = null; st.centered = false;
+			updateAt = 0; updatePeriod = 0; updateBox.hidden = true;
+			gpsClock.sample(null);paintClock();
 			if (st.map) {
 				if (st.marker) { st.map.removeLayer(st.marker); st.marker = null; }
 				if (st.ring) { st.map.removeLayer(st.ring); st.ring = null; }
@@ -871,13 +1016,14 @@ return view.extend({
 		], false);
 		gpsSet.classList.add('tg-gps-setsec');
 
-		var root = E('div', { 'class': 'tg-gps' }, [ head, main, unsup, gpsSet ]);
+		var root = E('div', { 'class': 'tg-gps' }, [ head, updateRow, main, unsup, gpsSet ]);
 		hd.reg.textContent = _('Asking the modem…');
 		hd.coordTxt.textContent = '-';
 
-		st.ageTimer = window.setInterval(function() {
-			if (!document.hidden && document.body.contains(root)) { paintAge(); }
+		st.clockTimer = window.setInterval(function() {
+			if (!document.hidden && document.body.contains(root)) { paintClock(); loadClockZone(); }
 		}, 1000);
+		loadClockZone();
 		modemtabs.attach();
 		if (st.mapWanted) { window.setTimeout(openMap, 0); } else { mapMsg('ask'); }
 		window.setTimeout(tick, 0);

@@ -7513,3 +7513,238 @@ msgstr "无法更改 APN。"
 
 msgid "Could not update the installed MediaTek helper package."
 msgstr "无法更新已安装的 MediaTek 辅助软件包。"
+
+msgid "Layers"
+msgstr "图层"
+
+msgid "Track"
+msgstr "轨迹"
+
+msgid "Position accuracy"
+msgstr "定位精度"
+
+msgid "A password is saved. Leave this field empty to keep it."
+msgstr "密码已保存。留空以保留原密码。"
+
+msgid "An account operation is already running."
+msgstr "账户操作正在进行中。"
+
+msgid "Check sign-in"
+msgstr "检查登录"
+
+msgid "Check the login and password."
+msgstr "请检查登录名和密码。"
+
+msgid "Could not connect to the service"
+msgstr "无法连接服务"
+
+msgid "Could not save the account."
+msgstr "无法保存账户。"
+
+msgid "Enter the password for this account."
+msgstr "请输入此账户的密码。"
+
+msgid "Install curl to connect to these services."
+msgstr "请安装 curl 以连接这些服务。"
+
+msgid "Login"
+msgstr "登录名"
+
+msgid "One account for 4Cells and Speedmetrics. Saving it does not send measurements."
+msgstr "4Cells 和 Speedmetrics 共用一个账户。保存不会上传测量数据。"
+
+msgid "Remove saved account"
+msgstr "删除已保存的账户"
+
+msgid "Save the account first."
+msgstr "请先保存账户。"
+
+msgid "Service unavailable"
+msgstr "服务不可用"
+
+msgid "Sign-in rejected"
+msgstr "登录被拒绝"
+
+msgid "Sign-in verified"
+msgstr "登录已验证"
+
+msgid "Too many requests. Try again later."
+msgstr "请求过多，请稍后重试。"
+
+msgid "Check sign-in in the 4Cells / Speedmetrics settings."
+msgstr "请在 4Cells / Speedmetrics 设置中检查登录。"
+
+msgid "Could not load the external layer."
+msgstr "无法加载外部图层。"
+
+msgid "Loading external layers…"
+msgstr "正在加载外部图层…"
+
+msgid "Mbit/s"
+msgstr "Mbit/s"
+
+msgid "Network type"
+msgstr "网络类型"
+
+msgid "Select operator"
+msgstr "选择运营商"
+
+msgid "Speed measurements (Speedmetrics)"
+msgstr "测速记录（Speedmetrics）"
+
+msgid "Towers (4Cells)"
+msgstr "基站（4Cells）"
+
+msgid "Towers (Speedmetrics)"
+msgstr "基站（Speedmetrics）"
+
+msgid "Zoom in to load external layers."
+msgstr "请放大地图以加载外部图层。"
+
+msgid "Sign in"
+msgstr "登录"
+
+msgid "Signed in"
+msgstr "已登录"
+
+msgid "Sign in to use the map layers. No measurements are sent."
+msgstr "登录以使用地图图层。不会上传测量数据。"
+
+msgid "Sign in under Settings → Telemetry."
+msgstr "请在设置 → 遥测中登录。"
+
+msgid "Towers"
+msgstr "基站"
+
+msgid "4Cells login"
+msgstr "4Cells 登录"
+
+msgid "Measurements"
+msgstr "测量记录"
+
+msgid "Terrain"
+msgstr "地形："
+
+msgid "Hillshade"
+msgstr "地形阴影"
+
+msgid "Contour lines"
+msgstr "等高线"
+
+msgid "Could not load elevation data."
+msgstr "无法加载高程数据。"
+
+msgid "Calculated position"
+msgstr "估算位置"
+
+msgid "Manually set position"
+msgstr "手动设置的位置"
+
+msgid "Verified position"
+msgstr "已验证位置"
+
+msgid "Position inherited from site"
+msgstr "由站点确定的位置"
+
+msgid "Position needs clarification"
+msgstr "位置需要确认"
+
+msgid "GPS time"
+msgstr "GPS 时间"
+
+msgid "Buildings"
+msgstr "建筑"
+
+msgid "Labels"
+msgstr "标注"
+
+msgid "Points of interest"
+msgstr "兴趣点"
+
+msgid "Roads"
+msgstr "道路"
+
+msgid "3D buildings"
+msgstr "3D 建筑"
+
+
+msgid "The service denied access. Layer requests are paused."
+msgstr "服务拒绝访问。图层请求已暂停。"
+
+msgid "Layer requests are temporarily paused after a service error."
+msgstr "服务发生错误后，图层请求已暂时暂停。"
+
+msgid "The service returned an unexpected page. Layer requests are paused."
+msgstr "服务返回了意外页面。图层请求已暂停。"
+
+msgid "Measurements (4Cells)"
+msgstr "测量点 (4Cells)"
+
+msgid "Change PIN"
+msgstr "更改 PIN"
+
+msgid "Could not read the SIM PIN status"
+msgstr "无法读取 SIM PIN 状态"
+
+msgid "Current PIN"
+msgstr "当前 PIN"
+
+msgid "Disable PIN protection"
+msgstr "禁用 PIN 保护"
+
+msgid "Enable PIN protection"
+msgstr "启用 PIN 保护"
+
+msgid "Enter PIN"
+msgstr "输入 PIN"
+
+msgid "Incorrect SIM PIN"
+msgstr "SIM PIN 不正确"
+
+msgid "New PIN"
+msgstr "新 PIN"
+
+msgid "Next"
+msgstr "下一页"
+
+msgid "No SIM card"
+msgstr "无 SIM 卡"
+
+msgid "Please wait…"
+msgstr "请稍候…"
+
+msgid "Previous"
+msgstr "上一页"
+
+msgid "SIM PIN"
+msgstr "SIM PIN"
+
+msgid "SIM PIN operation"
+msgstr "SIM PIN 操作"
+
+msgid "SIM PIN operation completed"
+msgstr "SIM PIN 操作已完成"
+
+msgid "SIM is locked"
+msgstr "SIM 已锁定"
+
+msgid "SIM is ready"
+msgstr "SIM 已就绪"
+
+msgid "SIM requires PIN"
+msgstr "SIM 需要 PIN"
+
+msgid "SIM requires PUK"
+msgstr "SIM 需要 PUK"
+
+msgid "Switching antennas"
+msgstr "正在切换天线"
+
+msgid "The PIN must contain 4–8 digits"
+msgstr "PIN 必须为 4–8 位数字"
+
+msgid "The modem did not confirm the SIM PIN operation"
+msgstr "调制解调器未确认 SIM PIN 操作"
+
+msgid "The modem is busy"
+msgstr "调制解调器正忙"

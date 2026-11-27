@@ -81,6 +81,25 @@ NMEA_FIX = [
 
 
 class Parsers(unittest.TestCase):
+    def test_router_clock_does_not_initialize_modem(self):
+        with tempfile.TemporaryDirectory() as td:
+            stub = Path(td)
+            for name, body in {'uci': 'echo Europe/Berlin', 'date': "echo '1767225600 -0330'"}.items():
+                p = stub / name
+                p.write_text('#!/bin/sh\n' + body + '\n')
+                p.chmod(0o755)
+            # BusyBox ash can prefer its date applet over PATH executables.
+            script = stub / 'gps.sh'
+            script.write_text(GPS.read_text().replace("$(date '+%s %z')", f"$({stub}/date '+%s %z')"))
+            r = shell(f'sh "{script}" clock for=fixture', env={
+                'PATH': str(stub) + ':' + os.environ['PATH'],
+                'GPS_RES': str(stub / 'no-modem-library'),
+            })
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(json.loads(r.stdout), {
+                'zone': 'Europe/Berlin', 'now': 1767225600, 'offset': -12600,
+            })
+
     def test_nmea_fix(self):
         d, r = parse('parse-nmea', '\n'.join([
             '$GNGGA,093357.00,5545.13320,N,03736.93360,E,1,09,0.98,152.4,M,14.2,M,,*7A',

@@ -1385,7 +1385,7 @@ mm_fail_verdict() {
 			failed)
 				case "$_mf_r" in
 					sim-missing)
-						echo "    NO SIM DETECTED. This is hardware, not settings:"
+						echo "    NO SIM DETECTED in the active slot. Check the selected SIM/eSIM slot first;"
 						echo "    check that the card is there, the right way round and seated in the tray,"
 						echo "    and on dual-slot modules - that the active slot is the one holding the card." ;;
 					sim-error|sim-wrong) echo "    SIM ERROR ($_mf_r) - the card cannot be read: contacts, or try another card" ;;
@@ -1436,7 +1436,7 @@ mm_fail_verdict() {
 			fi
 		fi
 		case "$_mf_sim" in
-			''|--) echo "    the modem has no SIM object - there is no card in any slot" ;;
+			''|--) echo "    the modem has no active SIM object - this does not prove every slot is empty" ;;
 		esac
 	done
 }

@@ -322,6 +322,15 @@ Yandex uses EPSG:3395; other presets use EPSG:3857. The browser loads the tiles,
 provider learns the area shown. The Open in links open the position in external map sites.
 The track is kept in the page (at most 2000 points) and is lost when the page closes.
 
+### Overlay visibility
+
+The Layers panel on the map independently controls the track and
+position accuracy circle. Both are visible by default. Choices stay in this
+browser under `5gmodem.gps.layer.line` and `5gmodem.gps.layer.ring` and survive
+basemap changes and GPS updates. Hiding the track does not stop recording it or
+change the current-position marker or following behavior. No extra external
+service is contacted for these overlays.
+
 ### Optional OpenFreeMap vector basemaps
 
 The existing map picker also offers OpenFreeMap Liberty, Positron, Bright and Dark.
@@ -395,3 +404,200 @@ GNSS time; the presence of coordinate fields alone does not establish a fix.
 Compal devices sharing Qualcomm USB IDs with Foxconn are identified through their
 USB product descriptor. Their GNSS support is discovered through ModemManager or
 the QMI LOC service. Foxconn-specific AT GPS controls are not selected for them.
+
+### Optional authenticated map layers
+
+The bottom of Settings → Telemetry has one 4Cells / Speedmetrics account block
+with login, password and a single Sign in button. It is independent of the form
+autosave. Sign in verifies both services before saving the credentials or replacing
+sessions; a failed candidate leaves the previous account and sessions intact. An
+empty password retains the saved password only for the same login. There are no
+separate save/check/remove buttons or permanent per-service status lines. 4Cells
+uses access/refresh tokens and Speedmetrics uses a cookie session. These actions
+send no modem measurements.
+
+Before authenticated 4Cells map requests, the backend checks the access token's
+expiry and renews it one minute early through `/api/auth/refresh`. Older saved
+sessions recover the refresh username from the JWT `unique_name` claim. A refresh
+lock rechecks the token after waiting, so concurrent map requests renew only once.
+If the refresh token is rejected or the runtime session is missing, 4Cells signs
+in using the saved credentials without replacing the Speedmetrics session. If
+both methods fail, requests stop with an authentication error instead of silently
+accepting anonymous points without station numbers or bands. Failed recovery has
+a one-minute retry cooldown; provider rate-limit cooldowns still take precedence.
+Session replacement is atomic and token changes invalidate the old response cache.
+
+The password is never returned to the browser. Credentials live in
+`/etc/5gmodem-private/maps.json` (0600, directory 0700), preserved by both editions.
+Sessions live in `/tmp/5gmodem-private/maps` with the same restricted permissions.
+These locations are outside the configuration, metrics and diagnostics collected
+by the app. The RPC methods are restricted to the full administrator ACL. Curl
+uses private request/header files, fixed HTTPS endpoints and certificate checks;
+passwords and tokens are absent from command-line arguments and returned errors.
+Lite needs curl installed to use these optional services.
+
+GPS offers independent, initially disabled overlays for 4Cells towers, Speedmetrics
+towers and Speedmetrics speed measurements. The 4Cells layer has an operator picker
+from its public handbook and GSM/WCDMA/LTE/NR selection. Speed points use rounded badges with a colored dot and download speed (upload when
+download is unknown). Speedmetrics towers use small plates with their number, 5G
+indicator when available and available download/upload speeds. Missing values are
+not replaced with zero. Popups show available download/upload, RTT and bands. The
+speed layer requests the last 30 days, limited to 1500 records; it is not a complete
+coverage map. Provider grid tiles are not used.
+
+Only enabling a layer requests its visible area from the router-side adapter. The
+provider learns that area. Requests require zoom 12 or deeper and bounds no wider
+than one degree; responses are size-limited. Pan/zoom requests are debounced and
+serialized; the browser keeps one response per layer for up to five minutes, with a 15%
+viewport margin so small GPS-follow movements reuse the same data. Late
+responses cannot restore a disabled layer or paint after leaving the view. Layer
+markers use geographic coordinates, so both map projections are supported. Expired
+or rejected sessions are reported with a link to sign in under Settings → Telemetry. These
+services use internal web endpoints; changes on the provider side may require an
+adapter update. There is no measurement upload or Speedmetrics test engine yet.
+
+Speedmetrics point badges follow the service's point palette (below 20, below 50,
+below 150, and 150+ Mbit/s), not its heatmap palette. Overlapping speed badges are
+grouped in screen coordinates and recomputed from cached points after map moves
+and zoom changes. Group badges show count and median DL, or median UL if DL is
+unknown. Clicking a group zooms toward its points; the popup has paginated
+individual readings, including for identical coordinates at maximum zoom.
+
+The panel controls are grouped by provider: 4Cells towers, then Speedmetrics
+towers and speed. The operator and technology pickers have a gap. When 4Cells is
+first enabled, the registered operator's MCC/MNC from the selected modem's cached
+metrics is matched to the provider's six-digit internal code. Missing or unmatched
+codes leave the picker unset. Manual selection wins over a late cached-metrics
+reply; switching modems resets that automatic choice for the new modem.
+
+### Hillshade and contours
+
+Two opt-in controls add hillshade and contour lines. Their Leaflet canvas grid is
+independent of the basemap, so it works with raster and OpenFreeMap vector styles.
+Terrarium elevation PNGs come directly to the browser from the public Terrain Tiles
+S3 bucket with anonymous CORS. Both controls off means no elevation requests. A
+view-local LRU cache holds up to 48 decoded 256-pixel DEM tiles; native zoom is
+capped at 14 and the browser interpolates heights at deeper zooms. Nothing is
+installed on the modem and no terrain processing runs on the router.
+
+Hillshade uses neighboring elevation samples. Contours are calculated with marching
+squares, with intervals of 200/100/50/20/10 m as zoom increases, emphasized index
+lines and meter labels. These are terrain heights, not the modem's GNSS altitude.
+Invalid elevation pixels remain blank instead of becoming sea-level contours.
+EPSG:3395 world rows are reprojected to the DEM's EPSG:3857 before sampling, so
+Yandex overlays remain aligned. Basemap/projection changes redraw the grid and
+leaving the page clears it. Provider credits remain visible while enabled.
+
+4Cells tower colors follow its location metadata: locType 0/1 is red and 2–4 green;
+bsType 6 uses olive/yellow for the unlocated/located clarification-required state.
+Position metadata is retained from the API and described in the popup. Popup and
+tooltip panes are explicitly above external marker panes, including on themes
+that override Leaflet's default pane order.
+
+References: https://registry.opendata.aws/terrain-tiles/ and
+https://github.com/tilezen/joerd/blob/master/docs/formats.md .
+
+GPS time is shown in the router’s runtime timezone and advances once per second
+between receiver samples using a monotonic browser timer. A fresh receiver timestamp
+resynchronizes it; repeated cached timestamps do not reset it. Timezone metadata is
+read once per minute without querying the modem. An IANA timezone is used when it
+matches the runtime offset, with a fixed-offset fallback for custom POSIX zones.
+
+OpenFreeMap styles expose browser-local switches for buildings, labels, POI and
+roads through `vectorlayers.js`. The controls are hidden on raster maps and
+disabled until the vector style loads; groups absent from a style stay disabled.
+OpenMapTiles source-layer names determine the groups, with road labels requiring
+both roads and labels. POI captions belong to the independent POI switch.
+Originally hidden style layers stay hidden. Switching styles detaches listeners
+from the previous GL map and reapplies the saved choices to the new one.
+
+Optional 3D buildings use `render_height` and `render_min_height` from the vector
+tiles. Liberty's native extrusion is flattened when disabled; the other styles
+receive a building extrusion layer without invented fallback heights. The camera
+stays overhead so Leaflet's GPS marker, track, accuracy ring and provider overlays
+remain aligned. These switches do not change modem polling or router services.
+
+Map appearance and overlays are grouped in a Layers panel opened by a button at
+the top right of the map. It stays open while changing options, closes with the
+button, close control, Escape or an outside click, and scrolls within the map on
+small screens. Global dismissal listeners exist only while the panel is open and
+are removed when leaving the view. The map selector is inside this panel too.
+
+External map requests stop when all provider layers are disabled; a request already
+in flight can still complete. HTTP 403/429 or an unexpected non-JSON page suspends
+the provider server-side for 30 minutes, shared across endpoints and browser tabs.
+Identical requests use a bounded five-minute router cache; changed viewports have
+no fixed waiting interval. A rate-limited
+provider stays paused for the remainder of the current map view; no automatic
+retry timer, IP rotation or challenge bypass is used. Account status is local and
+login requests occur only on explicit sign-in.
+
+Provider popups preserve marker identity while panning or redrawing an unchanged
+cached response. Speed clusters are rebuilt on zoom or new data, not translation.
+Opening a popup disables GPS following and defers provider refreshes until it
+closes. Transient refresh errors retain visible data; disabling a layer or changing
+its operator/technology filter still clears it. Popup listeners are removed on
+view destruction.
+
+External provider switches, manual operator and technology selection, and terrain
+choices persist in browser localStorage. Restoring the page reloads the enabled
+providers only; it does not enable any layer by default for a new browser. Modem
+switching resets the manual operator selection so automatic matching can run.
+FourCells tower captions use the existing response's `num` and `bands` fields,
+without extra network requests. Captions are shown from zoom 15 and use text DOM
+nodes rather than interpreting provider strings as HTML.
+
+FourCells tower requests follow the web client's session-signing exchange: obtain
+a short-lived identifier from `/api/security/sign`, then send `x-request-id` as the
+SHA-256 of the exact API path (including query), identifier and a consistent,
+truthful application User-Agent, separated by hyphens. No unsigned data request is
+sent if this handshake fails. The identifier cache is private, limited by the server
+TTL and bound to the current access token and User-Agent. This avoids obtaining a
+new identifier on each map movement. Existing request limits and error cooldowns
+also apply to handshake failures. A `license` text field alone is not used to
+classify an otherwise valid, signed response as an error.
+
+The optional FourCells Measurements layer uses the site's main-origin
+`/api/Map/v2/measurements/<technology>/<operator>` PNG tiles with Bearer auth
+and metric 0. `measurementlayers.js` renders the native 512-world-pixel grid,
+scaling the returned PNG (normally 256 pixels) as the web client does. Yandex
+EPSG3395 is resampled by row into the spherical source grid. Native zoom is capped
+at 17, native tiles start at zoom 6 and display starts at zoom 4, matching the
+provider's overview scales. FourCells towers also support zoom 4 and wider visible
+areas; the smaller-area zoom 12 limit applies only to Speedmetrics. No offscreen
+buffer is prefetched. Two rings of already displayed tiles are retained, and
+panning updates the tile grid at most every 200 ms instead of waiting for drag
+end. Point and tile RPCs use `nobatch: true` to stay independent of unrelated
+LuCI polling. The tile loader coalesces one frame's requests (16 ms) into batches
+of up to 12 unique coordinates with the same operator, technology and native zoom.
+Each batch uses one curl process and its shared connection cache. Where supported,
+`--parallel-max 3 --parallel-max-host 1` allows up to three HTTP/2 streams over one
+TLS connection; HTTP/1.1 reuses that connection sequentially. Older curl versions
+without the per-host connection limit also process the URL list sequentially.
+No persistent daemon or extra dependency is needed. PNGs already in the router
+cache are omitted from the transfer list. The original `tile` RPC remains available.
+During zoom animation, dispatch waits for the final grid so the central tiles
+and later edge tiles share the same batch. Retained older zoom levels cannot
+keep pending downloads alive after the new zoom settles.
+
+The frontend reserves the three network slots for a batch; point requests have
+priority before batch dispatch and JSON requests remain serialized. A batch reply
+contains its tiles together, so one slow image can delay that bounded batch.
+Requests removed from view before dispatch are skipped; late replies are ignored.
+Curl fail-early stops pending batch transfers on an HTTP error without retries.
+Authentication stays in a private header file, and credentials never enter curl
+arguments or the generated URL config. Coordinates, zoom, technology and operator
+are validated before network access; aggregate replies are limited to 2 MiB.
+Refresh after
+map movement is debounced by 150 ms. Unloaded tiles stop owning queued jobs, so
+old pan/zoom requests are skipped before network access; shared source tiles stay
+active while any visible consumer needs them. With flock, backend map reads share
+the account lock while login retains exclusive access; a separate lock serializes
+only signature-seed renewal. Viewport caches use distinct request hashes, and
+cache bodies are published with atomic rename.
+Routers using the exclusive fallback lock downgrade the frontend pool after a
+busy image response. Browser decoded-image cache is limited to 32 entries. The private
+router cache stores up to twelve tile responses plus two responses per point
+endpoint, each cached body at most 256 KiB. Only PNG magic is accepted for image
+responses; HTML/error bodies never become map images. Real 403/429 pauses are
+shared by both FourCells layers. Provider layer choices persist in this browser.

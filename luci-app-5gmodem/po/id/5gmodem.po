@@ -7513,3 +7513,238 @@ msgstr "Tidak dapat mengubah APN."
 
 msgid "Could not update the installed MediaTek helper package."
 msgstr "Tidak dapat memperbarui paket pembantu MediaTek yang terpasang."
+
+msgid "Layers"
+msgstr "Lapisan"
+
+msgid "Track"
+msgstr "Jejak"
+
+msgid "Position accuracy"
+msgstr "Akurasi posisi"
+
+msgid "A password is saved. Leave this field empty to keep it."
+msgstr "Kata sandi tersimpan. Kosongkan kolom ini untuk mempertahankannya."
+
+msgid "An account operation is already running."
+msgstr "Operasi akun sedang berjalan."
+
+msgid "Check sign-in"
+msgstr "Periksa login"
+
+msgid "Check the login and password."
+msgstr "Periksa login dan kata sandi."
+
+msgid "Could not connect to the service"
+msgstr "Tidak dapat terhubung ke layanan"
+
+msgid "Could not save the account."
+msgstr "Tidak dapat menyimpan akun."
+
+msgid "Enter the password for this account."
+msgstr "Masukkan kata sandi akun ini."
+
+msgid "Install curl to connect to these services."
+msgstr "Pasang curl untuk terhubung ke layanan ini."
+
+msgid "Login"
+msgstr "Login"
+
+msgid "One account for 4Cells and Speedmetrics. Saving it does not send measurements."
+msgstr "Satu akun untuk 4Cells dan Speedmetrics. Menyimpannya tidak mengirim pengukuran."
+
+msgid "Remove saved account"
+msgstr "Hapus akun tersimpan"
+
+msgid "Save the account first."
+msgstr "Simpan akun terlebih dahulu."
+
+msgid "Service unavailable"
+msgstr "Layanan tidak tersedia"
+
+msgid "Sign-in rejected"
+msgstr "Login ditolak"
+
+msgid "Sign-in verified"
+msgstr "Login terverifikasi"
+
+msgid "Too many requests. Try again later."
+msgstr "Terlalu banyak permintaan. Coba lagi nanti."
+
+msgid "Check sign-in in the 4Cells / Speedmetrics settings."
+msgstr "Periksa login di pengaturan 4Cells / Speedmetrics."
+
+msgid "Could not load the external layer."
+msgstr "Tidak dapat memuat lapisan eksternal."
+
+msgid "Loading external layers…"
+msgstr "Memuat lapisan eksternal…"
+
+msgid "Mbit/s"
+msgstr "Mbit/dtk"
+
+msgid "Network type"
+msgstr "Jenis jaringan"
+
+msgid "Select operator"
+msgstr "Pilih operator"
+
+msgid "Speed measurements (Speedmetrics)"
+msgstr "Pengukuran kecepatan (Speedmetrics)"
+
+msgid "Towers (4Cells)"
+msgstr "Menara (4Cells)"
+
+msgid "Towers (Speedmetrics)"
+msgstr "Menara (Speedmetrics)"
+
+msgid "Zoom in to load external layers."
+msgstr "Perbesar peta untuk memuat lapisan eksternal."
+
+msgid "Sign in"
+msgstr "Masuk"
+
+msgid "Signed in"
+msgstr "Berhasil masuk"
+
+msgid "Sign in to use the map layers. No measurements are sent."
+msgstr "Masuk untuk menggunakan lapisan peta. Tidak ada pengukuran yang dikirim."
+
+msgid "Sign in under Settings → Telemetry."
+msgstr "Masuk di Pengaturan → Telemetri."
+
+msgid "Towers"
+msgstr "Menara"
+
+msgid "4Cells login"
+msgstr "Login 4Cells"
+
+msgid "Measurements"
+msgstr "Pengukuran"
+
+msgid "Terrain"
+msgstr "Medan:"
+
+msgid "Hillshade"
+msgstr "Bayangan relief"
+
+msgid "Contour lines"
+msgstr "Garis kontur"
+
+msgid "Could not load elevation data."
+msgstr "Tidak dapat memuat data ketinggian."
+
+msgid "Calculated position"
+msgstr "Posisi perkiraan"
+
+msgid "Manually set position"
+msgstr "Posisi diatur manual"
+
+msgid "Verified position"
+msgstr "Posisi terverifikasi"
+
+msgid "Position inherited from site"
+msgstr "Posisi dari lokasi situs"
+
+msgid "Position needs clarification"
+msgstr "Posisi perlu dikonfirmasi"
+
+msgid "GPS time"
+msgstr "Waktu GPS"
+
+msgid "Buildings"
+msgstr "Bangunan"
+
+msgid "Labels"
+msgstr "Label"
+
+msgid "Points of interest"
+msgstr "Tempat menarik"
+
+msgid "Roads"
+msgstr "Jalan"
+
+msgid "3D buildings"
+msgstr "Bangunan 3D"
+
+
+msgid "The service denied access. Layer requests are paused."
+msgstr "Layanan menolak akses. Permintaan lapisan dijeda."
+
+msgid "Layer requests are temporarily paused after a service error."
+msgstr "Permintaan lapisan dijeda sementara setelah kesalahan layanan."
+
+msgid "The service returned an unexpected page. Layer requests are paused."
+msgstr "Layanan mengembalikan halaman yang tidak diharapkan. Permintaan lapisan dijeda."
+
+msgid "Measurements (4Cells)"
+msgstr "Pengukuran (4Cells)"
+
+msgid "Change PIN"
+msgstr "Ubah PIN"
+
+msgid "Could not read the SIM PIN status"
+msgstr "Tidak dapat membaca status PIN SIM"
+
+msgid "Current PIN"
+msgstr "PIN saat ini"
+
+msgid "Disable PIN protection"
+msgstr "Nonaktifkan perlindungan PIN"
+
+msgid "Enable PIN protection"
+msgstr "Aktifkan perlindungan PIN"
+
+msgid "Enter PIN"
+msgstr "Masukkan PIN"
+
+msgid "Incorrect SIM PIN"
+msgstr "PIN SIM salah"
+
+msgid "New PIN"
+msgstr "PIN baru"
+
+msgid "Next"
+msgstr "Berikutnya"
+
+msgid "No SIM card"
+msgstr "Tidak ada kartu SIM"
+
+msgid "Please wait…"
+msgstr "Harap tunggu…"
+
+msgid "Previous"
+msgstr "Sebelumnya"
+
+msgid "SIM PIN"
+msgstr "PIN SIM"
+
+msgid "SIM PIN operation"
+msgstr "Operasi PIN SIM"
+
+msgid "SIM PIN operation completed"
+msgstr "Operasi PIN SIM selesai"
+
+msgid "SIM is locked"
+msgstr "SIM terkunci"
+
+msgid "SIM is ready"
+msgstr "SIM siap"
+
+msgid "SIM requires PIN"
+msgstr "SIM memerlukan PIN"
+
+msgid "SIM requires PUK"
+msgstr "SIM memerlukan PUK"
+
+msgid "Switching antennas"
+msgstr "Mengalihkan antena"
+
+msgid "The PIN must contain 4–8 digits"
+msgstr "PIN harus terdiri dari 4–8 digit"
+
+msgid "The modem did not confirm the SIM PIN operation"
+msgstr "Modem tidak mengonfirmasi operasi PIN SIM"
+
+msgid "The modem is busy"
+msgstr "Modem sedang sibuk"

@@ -279,6 +279,19 @@ set -- $_args
 case "$_TGT" in *[!A-Za-z0-9._:-]*) _TGT="" ;; esac
 
 case "$1" in
+	clock)
+		# Runtime timezone metadata only; never initialize or query the modem.
+		_clock_zone=$(uci -q get system.@system[0].zonename)
+		case "$_clock_zone" in *[!A-Za-z0-9_+./-]*) _clock_zone= ;; esac
+		set -- $(date '+%s %z')
+		_clock_now=$1
+		_clock_offset=$(printf '%s\n' "$2" | awk '/^[+-][0-9][0-9][0-9][0-9]$/ {
+			h=substr($0,2,2)+0; m=substr($0,4,2)+0
+			if(h<24 && m<60) print (substr($0,1,1)=="-"?-1:1)*(h*3600+m*60)
+		}')
+		case "$_clock_now" in ''|*[!0-9]*) _clock_now=null ;; esac
+		printf '{"zone":"%s","offset":%s,"now":%s}\n' "$_clock_zone" "${_clock_offset:-null}" "$_clock_now"
+		exit 0 ;;
 	parse-nmea)  gnss_parse_nmea; exit 0 ;;
 	parse-at)    gnss_parse_at "$2"; exit 0 ;;
 	parse-state) gnss_parse_state "$2"; exit 0 ;;

@@ -22,7 +22,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=4.0.25
+PKG_VERSION:=4.1.0
 PKG_RELEASE:=1
 PKG_PROVIDES:=luci-5gmodem-ui
 PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
@@ -31,6 +31,7 @@ override PKG_FIXUP_DEPENDS = $(PKG_DEFAULT_DEPENDS) $(filter-out $(PKG_DEFAULT_D
 
 define Package/luci-app-5gmodem/conffiles
 /etc/config/5gmodem
+/etc/5gmodem-private/maps.json
 /etc/5gmodem/modem/atcmmds.user
 /etc/5gmodem/modem/atcmmds/*.user
 /etc/5gmodem/modem/phonebook.user
@@ -40,6 +41,7 @@ endef
 
 define Package/luci-app-5gmodem/postinst
 chmod +x "$${IPKG_INSTROOT}"/usr/share/5gmodem/*.sh 2>/dev/null
+chmod +x "$${IPKG_INSTROOT}"/usr/libexec/rpcd/5gmodem_maps 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/lib/netifd/proto/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/usb/71-5gmodem-resolve 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/tty/05-5gmodem-noat 2>/dev/null

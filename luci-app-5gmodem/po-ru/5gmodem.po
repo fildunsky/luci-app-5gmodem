@@ -7861,3 +7861,175 @@ msgstr "Модем занят"
 
 msgid "Could not update the installed MediaTek helper package."
 msgstr "Не удалось обновить установленный вспомогательный пакет MediaTek."
+
+msgid "Layers"
+msgstr "Слои"
+
+msgid "Track"
+msgstr "Трек"
+
+msgid "Position accuracy"
+msgstr "Область точности"
+
+msgid "A password is saved. Leave this field empty to keep it."
+msgstr "Пароль сохранён. Оставьте поле пустым, чтобы не менять его."
+
+msgid "An account operation is already running."
+msgstr "Операция с учётной записью уже выполняется."
+
+msgid "Check sign-in"
+msgstr "Проверить вход"
+
+msgid "Check the login and password."
+msgstr "Проверьте логин и пароль."
+
+msgid "Could not connect to the service"
+msgstr "Не удалось подключиться к сервису"
+
+msgid "Could not save the account."
+msgstr "Не удалось сохранить учётную запись."
+
+msgid "Enter the password for this account."
+msgstr "Введите пароль этой учётной записи."
+
+msgid "Install curl to connect to these services."
+msgstr "Установите curl для подключения к этим сервисам."
+
+msgid "Login"
+msgstr "Логин"
+
+msgid "One account for 4Cells and Speedmetrics. Saving it does not send measurements."
+msgstr "Единая учётная запись для 4Cells и Speedmetrics. Сохранение не отправляет замеры."
+
+msgid "Remove saved account"
+msgstr "Удалить сохранённую учётную запись"
+
+msgid "Save the account first."
+msgstr "Сначала сохраните учётную запись."
+
+msgid "Service unavailable"
+msgstr "Сервис недоступен"
+
+msgid "Sign-in rejected"
+msgstr "Вход отклонён"
+
+msgid "Sign-in verified"
+msgstr "Вход проверен"
+
+msgid "Too many requests. Try again later."
+msgstr "Слишком много запросов. Повторите позже."
+
+msgid "Check sign-in in the 4Cells / Speedmetrics settings."
+msgstr "Проверьте вход в настройках 4Cells / Speedmetrics."
+
+msgid "Could not load the external layer."
+msgstr "Не удалось загрузить внешний слой."
+
+msgid "Loading external layers…"
+msgstr "Загрузка внешних слоёв…"
+
+msgid "Mbit/s"
+msgstr "Мбит/с"
+
+msgid "Network type"
+msgstr "Тип сети"
+
+msgid "Select operator"
+msgstr "Выберите оператора"
+
+msgid "Speed measurements (Speedmetrics)"
+msgstr "Замеры скорости (Speedmetrics)"
+
+msgid "Towers (4Cells)"
+msgstr "Вышки (4Cells)"
+
+msgid "Towers (Speedmetrics)"
+msgstr "Вышки (Speedmetrics)"
+
+msgid "Zoom in to load external layers."
+msgstr "Приблизьте карту для загрузки внешних слоёв."
+
+msgid "Sign in"
+msgstr "Войти"
+
+msgid "Signed in"
+msgstr "Вход выполнен"
+
+msgid "Sign in to use the map layers. No measurements are sent."
+msgstr "Войдите для доступа к слоям карты. Замеры не отправляются."
+
+msgid "Sign in under Settings → Telemetry."
+msgstr "Войдите в разделе «Настройки → Телеметрия»."
+
+msgid "Towers"
+msgstr "Вышки"
+
+msgid "4Cells login"
+msgstr "Логин 4Cells"
+
+msgid "Measurements"
+msgstr "Замеры"
+
+msgid "Terrain"
+msgstr "Рельеф:"
+
+msgid "Hillshade"
+msgstr "Тени"
+
+msgid "Contour lines"
+msgstr "Горизонтали"
+
+msgid "Could not load elevation data."
+msgstr "Не удалось загрузить данные высот."
+
+msgid "Calculated position"
+msgstr "Расчётная позиция"
+
+msgid "Manually set position"
+msgstr "Позиция задана вручную"
+
+msgid "Verified position"
+msgstr "Проверенная позиция"
+
+msgid "Position inherited from site"
+msgstr "Позиция по площадке"
+
+msgid "Position needs clarification"
+msgstr "Позиция требует уточнения"
+
+msgid "GPS time"
+msgstr "Время GPS"
+
+msgid "Buildings"
+msgstr "Здания"
+
+msgid "Labels"
+msgstr "Подписи"
+
+msgid "Points of interest"
+msgstr "Объекты POI"
+
+msgid "Roads"
+msgstr "Дороги"
+
+msgid "3D buildings"
+msgstr "3D-здания"
+
+
+msgid "The service denied access. Layer requests are paused."
+msgstr "Сервис отказал в доступе. Загрузка слоёв приостановлена."
+
+msgid "Layer requests are temporarily paused after a service error."
+msgstr "После ошибки сервиса загрузка слоёв временно приостановлена."
+
+msgid "The service returned an unexpected page. Layer requests are paused."
+msgstr "Сервис вернул неожиданную страницу. Загрузка слоёв приостановлена."
+
+msgid "Measurements (4Cells)"
+msgstr "Замеры (4Cells)"
+
+msgid "Next"
+msgstr "Далее"
+
+msgid "Previous"
+msgstr "Назад"

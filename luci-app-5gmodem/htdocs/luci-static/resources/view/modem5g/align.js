@@ -218,7 +218,7 @@ function collapsible(key, titleText, content, defOpen) {
 var pageModemPath = '';
 
 return view.extend({
-	load: function() { return fresh.check(40023, [ modemtabs, mutil ]); },
+	load: function() { return fresh.check(40100, [ modemtabs, mutil ]); },
 
 	render: function() {
 		loadCss();

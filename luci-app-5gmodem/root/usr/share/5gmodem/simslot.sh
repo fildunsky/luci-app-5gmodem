@@ -193,17 +193,21 @@ if [ -n "$MI" ]; then
 	case "$1" in
 	set)
 		[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
+		# DW5829e supports native QMI slot switching through ModemManager.
+		# Its fragile-AT quirk must not bypass that working control path.
+		if [ -z "$_FRAG" ] || [ "$_AVIDPID" = "413c:81e4" ]; then
+			if mmcli -m "$MI" --set-primary-sim-slot="$2" >/dev/null 2>&1; then
+				echo '{"result":"ok"}'
+				exit 0
+			fi
+			logger -t 5gmodem "slots: ModemManager did not switch the slot - trying directly"
+		fi
 		if [ -n "$_FRAG" ]; then
 			SLOT_AT_PORT=$(_slot_at_mm)
 			[ -n "$SLOT_AT_PORT" ] || SLOT_AT_PORT=$(uci -q get "5gmodem.$_SEC.at_port")
 			_at_slot_set "$2" && exit 0
 			echo '{"error":"switch failed"}'; exit 0
 		fi
-		if mmcli -m "$MI" --set-primary-sim-slot="$2" >/dev/null 2>&1; then
-			echo '{"result":"ok"}'
-			exit 0
-		fi
-		logger -t 5gmodem "slots: ModemManager did not switch the slot - trying directly"
 		SLOT_AT_PORT=$(_slot_at_mm)
 		;;
 	*)

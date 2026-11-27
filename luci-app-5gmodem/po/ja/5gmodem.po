@@ -7513,3 +7513,238 @@ msgstr "APN を変更できませんでした。"
 
 msgid "Could not update the installed MediaTek helper package."
 msgstr "インストール済みの MediaTek 補助パッケージを更新できませんでした。"
+
+msgid "Layers"
+msgstr "レイヤー"
+
+msgid "Track"
+msgstr "軌跡"
+
+msgid "Position accuracy"
+msgstr "位置精度"
+
+msgid "A password is saved. Leave this field empty to keep it."
+msgstr "パスワードは保存済みです。変更しない場合は空欄にしてください。"
+
+msgid "An account operation is already running."
+msgstr "アカウント操作を実行中です。"
+
+msgid "Check sign-in"
+msgstr "ログインを確認"
+
+msgid "Check the login and password."
+msgstr "ログイン名とパスワードを確認してください。"
+
+msgid "Could not connect to the service"
+msgstr "サービスに接続できません"
+
+msgid "Could not save the account."
+msgstr "アカウントを保存できません。"
+
+msgid "Enter the password for this account."
+msgstr "このアカウントのパスワードを入力してください。"
+
+msgid "Install curl to connect to these services."
+msgstr "接続するには curl をインストールしてください。"
+
+msgid "Login"
+msgstr "ログイン名"
+
+msgid "One account for 4Cells and Speedmetrics. Saving it does not send measurements."
+msgstr "4Cells と Speedmetrics 共通のアカウントです。保存しても測定値は送信されません。"
+
+msgid "Remove saved account"
+msgstr "保存したアカウントを削除"
+
+msgid "Save the account first."
+msgstr "先にアカウントを保存してください。"
+
+msgid "Service unavailable"
+msgstr "サービスを利用できません"
+
+msgid "Sign-in rejected"
+msgstr "ログインが拒否されました"
+
+msgid "Sign-in verified"
+msgstr "ログインを確認済み"
+
+msgid "Too many requests. Try again later."
+msgstr "リクエストが多すぎます。後で再試行してください。"
+
+msgid "Check sign-in in the 4Cells / Speedmetrics settings."
+msgstr "4Cells / Speedmetrics の設定でログインを確認してください。"
+
+msgid "Could not load the external layer."
+msgstr "外部レイヤーを読み込めません。"
+
+msgid "Loading external layers…"
+msgstr "外部レイヤーを読み込み中…"
+
+msgid "Mbit/s"
+msgstr "Mbit/s"
+
+msgid "Network type"
+msgstr "ネットワークの種類"
+
+msgid "Select operator"
+msgstr "通信事業者を選択"
+
+msgid "Speed measurements (Speedmetrics)"
+msgstr "速度測定（Speedmetrics）"
+
+msgid "Towers (4Cells)"
+msgstr "基地局（4Cells）"
+
+msgid "Towers (Speedmetrics)"
+msgstr "基地局（Speedmetrics）"
+
+msgid "Zoom in to load external layers."
+msgstr "拡大すると外部レイヤーを読み込めます。"
+
+msgid "Sign in"
+msgstr "ログイン"
+
+msgid "Signed in"
+msgstr "ログインしました"
+
+msgid "Sign in to use the map layers. No measurements are sent."
+msgstr "地図レイヤーを利用するにはログインしてください。測定値は送信されません。"
+
+msgid "Sign in under Settings → Telemetry."
+msgstr "設定 → テレメトリーでログインしてください。"
+
+msgid "Towers"
+msgstr "基地局"
+
+msgid "4Cells login"
+msgstr "4Cells ログイン"
+
+msgid "Measurements"
+msgstr "測定"
+
+msgid "Terrain"
+msgstr "地形:"
+
+msgid "Hillshade"
+msgstr "陰影起伏"
+
+msgid "Contour lines"
+msgstr "等高線"
+
+msgid "Could not load elevation data."
+msgstr "標高データを読み込めません。"
+
+msgid "Calculated position"
+msgstr "推定位置"
+
+msgid "Manually set position"
+msgstr "手動設定位置"
+
+msgid "Verified position"
+msgstr "確認済み位置"
+
+msgid "Position inherited from site"
+msgstr "設置場所から取得した位置"
+
+msgid "Position needs clarification"
+msgstr "位置の確認が必要"
+
+msgid "GPS time"
+msgstr "GPS時刻"
+
+msgid "Buildings"
+msgstr "建物"
+
+msgid "Labels"
+msgstr "ラベル"
+
+msgid "Points of interest"
+msgstr "施設・スポット"
+
+msgid "Roads"
+msgstr "道路"
+
+msgid "3D buildings"
+msgstr "3D建物"
+
+
+msgid "The service denied access. Layer requests are paused."
+msgstr "サービスがアクセスを拒否しました。レイヤーの読み込みを停止しています。"
+
+msgid "Layer requests are temporarily paused after a service error."
+msgstr "サービスのエラーによりレイヤーの読み込みを一時停止しています。"
+
+msgid "The service returned an unexpected page. Layer requests are paused."
+msgstr "サービスが予期しないページを返しました。レイヤーの読み込みを停止しています。"
+
+msgid "Measurements (4Cells)"
+msgstr "測定値 (4Cells)"
+
+msgid "Change PIN"
+msgstr "PINを変更"
+
+msgid "Could not read the SIM PIN status"
+msgstr "SIM PINの状態を読み取れませんでした"
+
+msgid "Current PIN"
+msgstr "現在のPIN"
+
+msgid "Disable PIN protection"
+msgstr "PIN保護を無効にする"
+
+msgid "Enable PIN protection"
+msgstr "PIN保護を有効にする"
+
+msgid "Enter PIN"
+msgstr "PINを入力"
+
+msgid "Incorrect SIM PIN"
+msgstr "SIM PINが正しくありません"
+
+msgid "New PIN"
+msgstr "新しいPIN"
+
+msgid "Next"
+msgstr "次へ"
+
+msgid "No SIM card"
+msgstr "SIMカードがありません"
+
+msgid "Please wait…"
+msgstr "お待ちください…"
+
+msgid "Previous"
+msgstr "前へ"
+
+msgid "SIM PIN"
+msgstr "SIM PIN"
+
+msgid "SIM PIN operation"
+msgstr "SIM PIN操作"
+
+msgid "SIM PIN operation completed"
+msgstr "SIM PIN操作が完了しました"
+
+msgid "SIM is locked"
+msgstr "SIMはロックされています"
+
+msgid "SIM is ready"
+msgstr "SIMは使用可能です"
+
+msgid "SIM requires PIN"
+msgstr "SIMにPINが必要です"
+
+msgid "SIM requires PUK"
+msgstr "SIMにPUKが必要です"
+
+msgid "Switching antennas"
+msgstr "アンテナを切り替えています"
+
+msgid "The PIN must contain 4–8 digits"
+msgstr "PINは4～8桁の数字で入力してください"
+
+msgid "The modem did not confirm the SIM PIN operation"
+msgstr "モデムがSIM PIN操作を確認しませんでした"
+
+msgid "The modem is busy"
+msgstr "モデムはビジーです"

@@ -11,6 +11,7 @@
 'require dom';
 'require view.modem5g.mutil as mutil';
 'require view.modem5g.fresh as fresh';
+'require view.modem5g.mapaccount as mapaccount';
 
 var uciCommit = rpc.declare({
 	object: 'uci',
@@ -493,7 +494,8 @@ var CACHED_RES = [
 	'view/modem5g/fresh.js', 'view/modem5g/icons.js', 'view/modem5g/netarrange.js',
 	'view/modem5g/mobileview.js', 'view/modem5g/page-buttons.css', 'view/modem5g/page-esim.css',
 	'view/modem5g/page-settings.css', 'view/modem5g/sms.js', 'view/modem5g/page-sms.css',
-	'view/modem5g/gps.js', 'view/modem5g/page-ussd.css', 'view/modem5g/page-at.css',
+	'view/modem5g/gps.js', 'view/modem5g/mapaccount.js', 'view/modem5g/maplayers.js',
+	'view/modem5g/terrainlayers.js', 'view/modem5g/vectorlayers.js', 'view/modem5g/measurementlayers.js', 'view/modem5g/page-ussd.css', 'view/modem5g/page-at.css',
 	'view/modem5g/page-modem.css', 'view/modem5g/page-align.css', 'view/modem5g/page-stats.css',
 	'5gmodem/leaflet.js', '5gmodem/leaflet.css', 'sms-tool-5gm/smssettings.js',
 	'protocol/fibocom.js', 'protocol/qmiraw.js', 'protocol/mbimp.js'
@@ -546,8 +548,10 @@ function verifyInstalled(target) {
 	});
 }
 
-function failInstall(msg, detail, target) {
-	return verifyInstalled(target).then(function(cur) {
+function failInstall(msg, detail, target, uncertain) {
+	// An explicit backend error describes the whole update, including helpers.
+	// App version alone can recover only an uncertain timeout/transport failure.
+	return (uncertain ? verifyInstalled(target) : Promise.resolve(null)).then(function(cur) {
 		if (cur) { finishUpdate(cur); return; }
 		updProgress(null);
 		updPill('bad', _('Error'));
@@ -565,13 +569,13 @@ function pollInstall(tries, misses) {
 	tries = tries || 0;
 	misses = misses || 0;
 	if (tries > 300) {
-		return failInstall(_('Update is taking too long. Check the connection and try again.'), '', updTarget);
+		return failInstall(_('Update is taking too long. Check the connection and try again.'), '', updTarget, true);
 	}
 	window.setTimeout(function() {
 		L.resolveDefault(fs.read_direct('/tmp/5gmodem/update.json'), null).then(function(txt) {
 			if (txt == null) {
 				if (misses >= 30) {
-					return failInstall(_('Lost contact with the router during the update.'), '', updTarget);
+					return failInstall(_('Lost contact with the router during the update.'), '', updTarget, true);
 				}
 				return pollInstall(tries + 1, misses + 1);
 			}
@@ -995,7 +999,7 @@ function wlList(cfg, persist) {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(40023, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(40100, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1496,6 +1500,7 @@ return view.extend({
 		o = hws.option(form.DummyValue, '_health');
 		o.render = function() { return hwWrap; };
 
+
 		var tel = m.section(form.NamedSection, 'tele', 'tele', _('Telemetry'),
 			_('A small JSON file with the modem signal, operator, band and traffic for a smart home, an external display or another router. It never contains IMEI, IMSI, ICCID or cell IDs, and the phone number only if you turn it on below.'));
 		tel.addremove = false;
@@ -1589,6 +1594,10 @@ return view.extend({
 					btn.disabled = false;
 				});
 		};
+
+		var mapsNode = mapaccount.build();
+		o = tel.option(form.DummyValue, '_map_account');
+		o.render = function() { return mapsNode; };
 
 		var ext = m.section(form.TypedSection, '5gmodem', _('External IP'),
 			_('Where the router asks what its address looks like from the outside. The speed-test card uses the same service.'));
@@ -1924,7 +1933,7 @@ return view.extend({
 			if (!_asNode) { return ''; }
 			var parts = [];
 			_asNode.querySelectorAll('input, textarea').forEach(function(el) {
-				if (el.closest('.tg-wl')) { return; }
+				if (el.closest('.tg-wl, .tg-mapaccount')) { return; }
 				parts.push((el.type === 'checkbox' || el.type === 'radio')
 					? (el.checked ? '1' : '0') : String(el.value));
 			});
@@ -1976,7 +1985,7 @@ return view.extend({
 			_asSig = formSig();
 			// the watchdog form saves itself through health.sh; its events must not
 			// trigger a map save (a heavy one runs setopt.sh applyset)
-			var inHw = function(ev) { return !!(ev.target && ev.target.closest && ev.target.closest('.hw-form')); };
+			var inHw = function(ev) { return !!(ev.target && ev.target.closest && ev.target.closest('.hw-form, .tg-mapaccount')); };
 			// the card lists save themselves (wlPersist), the previews follow every change
 			var inList = function(ev) { return !!(ev.target && ev.target.closest && ev.target.closest('.tg-wl')); };
 			var onChange = function(ev) {
