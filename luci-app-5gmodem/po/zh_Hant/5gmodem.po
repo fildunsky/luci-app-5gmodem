@@ -7748,3 +7748,6 @@ msgstr "數據機未確認 SIM PIN 操作"
 
 msgid "The modem is busy"
 msgstr "數據機忙碌中"
+
+msgid "Could not read GPS data."
+msgstr "無法讀取 GPS 資料。"

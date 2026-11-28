@@ -15,7 +15,7 @@ function fixture(fetcher){
  class MockImage{constructor(){this.naturalWidth=this.naturalHeight=256;}set src(value){queueMicrotask(()=>this.onload());}}
  const mod=new Function('baseclass','document','Image',source)({extend:x=>x},document,MockImage);
  const widget=mod.build({fetch:(...args)=>{calls.push(args);return fetcher?fetcher(...args):Promise.resolve({ok:true,image:'data:image/png;base64,AA=='});},report:code=>reports.push(code)});
- const tile=(coords={z:15,x:100,y:6000})=>new Promise(resolve=>current.createTile(coords,(_err,c)=>resolve(c)));
+ const tile=(coords={z:15,x:100,y:6000})=>new Promise(resolve=>current.createTile(coords,(err,c)=>{c.error=err;resolve(c);}));
  return {widget,lf,map,calls,reports,removed,tile,options:()=>current.options,unload:c=>current.events.tileunload({tile:c}),canvases};
 }
 async function main(){
@@ -28,6 +28,7 @@ async function main(){
  assert.equal(f.options().updateInterval,200,'live pan updates remain throttled');
  f.map.events.zoomstart();assert.equal(f.calls[0][6](),false,'central zoom tiles wait for the full final grid');f.map.events.zoomend();assert.equal(f.calls[0][6](),true);
  await f.tile();assert.equal(f.calls.length,1,'decoded tiles are reused');
+ assert.equal(f.calls[0][5](),false,'cached reads never attach a canvas to the old transfer');
  f.map.options.crs=f.lf.CRS.EPSG3395;f.widget.styleChanged();c=await f.tile();assert.equal(c.draw.length,512,'Yandex tiles reproject source rows');assert.ok(f.calls.length<=3,'adjacent rows reuse source tiles');
  f.widget.configure({...config,enabled:false});assert.ok(f.removed.length);f.widget.destroy();
  let release;f=fixture(()=>new Promise(resolve=>release=resolve));f.widget.attach(f.map,f.lf);f.widget.configure(config);const pending=f.tile();
@@ -35,7 +36,7 @@ async function main(){
  assert.deepEqual(f.reports,['loading'],'disabled layer ignores late replies');
  f.widget.configure(config);const second=f.tile();release({ok:true,image:'data:image/png;base64,AA=='});await second;
  assert.equal(f.calls.length,2,'cancelled image must not poison the cache');
- f=fixture(()=>Promise.resolve({ok:false,error:'rate_limited'}));f.widget.attach(f.map,f.lf);f.widget.configure(config);await f.tile();assert.deepEqual(f.reports,['loading','rate_limited']);
+ f=fixture(()=>Promise.resolve({ok:false,error:'rate_limited'}));f.widget.attach(f.map,f.lf);f.widget.configure(config);await f.tile();assert.deepEqual(f.reports,['loading','rate_limited']);assert.equal(f.calls.length,1,'rate limiting is never retried');
  f=fixture(()=>new Promise(resolve=>release=resolve));f.widget.attach(f.map,f.lf);f.widget.configure(config);
  const oldTile=f.tile();f.unload(f.canvases[0]);assert.equal(f.calls[0][5](),false,'queued image becomes inactive when Leaflet unloads its tile');
  release({ok:true,image:'data:image/png;base64,AA=='});await oldTile;assert.deepEqual(f.reports,['loading']);
@@ -49,6 +50,17 @@ async function main(){
  const staleZoom=f.tile();f.map.events.zoomstart();f.map.zoom=14;f.map.events.zoomend();
  assert.equal(f.calls[0][5](),false,'retained old zoom levels cannot keep queued HTTP jobs alive');
  release({ok:true,image:'data:image/png;base64,AA=='});await staleZoom;
+ let attempts=0;
+ f=fixture(()=>Promise.resolve(++attempts===1?{ok:false,error:'network'}:{ok:true,image:'data:image/png;base64,AA=='}));
+ f.widget.attach(f.map,f.lf);f.widget.configure(config);c=await f.tile();
+ assert.equal(c.error,null);assert.equal(c.draw.length,1);assert.equal(attempts,2,'transient tile error gets one retry');
+ let failingRow;
+ f=fixture((_x,y)=>Promise.resolve(y===failingRow?{ok:false,error:'network'}:{ok:true,image:'data:image/png;base64,AA=='}));
+ f.map.options.crs=f.lf.CRS.EPSG3395;
+ failingRow=Math.floor(row(6000*512+.5,15,true)/512);
+ f.widget.attach(f.map,f.lf);f.widget.configure(config);c=await f.tile();
+ assert.equal(c.error.message,'network');assert.ok(c.draw.length>0 && c.draw.length<512,'completed rows still paint in a partially failed tile');
+ assert.equal(f.calls.filter(call=>call[1]===failingRow).length,2,'persistent network errors stop after the second attempt');
  console.log('PASS: measurement PNG tiles, projection, lazy loading, cache and cancellation');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

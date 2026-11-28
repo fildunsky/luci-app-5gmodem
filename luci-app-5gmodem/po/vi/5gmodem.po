@@ -7748,3 +7748,6 @@ msgstr "Modem không xác nhận thao tác mã PIN SIM"
 
 msgid "The modem is busy"
 msgstr "Modem đang bận"
+
+msgid "Could not read GPS data."
+msgstr "Không thể đọc dữ liệu GPS."

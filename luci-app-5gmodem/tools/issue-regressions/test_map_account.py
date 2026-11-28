@@ -63,8 +63,9 @@ if '--config' in a:
         code=429 if mode=='rate' else 403 if mode=='denied' else 401 if mode=='expired' else 200
         image=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==')
         pathlib.Path(job['output']).write_bytes(b'<html>blocked</html>' if mode=='tile_html' else image)
-        print(job['write-out'].replace('%{http_code}',str(code)).replace('%{num_connects}','0'),end='')
-        if code!=200: sys.exit(22)
+        if mode=='revoked' and 'revoked-access' in pathlib.Path(job['header'][1:]).read_text(): code=401
+        transfer=18 if mode=='tile_partial' and 'x=2&' in job['url'] else 22 if code!=200 else 0
+        print(job['write-out'].replace('%{http_code}',str(code)).replace('%{exitcode}',str(transfer)),end='')
     sys.exit(0)
 code=429 if mode=='rate' else 401 if mode==service else 200
 if a[-1].endswith('/security/sign'):
@@ -96,12 +97,15 @@ if '/api/map/enb/' in a[-1]:
     expected=hashlib.sha256((canonical+'-'+'0'*64+'-'+ua).encode()).hexdigest()
     headers=pathlib.Path(a[a.index('--header')+1][1:]).read_text()
     assert 'x-request-id: '+expected in headers, 'invalid request signature'
+    if mode=='revoked' and 'revoked-access' in headers: code=401
 pathlib.Path(a[a.index('--output')+1]).write_text(json.dumps(reply))
 if '/api/Map/v2/measurements/' in a[-1]:
     import base64
+    if mode=='revoked' and 'revoked-access' in pathlib.Path(a[a.index('--header')+1][1:]).read_text(): code=401
     image=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==')
     pathlib.Path(a[a.index('--output')+1]).write_bytes(b'<html>blocked</html>' if mode=='tile_html' else image)
 
+if '--cookie' in a and mode=='revoked' and 'revoked-cookie' in pathlib.Path(a[a.index('--cookie')+1]).read_text(): code=401
 if '--cookie-jar' in a: pathlib.Path(a[a.index('--cookie-jar')+1]).write_text('# Netscape\n.example.invalid\tTRUE\t/\tTRUE\t0\tsession\tsynthetic-'+suffix+'\n')
 print(code,end='')
 '''
@@ -334,6 +338,49 @@ print(str(value).lower() if isinstance(value,bool) else value)
         self.assertTrue(self.call('tiles',dict(data,tiles='1:2,4:2,4:2'))['ok'])
         requests=[json.loads(line) for line in (self.directory/'requests').read_text().splitlines()]
         self.assertEqual(len([r for r in requests if r[0]=='BATCH'][-1][1]),1,'cached and duplicate pairs do not download again')
+
+    def test_partial_tiles_keep_completed_downloads(self):
+        self.assertTrue(self.login()['ok'])
+        data = dict(tiles='1:2,2:2,3:2', zoom='16', operator='001001', technology='lte')
+        tiles = self.call('tiles', data, scenario='tile_partial')['tiles']
+        self.assertTrue(tiles['1:2']['ok'])
+        self.assertEqual(tiles['2:2']['error'], 'network')
+        self.assertTrue(tiles['3:2']['ok'])
+        self.assertEqual(len(list(self.runtime.glob('tile-*.body'))), 2)
+
+    def test_unexpired_rejected_fourcells_session_retries_each_endpoint(self):
+        area = dict(kind='fourcells', south='1', west='2', north='1.1', east='2.1', zoom='16',
+                    operator='001001', technology='lte')
+        tile = dict(x='1', y='2', zoom='16', operator='001001', technology='lte')
+        expected = {'layers': '/api/map/enb/', 'tile': '/api/Map/v2/measurements/', 'tiles': '--config'}
+        for method, request in (('layers', area), ('tile', tile), ('tiles', dict(tile, tiles='1:2,2:2'))):
+            with self.subTest(method=method):
+                self.assertTrue(self.login()['ok'])
+                (self.runtime / 'fourcells.json').write_text(json.dumps({
+                    'accessToken': 'revoked-access', 'expires': 4102444800
+                }))
+                for file in self.runtime.glob('*.body'):
+                    file.unlink()
+                log = self.directory / 'requests'
+                log.write_text('')
+                self.assertTrue(self.call(method, request, scenario='revoked')['ok'])
+                requests = [json.loads(line) for line in log.read_text().splitlines()]
+                self.assertEqual(sum(expected[method] in ' '.join(row) for row in requests
+                                     if row and row[0] != 'BATCH'), 2)
+                self.assertEqual(sum('--data-binary' in row for row in requests), 1)
+
+    def test_speedmetrics_recovers_missing_and_revoked_cookie(self):
+        self.assertTrue(self.login()['ok'])
+        cookie = self.runtime / 'speedmetrics.cookie'
+        before = (self.runtime / 'fourcells.json').read_bytes()
+        area = dict(kind='speed', south='1', west='2', north='1.1', east='2.1', zoom='16')
+        cookie.unlink()
+        self.assertTrue(self.call('layers', area)['ok'])
+        self.assertTrue(cookie.is_file())
+        cookie.write_text('revoked-cookie')
+        self.assertTrue(self.call('layers', dict(area, kind='towers'), scenario='revoked')['ok'])
+        self.assertNotIn('revoked-cookie', cookie.read_text())
+        self.assertEqual((self.runtime / 'fourcells.json').read_bytes(), before)
 
     def test_tile_batch_validates_every_coordinate_before_network(self):
         data=dict(tiles='1:2,2:2',zoom='16',operator='001001',technology='lte')

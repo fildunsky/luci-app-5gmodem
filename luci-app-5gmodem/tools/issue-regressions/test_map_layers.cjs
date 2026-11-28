@@ -9,9 +9,9 @@ function element(tag, attrs = {}, children = []) {
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function fixture(response, options, stored = {}) {
- const calls = [], timers = new Map(), markers = [], groups = [], listeners = {}, credits = new Set();
+ const calls = [], timers = new Map(), cooldowns = new Map(), markers = [], groups = [], listeners = {}, credits = new Set();
  let serial = 0; const storage = new Map(Object.entries(stored));
- const win = { localStorage: {getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v))}, clearTimeout: id => timers.delete(id), setTimeout: fn => { timers.set(++serial, fn); return serial; } };
+ const win = { localStorage: {getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v))}, clearTimeout: id => {timers.delete(id); cooldowns.delete(id);}, setTimeout: (fn, delay) => { (delay > 5000 ? cooldowns : timers).set(++serial, {fn,delay}); return serial; } };
  const widget = new Function('baseclass', 'rpc', 'window', 'E', 'L', '_', source)(
   {extend: x => x}, {declare: () => (...args) => { calls.push(args); return Promise.resolve(response(...args)); }},
   win, element, {url: x => '/' + x}, s => s).build(options);
@@ -30,7 +30,8 @@ function fixture(response, options, stored = {}) {
  const hint = widget.node.children.find(c => c.tag === 'small');
  return {widget, calls, map, markers, groups, credits, filters, hint, listeners, storage,
   enable(i, on = true) {checks[i].checked = on; checks[i].change();},
-  async flush() {const jobs = [...timers.values()]; timers.clear(); jobs.forEach(fn => fn()); for (let i=0;i<8;i++) await settle();},
+  async flush() {const jobs = [...timers.values()]; timers.clear(); jobs.forEach(job => job.fn()); for (let i=0;i<8;i++) await settle();},
+  resumeAfter(delay) {for(const [key, job] of cooldowns){if(job.delay===delay){cooldowns.delete(key);job.fn();}}},
   attach() {widget.attach(map, lf);} };
 }
 async function main() {
@@ -110,9 +111,26 @@ async function main() {
  assert.equal(f.calls.length,initial,'disabled layers never schedule new external requests');
  f=fixture(()=>({ok:false,error:'rate_limited'}));f.attach();f.enable(2);await f.flush();
  f.map.bounds=[3,4,3.1,4.1];f.listeners.moveend();await f.flush();f.enable(2,false);f.enable(2);await f.flush();
- assert.equal(f.calls.length,1,'rate limiting pauses the provider for the rest of the view');
+ assert.equal(f.calls.length,1,'rate limiting pauses the provider until the cooldown expires');
  f=fixture(()=>({ok:false,error:'rate_limited'}));f.attach();f.enable(0);await f.flush();
  f.enable(0,false);f.enable(0);await f.flush();assert.equal(f.calls.length,1,'operator loading also respects provider suspension');
+
+ let resumed=0, paused=0;
+ f=fixture(kind=>kind==='operators'?{ok:true,data:[{operators:[{internalCode:'001001',name:'Example'}]}]}:{ok:true,data:{success:true,data:[]}},
+  {measurements:{configure(){},pause(){paused++;},resume(){resumed++;}}});
+ f.attach();f.enable(0);f.enable(3);await f.flush();
+ f.filters.children[0].value='001001';f.filters.children[0].change();await f.flush();
+ const beforePause=f.calls.length;
+ f.widget.measurementStatus('provider_paused',7);
+ f.map.bounds=[3,4,3.1,4.1];f.listeners.moveend();await f.flush();
+ assert.equal(f.calls.length,beforePause,'towers and measurements share the 4Cells cooldown');
+ assert.equal(paused,1);
+ f.resumeAfter(7000);await f.flush();
+ assert.equal(resumed,1,'measurement tiles resume even without a map move');
+ assert.equal(f.calls.length,beforePause+1,'towers automatically reload when the server cooldown ends');
+ f.widget.measurementStatus('provider_paused',7);
+ f.widget.destroy();f.resumeAfter(7000);await f.flush();
+ assert.equal(resumed,1,'a closed view never restarts external layers');
 
  let fourRequests=0;
  f=fixture(kind=>{

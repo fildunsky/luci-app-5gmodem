@@ -39,24 +39,34 @@ gnss_parse_nmea() {
 		next
 	}
 	$1 !~ /^\$G[PLNABQ][A-Z][A-Z][A-Z]$/ { next }
+	function newer(a, b,   d) {
+		if (a !~ /^[0-9]{6}$/) return 0
+		if (b !~ /^[0-9]{6}$/) return 1
+		d = (substr(a,1,2)-substr(b,1,2))*3600 + (substr(a,3,2)-substr(b,3,2))*60 + substr(a,5,2)-substr(b,5,2)
+		return (d+86400)%86400 > 0 && (d+86400)%86400 < 43200
+	}
 	t == "GGA" {
-		if ($7 != "" && $7 + 0 > 0) {
-			la = coord($3, $4); lo = coord($5, $6)
-			if (la != "" && lo != "") { lat = la; lon = lo; q = $7 + 0 }
+		gga_seen = 1
+		gt = substr($2, 1, 6)
+		gla = coord($3, $4); glo = coord($5, $6)
+		gq = $7 + 0
+		su = hd = al = ""
+		if (gq > 0 && gla != "" && glo != "") {
 			if ($8 != "") su = $8 + 0
 			if ($9 != "") hd = $9 + 0
 			if ($10 != "") al = $10 + 0
-		} else if (q == "") q = 0
-		if ($2 ~ /^[0-9]{6}/) tm = substr($2, 1, 6)
+		} else gq = 0
 	}
 	t == "RMC" {
+		rmc_seen = 1
+		rt = substr($2, 1, 6)
+		dt = $10 ~ /^[0-9]{6}$/ ? $10 : ""
+		rla = rlo = rsp = rco = ""
 		if ($3 == "A") {
-			if ($8 != "") sp = sprintf("%.1f", $8 * 1.852)
-			if ($9 != "") co = sprintf("%.1f", $9)
-			if (lat == "") { la = coord($4, $5); lo = coord($6, $7); if (la != "" && lo != "") { lat = la; lon = lo; if (q == "") q = 1 } }
+			rla = coord($4, $5); rlo = coord($6, $7)
+			if ($8 != "") rsp = sprintf("%.1f", $8 * 1.852)
+			if ($9 != "") rco = sprintf("%.1f", $9)
 		}
-		if ($10 ~ /^[0-9]{6}$/) dt = $10
-		if ($2 ~ /^[0-9]{6}/) tm = substr($2, 1, 6)
 	}
 	t == "GSA" {
 		if ($3 ~ /^[123]$/) md = $3 + 0
@@ -66,6 +76,14 @@ gnss_parse_nmea() {
 	}
 	t == "GSV" { if ($4 ~ /^[0-9]+$/) vis[tk] = $4 + 0 }
 	END {
+		# A valid RMC can recover a missing GGA fix. Its time travels with its position.
+		if (rla != "" && rlo != "" && (!gq || newer(rt, gt))) {
+			lat = rla; lon = rlo; q = 1; tm = rt
+			su = hd = al = ""
+		} else if (gq > 0) {
+			lat = gla; lon = glo; q = gq; tm = gt
+		} else if (gga_seen || rmc_seen) { q = 0; tm = rt != "" ? rt : gt }
+		if (tm == rt) { sp = rsp; co = rco }
 		n = 0; for (k in vis) n += vis[k]
 		if (su == "" && gu > 0 && md >= 2) su = gu
 		if (hd == "" && ghd != "") hd = ghd
@@ -83,7 +101,8 @@ gnss_parse_nmea() {
 		if (su != "") print "sats=" su
 		if (n > 0) print "inview=" n
 		if (hd != "") print "hdop=" hd
-		if (dt != "" && tm != "") print "utc=20" substr(dt, 5, 2) "-" substr(dt, 3, 2) "-" substr(dt, 1, 2) "T" substr(tm, 1, 2) ":" substr(tm, 3, 2) ":" substr(tm, 5, 2) "Z"
+		# Across midnight, wait for an RMC from the same date instead of stamping a GGA with the previous date.
+		if (dt != "" && tm ~ /^[0-9]{6}$/ && (tm == rt || (gq > 0 && rt ~ /^[0-9]{6}$/ && tm > rt))) print "utc=20" substr(dt, 5, 2) "-" substr(dt, 3, 2) "-" substr(dt, 1, 2) "T" substr(tm, 1, 2) ":" substr(tm, 3, 2) ":" substr(tm, 5, 2) "Z"
 		else if (eutc != "") print "utc=" eutc
 	}'
 }
@@ -782,18 +801,17 @@ _json() {
 
 _status() {
 	# two open tabs must not split one NMEA stream: a fresh answer is shared
+	_ttl=3; [ "${_vp%%:*}" = 0e8d ] && _ttl=10
 	if [ -s "$LAST" ]; then
 		_age=$(( $(date +%s) - $(date -r "$LAST" +%s 2>/dev/null || echo 0) ))
 		# FM350: one read holds the modem's AT port for ~3 s, so its answer is shared for longer
 		# (the NMEA TCP server asks every second per client)
-		_ttl=3; [ "${_vp%%:*}" = 0e8d ] && _ttl=10
 		[ "$_age" -ge 0 ] && [ "$_age" -lt "$_ttl" ] && { cat "$LAST"; return; }
 	fi
 	_lk="$TD/gnss_lock_$_K"
 	if ! mkdir "$_lk" 2>/dev/null; then
 		# a lock older than a minute is left by a killed run
 		if [ -n "$(find "$_lk" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then rmdir "$_lk" 2>/dev/null; fi
-		[ -s "$LAST" ] && { cat "$LAST"; return; }
 		mkdir "$_lk" 2>/dev/null || { echo '{"supported":0,"busy":1}'; return; }
 	fi
 	_c=$(_caps_eff); _use_gnss_atp "$_c"

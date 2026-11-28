@@ -8033,3 +8033,6 @@ msgstr "Далее"
 
 msgid "Previous"
 msgstr "Назад"
+
+msgid "Could not read GPS data."
+msgstr "Не удалось получить данные GPS."

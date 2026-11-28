@@ -118,6 +118,14 @@ class Parsers(unittest.TestCase):
         self.assertEqual(d['hdop'], '0.98')
         self.assertEqual(d['utc'], '2026-11-14T09:33:57Z')
 
+    def test_valid_rmc_survives_no_fix_gga_in_both_orders(self):
+        gga = '$GNGGA,093358.00,,,,,0,00,,,,,,'
+        rmc = '$GNRMC,093357.00,A,0100.000,N,00200.000,E,10.0,20,141126,,,A'
+        for frames in ((gga, rmc), (rmc, gga)):
+            with self.subTest(frames=frames):
+                d, _ = parse('parse-nmea', '\n'.join(frames))
+                self.assertEqual((d['fix'], d['lat'], d['utc']), ('2', '1.000000', '2026-11-14T09:33:57Z'))
+
     def test_nmea_foxconn_t77w968(self):
         # T77W968 (Dell mode, NMEA on ttyUSB2): GP talker only, minutes with 6 decimals,
         # GSA mode 2 with 12 satellites, GSV split over 4 sentences; coordinates are synthetic
@@ -291,7 +299,7 @@ class Parsers(unittest.TestCase):
 
 class StatusWithStubs(unittest.TestCase):
     # gps.sh against a fake modem: lib.sh, uci and listmodems.sh are replaced
-    def run_gps(self, vidpid, answers, *args, uci='', sysfs=None, cache=None):
+    def run_gps(self, vidpid, answers, *args, uci='', sysfs=None, cache=None, busy=False):
         with tempfile.TemporaryDirectory() as t:
             t = Path(t)
             (t / 'res').mkdir()
@@ -301,6 +309,10 @@ class StatusWithStubs(unittest.TestCase):
             if cache:
                 (t / 'tmp').mkdir()
                 (t / 'tmp' / cache[0]).write_text(cache[1])
+            if busy:
+                (t / 'tmp/gnss_lock_m_1_1').mkdir(parents=True, exist_ok=True)
+                if cache:
+                    os.utime(t / 'tmp' / cache[0], (1, 1))
             # an answer given as a tuple (text,) comes without the final OK
             cases = ''.join(f"\t\t'{c}') printf '%s\\n' '{a[0]}' ;;\n" if isinstance(a, tuple)
                             else f"\t\t'{c}') printf '%s\\n' '{a}' 'OK' ;;\n" for c, a in answers.items())
@@ -322,6 +334,12 @@ class StatusWithStubs(unittest.TestCase):
             r = shell(f'sh {GPS} ' + ' '.join(args), env=env)
             sent = (t / 'tmp/sent').read_text().split('\n') if (t / 'tmp/sent').exists() else []
             return r, [s for s in sent if s]
+
+    def test_busy_does_not_return_a_stale_fix(self):
+        stale = ('gnss_last_m_1_1.json', '{"supported":1,"fix":3,"lat":1.0,"lon":2.0,"ts":1}')
+        r, sent = self.run_gps('2c7c:0800', {}, 'status', cache=stale, busy=True)
+        self.assertEqual(json.loads(r.stdout), {'supported': 0, 'busy': 1})
+        self.assertEqual(sent, [])
 
     def test_telit_incomplete_probe_is_pending(self):
         cmd = 'AT$GPSP?'

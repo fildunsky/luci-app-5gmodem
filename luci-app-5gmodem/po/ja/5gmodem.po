@@ -7748,3 +7748,6 @@ msgstr "モデムがSIM PIN操作を確認しませんでした"
 
 msgid "The modem is busy"
 msgstr "モデムはビジーです"
+
+msgid "Could not read GPS data."
+msgstr "GPS データを読み取れませんでした。"

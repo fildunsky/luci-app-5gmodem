@@ -61,7 +61,7 @@ function args(a) {
 
 function run(a) {
 	return L.resolveDefault(fs.exec_direct(BIN, args(a)), '').then(function(out) {
-		try { return JSON.parse(out || '{}'); } catch (e) { return {}; }
+		try { return JSON.parse(out || 'null') || {}; } catch (e) { return {}; }
 	});
 }
 
@@ -251,7 +251,7 @@ function createGPSClock(now) {
 
 return view.extend({
 	load: function() {
-		return fresh.check(40100, [ modemtabs, mutil ]).then(function() {
+		return fresh.check(40101, [ modemtabs, mutil ]).then(function() {
 			return L.resolveDefault(uci.load('5gmodem'));
 		});
 	},
@@ -348,7 +348,7 @@ return view.extend({
 			if (overlaysOn[key]) { if (!st.map.hasLayer(st[key])) { st[key].addTo(st.map); } }
 			else if (st.map.hasLayer(st[key])) { st.map.removeLayer(st[key]); }
 		}
-		st.measurements=measurementlayers.build({fetch:maplayers.tile,report:function(code){externalLayers.measurementStatus(code);}});
+		st.measurements=measurementlayers.build({fetch:maplayers.tile,report:function(code,retryAfter){externalLayers.measurementStatus(code,retryAfter);}});
 		var externalLayers = maplayers.build({ measurements:st.measurements,onExplore: function() { setFollow(false); }, getOperator: function() {
 			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', args(['cached', '10'])), '{}').then(function(out) {
 				try { return JSON.parse(out || '{}'); } catch (e) { return {}; }
@@ -728,8 +728,13 @@ return view.extend({
 		}
 
 		function drawMap() {
-			var j = st.last || {};
-			if (!st.map || j.lat === null || j.lat === undefined || !(+j.fix > 0)) { return; }
+			var j = st.positionUnavailable ? {} : (st.last || {});
+			if (!st.map) { return; }
+			if (j.lat == null || !(+j.fix > 0)) {
+				if (st.marker) { st.map.removeLayer(st.marker); st.marker = null; }
+				if (st.ring) { st.map.removeLayer(st.ring); st.ring = null; }
+				return;
+			}
 			var lf = st.lf, ll = [ +j.lat, +j.lon ];
 			var h = num(j.hdop, 1);
 			if (h !== null && +h > 0) {
@@ -789,15 +794,28 @@ return view.extend({
 		}
 
 		function show(j) {
+			if (!j || j.busy || j.error || (j.supported !== 0 && j.supported !== 1 &&
+				j.source !== 'ugps' && j.source !== 'usbgps')) {
+				// Leave the page open during a transient failure.
+				if (st.last && performance.now() - st.lastPollAt > 10000) {
+					st.positionUnavailable = true;
+					gpsClock.sample(null);
+					drawMap();
+				}
+				hd.reg.textContent = _('Could not read GPS data.');
+				return;
+			}
 			st.last = j;
+			st.lastPollAt = performance.now();
 			var src = j.source || '';
 			var sup = +j.supported === 1 || src === 'ugps' || src === 'usbgps';
+			st.positionUnavailable = !sup;
 			unsup.style.display = sup ? 'none' : '';
 			head.style.display = sup ? '' : 'none';
 			updateRow.style.display = sup ? '' : 'none';
 			main.style.display = sup ? '' : 'none';
 			gpsSet.style.display = sup ? '' : 'none';
-			if (!sup) { gpsClock.sample(null); return; }
+			if (!sup) { gpsClock.sample(null); drawMap(); return; }
 			paintUpdate(j);
 
 			mapSec.classList.toggle('tg-gps-dark', !!styleOf(mapKey).inv && isDarkUI(mapSec));

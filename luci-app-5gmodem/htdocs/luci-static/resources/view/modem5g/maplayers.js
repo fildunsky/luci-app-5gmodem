@@ -212,15 +212,34 @@ return baseclass.extend({
 		node.appendChild(hint);
 		function active() { return enabled.fourcells || enabled.towers || enabled.speed || enabled.trails; }
 		function invalidate(kind){delete drawn[kind];if(kind==='speed'){speedZoom=null;}if(kind==='fourcells'){towerLabels=[];}if(groups[kind]){groups[kind].clearLayers();}}
+		function pauseProvider(service, code, retryAfter) {
+			if (disposed || paused[service]) { return; }
+			var delay = Math.min(1800, Math.max(1, +retryAfter || (code === 'provider_paused' ? 60 : 1800)));
+			paused[service] = { code: code, timer: window.setTimeout(function() {
+				delete paused[service];
+				if (service === 'fourcells') {
+					trailStatus = '';
+					operatorAttempts = 0;
+					loadOperators();
+					if (options.measurements) { options.measurements.resume(); }
+				}
+				schedule();
+			}, delay * 1000) };
+			if (service === 'fourcells' && options.measurements) {
+				options.measurements.pause();
+				trailStatus = errorText(code);
+			}
+		}
+
 		function loadOperators() {
 			if(disposed || !(enabled.fourcells||enabled.trails)){return;}
-			if(paused.fourcells){hint.textContent='4Cells: '+errorText(paused.fourcells);return;}
+			if(paused.fourcells){hint.textContent='4Cells: '+errorText(paused.fourcells.code);return;}
 			if (operatorsReady || operatorsLoading) { return; }
 			window.clearTimeout(operatorRetry);
 			operatorsLoading = true;operatorAttempts++;operatorError='';
 			showStatus();
 			fetchLayers('operators', '', '', '', '', 0, '', '').then(function(j) {
-				if (!j.ok) { if (providerSuspended(j.error)) { paused.fourcells=j.error; } var error=new Error(errorText(j.error));error.code=j.error;throw error; }
+				if (!j.ok) { if (providerSuspended(j.error)) { pauseProvider('fourcells', j.error, j.retry_after); } var error=new Error(errorText(j.error));error.code=j.error;throw error; }
 				if (disposed) { return; }
 				if(!Array.isArray(j.data) || !j.data.some(function(c){return Array.isArray(c.operators)&&c.operators.length;})){throw new Error(errorText('unexpected_response'));}
 				(j.data || []).forEach(function(country) {
@@ -383,20 +402,20 @@ return baseclass.extend({
 					invalidate(kind);errors.push(labels[kind]+': '+errorText('zoom_in'));return;
 				}
 				if (kind === 'fourcells' && !operator.value) {
-					if(paused.fourcells){errors.push(labels[kind]+': '+errorText(paused.fourcells));}
+					if(paused.fourcells){errors.push(labels[kind]+': '+errorText(paused.fourcells.code));}
 					else {counts.push(_('Select operator'));}
 					return;
 				}
 				queue = queue.then(function() {
 					if (disposed || my !== revision || !enabled[kind] || popupActive) { return; }
 					var service=kind==='fourcells'?'fourcells':'speedmetrics';
-					if(paused[service]){errors.push(labels[kind]+': '+errorText(paused[service]));return;}
+					if(paused[service]){errors.push(labels[kind]+': '+errorText(paused[service].code));return;}
 					var requestArea=kind==='fourcells'?area:[Math.max(-85,+coords[0]-Math.min(padLat,(1-spanLat)/2)),Math.max(-180,+coords[1]-Math.min(padLon,(1-spanLon)/2)),Math.min(85,+coords[2]+Math.min(padLat,(1-spanLat)/2)),Math.min(180,+coords[3]+Math.min(padLon,(1-spanLon)/2))].map(function(v){return +v.toFixed(5);});
 					var key = z + ',' + (kind==='fourcells'?operator.value+','+technology.value:''), previous = cache[kind];
 					var covered=previous && previous.key===key && previous.area[0]<=+coords[0] && previous.area[1]<=+coords[1] && previous.area[2]>=+coords[2] && previous.area[3]>=+coords[3];
 					var request = covered && Date.now() - previous.ts < 300000 ? Promise.resolve(previous.data) :
 						fetchLayers(kind, requestArea[0], requestArea[1], requestArea[2], requestArea[3], z, operator.value, technology.value).then(function(j) {
-							if (!j.ok) { if(providerSuspended(j.error)){paused[service]=j.error;} throw new Error(errorText(j.error)); }
+							if (!j.ok) { if(providerSuspended(j.error)){pauseProvider(service, j.error, j.retry_after);} throw new Error(errorText(j.error)); }
 							if (kind === 'fourcells' && !j.data.success) { throw new Error(errorText()); }
 							cache[kind] = { key: key, area:requestArea, ts: Date.now(), data: j.data };
 							return j.data;
@@ -415,9 +434,9 @@ return baseclass.extend({
 				showStatus();
 			});
 		}
-		return { node: node, measurementStatus:function(code){
+		return { node: node, measurementStatus:function(code, retryAfter){
 			trailStatus=code === 'loading' ? _('Loading…') : code ? errorText(code) : '✓';
-			if(providerSuspended(code)){paused.fourcells=code;if(options.measurements){options.measurements.pause();}}
+			if(providerSuspended(code)){pauseProvider('fourcells', code, retryAfter);}
 			showStatus();
 		}, modemChanged: function() { operatorGeneration++; operatorTouched = false; storedOperator='';layerPreference('operator','');operator.value = ''; invalidate('fourcells'); selectCurrentOperator();schedule(); }, attach: function(m, leaflet) {
 			map = m; lf = leaflet;
@@ -430,6 +449,7 @@ return baseclass.extend({
 		}, destroy: function() {
 			disposed = true; revision++; window.clearTimeout(timer);
 			window.clearTimeout(operatorRetry);
+			Object.keys(paused).forEach(function(service) { window.clearTimeout(paused[service].timer); });
 			if (map) { map.off('moveend', onMapMove); }
 			if (map) { map.off('popupopen',onPopupOpen);map.off('popupclose',onPopupClose); }
 			Object.keys(groups).forEach(function(k) { groups[k].clearLayers(); });

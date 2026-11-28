@@ -89,7 +89,12 @@ class Generators(unittest.TestCase):
 
 class Tick(unittest.TestCase):
     def tick(self, cfg, status='', ntp=None, now=None, keep=None):
-        t = keep or Path(tempfile.mkdtemp())
+        if keep:
+            t = keep
+        else:
+            directory = tempfile.TemporaryDirectory()
+            self.addCleanup(directory.cleanup)
+            t = Path(directory.name)
         for d in ('res', 'bin', 'tmp'):
             (t / d).mkdir(exist_ok=True)
         stubs = {
@@ -169,17 +174,29 @@ class Tick(unittest.TestCase):
 
     def test_traccar_send_and_interval(self):
         cfg = {'gps_traccar_url': 'http://192.168.1.10:5055', 'gps_traccar_id': 'tracker-42', 'gps_traccar_interval': '60'}
-        t, o = self.tick(cfg, FIX % 0)
+        status = FIX % int(time.time())
+        t, o = self.tick(cfg, status)
         self.assertEqual(len(o['curl']), 1)
         url = o['curl'][0].split()[-1]
         self.assertTrue(url.startswith('http://192.168.1.10:5055/?id=tracker-42&lat=55.75222&lon=37.61556&timestamp='), url)
         self.assertIn('&speed=22.4&bearing=84.4', url)
         self.assertIn('--connect-timeout', o['curl'][0])
-        t, o = self.tick(cfg, FIX % 0, keep=t)
+        t, o = self.tick(cfg, status, keep=t)
         self.assertEqual(len(o['curl']), 1)       # not again before the interval
         # a path on the server keeps its own slash
-        t, o = self.tick(dict(cfg, gps_traccar_url='https://h.example/osmand'), FIX % 0)
+        t, o = self.tick(dict(cfg, gps_traccar_url='https://h.example/osmand'), status)
         self.assertTrue(o['curl'][0].split()[-1].startswith('https://h.example/osmand?id='))
+
+    def test_traccar_rejects_stale_fix_and_uses_sample_time_without_utc(self):
+        cfg = {'gps_traccar_url': 'https://tracker.example.invalid', 'gps_traccar_id': 'fixture'}
+        now = 1794650000
+        def status(stamp):
+            return (FIX % stamp).replace('2026-11-14T09:33:57Z', '')
+        for stamp in (0, now - 11, now + 1):
+            _, output = self.tick(cfg, status(stamp), now=now)
+            self.assertEqual(output['curl'], [])
+        _, output = self.tick(cfg, status(now - 2), now=now)
+        self.assertIn(f'timestamp={now - 2}', output['curl'][0])
 
     def test_traccar_no_fix_or_bad_settings(self):
         cfg = {'gps_traccar_url': 'http://192.168.1.10:5055', 'gps_traccar_id': 'car'}

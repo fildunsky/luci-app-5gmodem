@@ -2162,3 +2162,6 @@ msgstr ""
 
 msgid "Previous"
 msgstr ""
+
+msgid "Could not read GPS data."
+msgstr ""

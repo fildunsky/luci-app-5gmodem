@@ -106,6 +106,25 @@ async function main() {
  assert.equal(css.length,1,'reuse loaded stylesheet');
  assert.match(css[0].integrity,/^sha384-/); assert.equal(css[0].crossorigin,'anonymous');
  assert.equal(win.L,luci,'never overwrite the LuCI global');
+ const drawStart=source.indexOf('function drawMap()');
+ const drawBody=source.slice(drawStart,source.indexOf('var lf = st.lf, ll',drawStart));
+ const showStart=source.indexOf('function show(j)');
+ const showBody=source.slice(showStart,source.indexOf('paintUpdate(j);',showStart));
+ const removed=[], head={style:{}}, hd={reg:{}};
+ const state={last:{supported:1,fix:3,lat:1,lon:2},lastPollAt:1000,map:{removeLayer:x=>removed.push(x)},marker:'marker',ring:'ring'};
+ let clock=2000;
+ const gps=new Function('st','performance','hd','head','unsup','updateRow','main','gpsSet','gpsClock','_',
+  drawBody+'}'+showBody+'} return {show,drawMap};')(
+  state,{now:()=>clock},hd,head,{style:{}},{style:{}},{style:{}},{style:{}},{sample(){}},s=>s);
+ for(const reply of [null, {}, {supported:0,busy:1}])gps.show(reply);
+ assert.equal(head.style.display,undefined,'failed reads leave the current GPS view visible');
+ assert.equal(state.last.fix,3);
+ assert.equal(removed.length,0,'brief contention keeps the current position');
+ clock=12000;gps.show({supported:0,busy:1});
+ assert.deepEqual(removed,['marker','ring'],'a stale position and its accuracy ring disappear during prolonged contention');
+ gps.show({supported:1,fix:0});state.marker='old-marker';gps.drawMap();
+ assert.equal(removed.at(-1),'old-marker','a genuine fix loss immediately removes the previous marker');
+ gps.show({supported:0});assert.equal(head.style.display,'none','a genuine unsupported result still hides the view');
  console.log('PASS: optional GPS basemaps, races, fallback, overlays and isolated loader');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

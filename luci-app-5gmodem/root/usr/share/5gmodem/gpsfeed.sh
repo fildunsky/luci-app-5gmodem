@@ -155,7 +155,15 @@ _gps_allowed() { [ "$(_o netonly)" != 1 ] && [ "$(_o show_gps)" != 0 ]; }
 # one gps.sh call per tick, shared by the features (sets _ST in the calling shell)
 _ST=""; _ST_DONE=""
 _status() {
-	[ -n "$_ST_DONE" ] || { _ST=$("$RES/gps.sh" status 2>/dev/null); _ST_DONE=1; }
+	local stamp now
+	[ -z "$_ST_DONE" ] || return 0
+	_ST=$("$RES/gps.sh" status 2>/dev/null)
+	_ST_DONE=1
+	stamp=$(_jv "$_ST" ts)
+	now=$(date +%s)
+	case "$stamp" in ''|*[!0-9]*) _ST=""; return 0 ;; esac
+	# Allow FM350's longer shared cache, but never export an old fix as live.
+	if [ "$stamp" -gt "$now" ] || [ "$((now - stamp))" -gt 10 ]; then _ST=""; fi
 }
 
 # --- clock from GNSS ---
@@ -232,7 +240,7 @@ _traccar_tick() {
 		[ "$_tr_now" -ge "$_tr_last" ] && [ $((_tr_now - _tr_last + 5)) -lt "$_tr_iv" ] && return 0 ;;
 	esac
 	_status
-	_tr_q=$(printf '%s' "$_ST" | osmand_query "$_tr_id" "$(date +%s)") || return 0
+	_tr_q=$(printf '%s' "$_ST" | osmand_query "$_tr_id" "$(_jv "$_ST" ts)") || return 0
 	[ -n "$_tr_q" ] || return 0
 	_tr_was=$(sed -n 2p "$_tr_f" 2>/dev/null)
 	case "$_tr_u" in *://*/*) _tr_full="$_tr_u?$_tr_q" ;; *) _tr_full="$_tr_u/?$_tr_q" ;; esac

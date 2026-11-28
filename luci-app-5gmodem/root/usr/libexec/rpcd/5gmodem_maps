@@ -85,6 +85,7 @@ reply_error() {
 	json_add_boolean ok 0
 	json_add_string error "$1"
 	[ -z "$2" ] || json_add_string service "$2"
+	[ -z "$pause_remaining" ] || json_add_int retry_after "$pause_remaining"
 	json_dump
 }
 
@@ -120,6 +121,48 @@ fourcells_login_saved() {
 	return 1
 }
 
+ensure_speedmetrics_session() {
+	local stored_login stored_password current result now retry_at retry_error locked=0
+	session_error=sign_in_required
+	current=$([ -s "$RUNTIME/speedmetrics.cookie" ] && sha256sum "$RUNTIME/speedmetrics.cookie" 2>/dev/null | awk '{print $1}')
+	[ -z "$current" ] || [ "$current" = "$rejected_cookie" ] || return 0
+	if [ "$lock_mode" = flock ]; then
+		exec 7>"$RUNTIME/speedmetrics-refresh.lock" || { session_error=storage; return 1; }
+		flock 7 || { session_error=busy; return 1; }
+		locked=1
+	fi
+	current=$([ -s "$RUNTIME/speedmetrics.cookie" ] && sha256sum "$RUNTIME/speedmetrics.cookie" 2>/dev/null | awk '{print $1}')
+	if [ -n "$current" ] && [ "$current" != "$rejected_cookie" ]; then
+		[ "$locked" != 1 ] || flock -u 7
+		return 0
+	fi
+	read_account
+	[ -n "$stored_login" ] && [ -n "$stored_password" ] || return 1
+	now=$(cut -d. -f1 /proc/uptime)
+	if read -r retry_at retry_error 2>/dev/null < "$RUNTIME/speedmetrics-retry"; then
+		case "$retry_at" in ''|*[!0-9]*) retry_at=0 ;; esac
+		if [ "$now" -lt "$retry_at" ]; then session_error=$retry_error; return 1; fi
+	fi
+	json_init
+	json_add_string login "$stored_login"
+	json_add_string password "$stored_password"
+	json_dump > "$work/request.json"
+	authenticate speedmetrics
+	result=$(cat "$work/speedmetrics.result" 2>/dev/null)
+	case "$result" in
+		ok)
+			mv "$work/speedmetrics.session" "$RUNTIME/speedmetrics.cookie" || { session_error=storage; return 1; }
+			rm -f "$RUNTIME/speedmetrics-retry"
+			[ "$locked" != 1 ] || flock -u 7
+			return 0 ;;
+		rejected) session_error=sign_in_required ;;
+		rate_limited) session_error=rate_limited; printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_speedmetrics" ;;
+		*) session_error=${result:-network} ;;
+	esac
+	printf '%s %s\n' "$((now+60))" "$session_error" > "$RUNTIME/speedmetrics-retry"
+	return 1
+}
+
 ensure_fourcells_session() {
 	local token expiry payload padding username refresh attempt clock_now now retry_at retry_error http new_token new_refresh refresh_locked=0
 	session_error=sign_in_required
@@ -136,7 +179,7 @@ ensure_fourcells_session() {
 		case "$expiry" in ''|*[!0-9]*) expiry=0 ;; esac
 		[ -n "$token" ] || expiry=1
 		clock_now=$(date +%s)
-		if [ "$expiry" -eq 0 ] || [ "$expiry" -gt "$((clock_now+60))" ]; then
+		if [ "$token" != "$rejected_token" ] && { [ "$expiry" -eq 0 ] || [ "$expiry" -gt "$((clock_now+60))" ]; }; then
 			[ "$refresh_locked" != 1 ] || flock -u 7
 			return 0
 		fi
@@ -346,6 +389,7 @@ login_account() {
 	fi
 	mv "$work/fourcells.session" "$RUNTIME/fourcells.json"
 	mv "$work/speedmetrics.session" "$RUNTIME/speedmetrics.cookie"
+	rm -f "$RUNTIME/refresh-retry" "$RUNTIME/speedmetrics-retry" "$RUNTIME/auth-rejected-fourcells" "$RUNTIME/auth-rejected-speedmetrics"
 	json_init
 	json_add_string fourcells ok
 	json_add_string speedmetrics ok
@@ -379,7 +423,7 @@ map_layers() {
 			|| { reply_error zoom_in; return; }
 	fi
 	case "$kind" in
-		towers|speed) [ -s "$RUNTIME/speedmetrics.cookie" ] || { reply_error sign_in_required; return; } ;;
+		towers|speed) ;;
 		fourcells)
 			printf '%s\n' "$operator" | grep -Eq '^[0-9]{5,7}$' || { reply_error invalid; return; }
 			case "$technology" in gsm|wcdma|lte|nr) ;; *) reply_error invalid; return ;; esac ;;
@@ -393,12 +437,16 @@ map_layers() {
 		reason=$(cat "$RUNTIME/pause_reason_$service" 2>/dev/null)
 		case "$reason" in
 			api_access_required) rm -f "$RUNTIME/pause_$service" "$RUNTIME/pause_reason_$service" ;;
-			*) reply_error provider_paused; return ;;
+			*) pause_remaining=$((until-now)) reply_error provider_paused; return ;;
 		esac
 	fi
 	if [ "$kind" = fourcells ]; then
 		work=$(mktemp -d "$RUNTIME/layers.XXXXXX") || { reply_error storage; return; }
 		ensure_fourcells_session || { reply_error "$session_error"; return; }
+	elif [ "$service" = speedmetrics ]; then
+		work=$(mktemp -d "$RUNTIME/layers.XXXXXX") || { reply_error storage; return; }
+		ensure_speedmetrics_session || { reply_error "$session_error"; return; }
+		cp "$RUNTIME/speedmetrics.cookie" "$work/speedmetrics.cookie" || { reply_error storage; return; }
 	fi
 	query="$south,$west,$north,$east"
 	url=https://speedmetrics.ru/api/v1/speed_web
@@ -411,7 +459,7 @@ map_layers() {
 	binding=public
 	case "$kind" in
 		fourcells) binding=$(sha256sum "$RUNTIME/fourcells.json" | awk '{print $1}') ;;
-		towers|speed) binding=$(sha256sum "$RUNTIME/speedmetrics.cookie" | awk '{print $1}') ;;
+		towers|speed) binding=$(sha256sum "$work/speedmetrics.cookie" | awk '{print $1}') ;;
 	esac
 	cache_key=$(printf '%s\n%s' "$url" "$binding" | sha256sum | awk '{print $1}')
 	cache_prefix="$RUNTIME/cache_$kind-$cache_key"
@@ -423,19 +471,28 @@ map_layers() {
 			token=$(jsonfilter -i "$RUNTIME/fourcells.json" -e '@.accessToken' 2>/dev/null)
 			[ -n "$token" ] || { reply_error sign_in_required; return; }
 			printf 'Authorization: Bearer %s\n' "$token" > "$work/header"
-			fourcells_sign_headers "${url#https://4cells.ru:4444}" || { reply_error "$sign_error"; return; }
+			fourcells_sign_headers "${url#https://4cells.ru:4444}" || {
+				[ "$lock_mode" != flock ] || flock -u 8
+				[ "$sign_error" != sign_in_required ] || { failed_token=$token; return 41; }
+				reply_error "$sign_error"; return
+			}
 			set -- "$@" --user-agent "$FOURCELLS_UA" --header "@$work/header" ;;
-		towers|speed) set -- "$@" --cookie "$RUNTIME/speedmetrics.cookie" ;;
+		towers|speed) set -- "$@" --cookie "$work/speedmetrics.cookie" ;;
 	esac
 	http=$(curl "$@" --output "$work/data.json" --write-out '%{http_code}' "$url" 2>/dev/null) || http=000
 	rm -f "$RUNTIME/pause_reason_$service"
 	case "$http" in
-		401) reply_error sign_in_required ;;
+		401)
+			case "$service:$kind" in fourcells:fourcells) failed_token=$token; return 41 ;; speedmetrics:*) failed_cookie=$binding; return 41 ;; esac
+			reply_error sign_in_required ;;
 		403) printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_$service"; reply_error access_denied ;;
 		429) printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_$service"; reply_error rate_limited ;;
 		200)
 			if [ "$(wc -c < "$work/data.json")" -le 2097152 ] && jsonfilter -i "$work/data.json" -e '@' >/dev/null 2>&1; then
-				if [ "$(jsonfilter -i "$work/data.json" -e '@.needLogin' 2>/dev/null)" = true ]; then reply_error sign_in_required; return; fi
+				if [ "$(jsonfilter -i "$work/data.json" -e '@.needLogin' 2>/dev/null)" = true ]; then
+					case "$kind" in fourcells) failed_token=$token; return 41 ;; towers|speed) failed_cookie=$binding; return 41 ;; esac
+					reply_error sign_in_required; return
+				fi
 				if [ -n "$(jsonfilter -i "$work/data.json" -e '@.error' 2>/dev/null)" ]; then reply_error unavailable; return; fi
 				cache_store "$cache_prefix" "$work/data.json" "$cache_key"
 				# Keep two viewports per endpoint; keys cannot mix concurrent replies.
@@ -466,7 +523,7 @@ map_tile() {
 	now=$(cut -d. -f1 /proc/uptime)
 	until=$(cat "$RUNTIME/pause_fourcells" 2>/dev/null)
 	case "$until" in ''|*[!0-9]*) until=0 ;; esac
-	[ "$now" -lt "$until" ] && { reply_error provider_paused; return; }
+	[ "$now" -lt "$until" ] && { pause_remaining=$((until-now)) reply_error provider_paused; return; }
 	command -v curl >/dev/null 2>&1 || { reply_error curl_required; return; }
 	work=$(mktemp -d "$RUNTIME/tile.XXXXXX") || { reply_error storage; return; }
 	ensure_fourcells_session || { reply_error "$session_error"; return; }
@@ -491,7 +548,7 @@ map_tile() {
 				rm -f "$old" "${old%.body}.key" "${old%.body}.t"
 			done
 			emit_map_tile "$work/tile.png" ;;
-		401) reply_error sign_in_required ;;
+		401) failed_token=$token; return 41 ;;
 		403|429)
 			printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_fourcells"
 			[ "$http" = 429 ] && reply_error rate_limited || reply_error access_denied ;;
@@ -501,7 +558,7 @@ map_tile() {
 
 map_tiles() {
 	local input tiles zoom operator technology pairs pair x y count=0 seen='' now until token binding
-	local i=0 url key prefix old code error='' total=0 bytes parallel http2 single_host
+	local i=0 url key prefix old code transfer_exit error='' total=0 bytes parallel http2 single_host
 	IFS= read -r input
 	json_load "$input" 2>/dev/null || { reply_error invalid; return; }
 	json_get_var tiles tiles; json_get_var zoom zoom
@@ -525,7 +582,7 @@ map_tiles() {
 	now=$(cut -d. -f1 /proc/uptime)
 	until=$(cat "$RUNTIME/pause_fourcells" 2>/dev/null)
 	case "$until" in ''|*[!0-9]*) until=0 ;; esac
-	[ "$now" -lt "$until" ] && { reply_error provider_paused; return; }
+	[ "$now" -lt "$until" ] && { pause_remaining=$((until-now)) reply_error provider_paused; return; }
 	command -v curl >/dev/null 2>&1 || { reply_error curl_required; return; }
 	work=$(mktemp -d "$RUNTIME/tiles.XXXXXX") || { reply_error storage; return; }
 	ensure_fourcells_session || { reply_error "$session_error"; return; }
@@ -562,7 +619,7 @@ connect-timeout = 5
 max-time = 12
 max-filesize = 262144
 fail
-write-out = "$i %{http_code} %{num_connects}\\n"
+write-out = "$i %{http_code} %{exitcode}\\n"
 EOF
 		fi
 		i=$((i+1))
@@ -570,7 +627,7 @@ EOF
 	if [ -s "$work/curl.conf" ]; then
 		# One curl connection cache for the viewport. Default parallel policy waits
 		# for HTTP/2 multiplexing; do not use --parallel-immediate (extra TLS setups).
-		set -- --silent --fail-early
+		set -- --silent
 		parallel=$(cat "$RUNTIME/curl-parallel" 2>/dev/null)
 		if [ -z "$parallel" ]; then
 			parallel=0; curl --help all 2>/dev/null | grep -q -- '--parallel-max ' && parallel=1
@@ -587,23 +644,25 @@ EOF
 			[ "$single_host" != 1 ] || set -- "$@" --parallel --parallel-max 3 --parallel-max-host 1
 		fi
 		curl "$@" --config "$work/curl.conf" > "$work/status" 2>/dev/null || :
-		# fail-early stops outstanding transfers after an HTTP error, without retries.
+		# A failed tile does not discard other completed transfers in the batch.
 		if awk '$2==429 {found=1} END {exit !found}' "$work/status"; then error=rate_limited
 		elif awk '$2==403 {found=1} END {exit !found}' "$work/status"; then error=access_denied
-		elif awk '$2==401 {found=1} END {exit !found}' "$work/status"; then error=sign_in_required; fi
+		elif awk '$2==401 {found=1} END {exit !found}' "$work/status"; then failed_token=$token; return 41; fi
 		case "$error" in rate_limited|access_denied) printf '%s\n' "$((now+1800))" > "$RUNTIME/pause_fourcells" ;; esac
 		[ -z "$error" ] || { reply_error "$error"; return; }
 	fi
 	while read -r i pair key; do
 		if [ ! -s "$work/$i.result" ]; then
-			code=$(awk -v i="$i" '$1==i {print $2}' "$work/status")
-			if [ "$code" = 200 ] && [ -s "$work/$i.png" ] \
+			read -r code transfer_exit <<EOF
+$(awk -v i="$i" '$1==i {print $2, $3}' "$work/status")
+EOF
+			if [ "$code" = 200 ] && [ "$transfer_exit" = 0 ] && [ -s "$work/$i.png" ] \
 				&& [ "$(wc -c < "$work/$i.png")" -le 262144 ] \
 				&& [ "$(head -c 8 "$work/$i.png" | base64)" = iVBORw0KGgo= ]; then
 				cache_store "$RUNTIME/tile-$key" "$work/$i.png" "$key"
 				emit_map_tile "$work/$i.png" > "$work/$i.result"
 			else
-				error=network; [ "$code" != 200 ] || error=unexpected_response
+				error=network; [ "$code" != 200 ] || [ "$transfer_exit" != 0 ] || error=unexpected_response
 				reply_error "$error" > "$work/$i.result"
 			fi
 		fi
@@ -621,6 +680,35 @@ EOF
 	printf '}}\n'
 }
 
+# Retry an authenticated read once, using the identity rejected by the provider.
+# The session locks let a concurrent request reuse an already renewed session.
+map_request() {
+	local handler="$1" input failed_token='' failed_cookie='' rejected_token='' rejected_cookie='' rc service now until
+	IFS= read -r input
+	"$handler" <<EOF
+$input
+EOF
+	rc=$?
+	[ "$rc" = 41 ] || return 0
+	rejected_token=$failed_token
+	rejected_cookie=$failed_cookie
+	service=fourcells; [ -z "$rejected_cookie" ] || service=speedmetrics
+	now=$(cut -d. -f1 /proc/uptime)
+	until=$(cat "$RUNTIME/auth-rejected-$service" 2>/dev/null)
+	case "$until" in ''|*[!0-9]*) until=0 ;; esac
+	[ "$now" -ge "$until" ] || { reply_error sign_in_required; return; }
+	rm -rf "$work"
+	work=''
+	"$handler" <<EOF
+$input
+EOF
+	if [ "$?" = 41 ]; then
+		now=$(cut -d. -f1 /proc/uptime)
+		printf '%s\n' "$((now+60))" > "$RUNTIME/auth-rejected-$service"
+		reply_error sign_in_required
+	fi
+}
+
 case "$1" in
 	list) echo '{"status":{},"login":{"login":"str","password":"str"},"layers":{"kind":"str","south":"str","west":"str","north":"str","east":"str","zoom":"str","operator":"str","technology":"str"},"tile":{"x":"str","y":"str","zoom":"str","operator":"str","technology":"str"},"tiles":{"tiles":"str","zoom":"str","operator":"str","technology":"str"}}' ;;
 	call)
@@ -630,9 +718,9 @@ case "$1" in
 				acquire_lock "$2" || { reply_error busy; exit 0; }
 				case "$2" in
 					login) login_account ;;
-					layers) map_layers ;;
-					tile) map_tile ;;
-					tiles) map_tiles ;;
+					layers) map_request map_layers ;;
+					tile) map_request map_tile ;;
+					tiles) map_request map_tiles ;;
 				esac ;;
 			*) reply_error invalid ;;
 		esac ;;
